@@ -1,14 +1,72 @@
 {
-  "name": "${PROJECT_NAME}",
+  "name": "app-lite",
+  "private": true,
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/index.js",
+  "description": "Super App - Plataforma completa para conectar prestadores de serviço, compradores e anunciantes",
+  "author": "Super App Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/infotechd/app-lite.git"
+  },
   "scripts": {
-    "build": "tsc"
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "format": "prettier --write .",
+    "start": "concurrently \"pnpm:start:backend\" \"pnpm:start:mobile\"",
+    "start:mobile": "pnpm run start --filter packages/mobile",
+    "start:backend": "pnpm run dev --filter packages/backend",
+    "android:mobile": "pnpm run android --filter packages/mobile",
+    "ios:mobile": "pnpm run ios --filter packages/mobile",
+    "build:mobile": "pnpm run build --filter packages/mobile",
+    "build:backend": "pnpm run build --filter packages/backend",
+    "build": "pnpm run build:backend && pnpm run build:mobile",
+    "test:backend": "pnpm --filter super-app-backend run test",
+    "test:mobile": "pnpm --filter super-app-mobile run test",
+    "test": "pnpm run test:backend && pnpm run test:mobile",
+    "test:connection": "node scripts/test-connection.mjs",
+    "install:mobile": "cd packages/mobile && pnpm install",
+    "install:backend": "cd packages/backend && pnpm install",
+    "install:all": "pnpm install && pnpm run install:mobile && pnpm run install:backend"
   },
-  "dependencies": {},
+  "workspaces": [
+    "packages/backend",
+    "packages/mobile"
+  ],
   "devDependencies": {
-    "typescript": "^5.5.3"
+    "@eslint/js": "^9.24.0",
+    "@types/cookie-parser": "^1.4.8",
+    "@typescript-eslint/eslint-plugin": "^8.29.1",
+    "@typescript-eslint/parser": "^8.29.1",
+    "babel-preset-expo": "^12.0.11",
+    "concurrently": "^8.2.2",
+    "eslint": "^9.24.0",
+    "eslint-config-prettier": "^10.1.2",
+    "eslint-plugin-prettier": "^5.2.6",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
   },
-  "private": true
+  "dependencies": {
+    "axios": "^1.9.0",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.5.0",
+    "stripe": "^18.0.0",
+    "use-latest-callback": "^0.2.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@react-native-async-storage/async-storage": "2.1.2",
+      "metro": "^0.82.0",
+      "metro-config": "^0.82.0",
+      "metro-resolver": "^0.82.0",
+      "metro-runtime": "^0.82.0",
+      "metro-core": "^0.82.0",
+      "metro-source-map": "^0.82.0",
+      "metro-symbolicate": "^0.82.0",
+      "ob1": "^0.82.0"
+    }
+  },
+  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f"
 }

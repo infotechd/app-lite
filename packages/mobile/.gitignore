@@ -1,0 +1,4 @@
+# packages/mobile/.gitignore
+# This package defers to the monorepo root .gitignore.
+# Keep package-specific rules here only if they are unique to this package.
+# Intentionally left minimal.
