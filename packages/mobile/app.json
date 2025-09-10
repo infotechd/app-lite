@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "App Lite",
+    "slug": "app-lite",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "app-lite",
+    "assetBundlePatterns": ["**/*"],
+    "platforms": ["ios", "android"],
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Precisamos de acesso à sua biblioteca para você anexar imagens e vídeos às ofertas.",
+        "NSCameraUsageDescription": "Precisamos de acesso à sua câmera para que você possa tirar fotos ou gravar vídeos para anexar às ofertas."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.infotechd.applite",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "ACCESS_NETWORK_STATE",
+        "INTERNET"
+      ]
+    },
+    "androidStatusBar": {
+      "translucent": true,
+      "backgroundColor": "#6200EE",
+      "barStyle": "light-content"
+    },
+    "androidNavigationBar": {
+      "visible": "immersive",
+      "backgroundColor": "#00000000"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

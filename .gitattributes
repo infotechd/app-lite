@@ -1,0 +1,38 @@
+# Padrão: tratar arquivos como texto e normalizar para LF no repositório
+* text=auto eol=lf
+
+# Scripts Windows devem usar CRLF na working copy (compatibilidade)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Arquivos que DEVEM ser LF (JS/TS/JSON/YAML/MD/XML/Gradle/Kotlin/Shell)
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.sh    text eol=lf
+*.xml   text eol=lf
+*.gradle text eol=lf
+gradlew text eol=lf
+*.kt    text eol=lf
+*.kts   text eol=lf
+
+# Arquivos binários (não mexer em EOL)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.mp4 binary
+*.webm binary
+*.zip binary
+*.jar binary
+*.keystore binary
+*.aab binary
+*.apk binary
