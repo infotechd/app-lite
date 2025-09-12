@@ -6,8 +6,14 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "app-lite",
-    "assetBundlePatterns": ["**/*"],
-    "platforms": ["ios", "android"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
@@ -16,7 +22,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "",
+      "bundleIdentifier": "com.infotechd.applite",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Precisamos de acesso à sua biblioteca para você anexar imagens e vídeos às ofertas.",
         "NSCameraUsageDescription": "Precisamos de acesso à sua câmera para que você possa tirar fotos ou gravar vídeos para anexar às ofertas."
@@ -31,7 +37,6 @@
       "versionCode": 1,
       "permissions": [
         "CAMERA",
-        "READ_EXTERNAL_STORAGE",
         "ACCESS_NETWORK_STATE",
         "INTERNET"
       ]
@@ -47,6 +52,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-secure-store"
+    ]
   }
 }
