@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 type IconName = React.ComponentProps<typeof Icon>['name'];
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import BuscarOfertasScreen from '../screens/app/BuscarOfertasScreen';

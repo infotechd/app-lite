@@ -5,7 +5,7 @@ import { OfertaServico, OfertaFilters } from '@/types/oferta';
 import { ofertaService } from '@/services/ofertaService';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing } from '@/styles/theme';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';

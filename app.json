@@ -1,5 +1,7 @@
 {
   "expo": {
+    "name": "app-lite",
+    "slug": "app-lite",
     "extra": {
       "eas": {
         "projectId": ""
