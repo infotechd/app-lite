@@ -4,8 +4,11 @@
     "slug": "app-lite",
     "extra": {
       "eas": {
-        "projectId": ""
+        "projectId": "5b7d17d9-d793-4c25-ade2-e4ff466121d4"
       }
+    },
+    "android": {
+      "package": "com.infotechd.applite"
     }
   }
 }

@@ -8,7 +8,11 @@
     "web": "expo start --web",
     "test": "jest --config ./jest.config.js --coverage",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "build": "npx eas build",
+    "submit": "npx eas submit"
   },
   "dependencies": {
     "@babel/runtime": "^7.26.0",
@@ -27,6 +31,7 @@
     "expo-asset": "~11.1.7",
     "expo-av": "~15.1.7",
     "expo-constants": "~17.1.7",
+    "expo-dev-client": "~5.2.4",
     "expo-font": "~13.3.2",
     "expo-image-picker": "~16.1.4",
     "expo-secure-store": "~14.2.4",
