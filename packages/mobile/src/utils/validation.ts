@@ -50,11 +50,22 @@ export const OFERTA_MEDIA_CONFIG: MediaConfig = {
     ALLOWED_TYPES: ['image/jpeg', 'image/png', 'video/mp4'] as const,
 };
 
+const IMAGE_MAX = 10 * 1024 * 1024;  // 10MB
+const VIDEO_MAX = 50 * 1024 * 1024;  // 50MB
+
 const mediaFileSchema = z.object({
     uri: z.string().min(1),
     name: z.string().min(1),
     type: z.enum(OFERTA_MEDIA_CONFIG.ALLOWED_TYPES),
-    size: z.number().positive().max(OFERTA_MEDIA_CONFIG.MAX_SIZE).optional(),
+    size: z.number().positive().optional(),
+}).superRefine((f, ctx) => {
+    if (f.size == null) return; // se faltar size, não valida tamanho
+    if (f.type === 'video/mp4' && f.size > VIDEO_MAX) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Vídeo acima de 50MB' });
+    }
+    if ((f.type === 'image/jpeg' || f.type === 'image/png') && f.size > IMAGE_MAX) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Imagem acima de 10MB' });
+    }
 });
 
 export const criarOfertaSchema = z.object({
@@ -71,7 +82,6 @@ export const criarOfertaSchema = z.object({
     mediaFiles: z
         .array(mediaFileSchema)
         .max(OFERTA_MEDIA_CONFIG.MAX_FILES, `Máximo ${OFERTA_MEDIA_CONFIG.MAX_FILES} arquivos`)
-        .refine((arr) => arr.every((f) => OFERTA_MEDIA_CONFIG.ALLOWED_TYPES.includes(f.type as any)), 'Apenas JPG, PNG ou MP4')
         .default([]),
 });
 

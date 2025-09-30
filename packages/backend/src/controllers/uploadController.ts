@@ -1,3 +1,26 @@
+/**
+ * Controller de Upload
+ * Responsável por:
+ * - Receber uploads (imagens/vídeos) via Multer (memória) e armazenar no GridFS.
+ * - Fornecer download com suporte a range para streaming.
+ * - Listar, detalhar e excluir arquivos do usuário.
+ *
+ * Segurança e boas práticas:
+ * - Limites de tamanho/quantidade de arquivos controlados via variáveis de ambiente.
+ * - Filtro de tipos MIME permitido (defesa inicial, não substitui validação profunda).
+ * - Sanitização de range no download para evitar leituras fora do intervalo.
+ * - Telemetria de sucesso/erro para auditoria.
+ *
+ * Ideias para futuras melhorias:
+ * - Validação MIME por assinatura mágica (magic numbers) além do mimetype enviado pelo cliente.
+ * - Verificação antivírus/antimalware antes de persistir (ex.: ClamAV).
+ * - Quotas por usuário, limites diários e rate limiting por IP/usuário.
+ * - Geração de miniaturas (thumbnails) e metadados adicionais (dimensões, duração).
+ * - Transcodificação assíncrona de vídeos e normalização de imagens.
+ * - Criptografia em repouso/cliente e controle de acesso granular por arquivo.
+ * - Deduplicação por hash para economizar armazenamento.
+ * - Observabilidade: métricas (Prometheus), tracing e logs estruturados.
+ */
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import multer, { FileFilterCallback } from 'multer';
 import mongoose from 'mongoose';
@@ -9,7 +32,19 @@ import { logger, loggerUtils } from '../utils/logger';
 import { z } from 'zod';
 import type { AuthRequest } from '../middleware/auth';
 
-// Utilitário simples para extrair duração de um MP4 a partir do buffer (lê box 'mvhd')
+/**
+ * Extrai a duração (em segundos) de um arquivo MP4 a partir do buffer, lendo o box 'mvhd'.
+ * Retorna undefined quando não for possível determinar (ex.: arquivo corrompido ou container não padrão).
+ *
+ * Notas:
+ * - Implementação leve focada em MP4; não valida codecs/stream completos.
+ * - Evita lançar exceções para não interromper o fluxo de validação do upload.
+ *
+ * Futuras melhorias:
+ * - Suportar outros containers (ex.: MOV, WebM) e playlists (HLS/DASH).
+ * - Usar BigInt para cálculos de duração 64-bit e evitar perda de precisão.
+ * - Considerar bibliotecas de metadados (ex.: mp4box, mediainfo) se requisitos aumentarem.
+ */
 function getMp4DurationSeconds(buffer: Buffer): number | undefined {
     try {
         const mvhdIndex = buffer.indexOf(Buffer.from('mvhd'));
@@ -44,9 +79,26 @@ function getMp4DurationSeconds(buffer: Buffer): number | undefined {
     }
 }
 
-// Configuração do multer para upload em memória
+// Configuração do multer para upload em memória (buffer).
+// Observação: usar memória simplifica a validação prévia (ex.: duração de vídeo), mas consome RAM proporcional ao arquivo.
+// Em cargas altas ou arquivos grandes, considerar armazenamento temporário em disco/streaming direto para o GridFS.
 const storage = multer.memoryStorage();
 
+/**
+ * Configuração do middleware de upload.
+ * - limits.fileSize: tamanho máximo do arquivo em bytes (env MAX_FILE_SIZE). Padrão: 10MB.
+ * - limits.files: quantidade máxima de arquivos por requisição (env MAX_FILES_PER_UPLOAD).
+ * - fileFilter: filtro de tipos MIME permitidos; retorna false para rejeitar silenciosamente.
+ *
+ * Segurança:
+ * - O MIME enviado pelo cliente pode ser forjado; combine com validação por assinatura do arquivo quando necessário.
+ * - Ajuste limites de forma conservadora para evitar DoS por memória.
+ *
+ * Futuras melhorias:
+ * - Validar tipos por "magic number" (assinatura) além do mimetype.
+ * - Mover para storage em disco ou stream para GridFS para reduzir uso de memória.
+ * - Diferenciar limites por rota/tipo de usuário.
+ */
 const upload = multer({
     storage,
     limits: {
@@ -70,7 +122,14 @@ const upload = multer({
     },
 });
 
-// Schema de validação para upload
+// Schema de validação para upload (campos adicionais do formulário).
+// Mantém o contrato claro e evita dados inesperados.
+/**
+ * Futuras melhorias no schema:
+ * - Validar tamanhos máximos de strings e normalizar espaços.
+ * - Adicionar campos como "tags", "privacidade", "expiraEm".
+ * - Internacionalização de mensagens de erro (zod).
+ */
 const uploadSchema = z.object({
     categoria: z.string().optional(),
     descricao: z.string().optional(),
@@ -89,6 +148,27 @@ export const uploadController: UploadController = {
     // Middleware para upload múltiplo
     uploadMultiple: upload.array('files', 5) as RequestHandler,
 
+    /**
+     * Upload de imagens/vídeos para GridFS.
+     *
+     * Fluxo:
+     * 1) Coleta arquivos do Multer e valida presença.
+     * 2) Valida dados adicionais via Zod.
+     * 3) Para vídeos MP4, checa duração máxima (<= 15s); rejeita excedentes.
+     * 4) Garante disponibilidade do banco e envia para GridFS com metadados.
+     * 5) Registra logs e telemetria de sucesso ou falha.
+     *
+     * Regras/limites atuais:
+     * - Tipos permitidos: ver ALLOWED_FILE_TYPES.
+     * - Tamanho máximo por arquivo: ver MAX_FILE_SIZE.
+     * - Máximo de arquivos por requisição: ver MAX_FILES_PER_UPLOAD.
+     *
+     * Futuras melhorias:
+     * - Verificação antivírus e validação de integridade (hash).
+     * - Enfileirar uploads pesados e processamentos assíncronos (thumbs/transcode).
+     * - Aplicar quotas e rate limiting por usuário/rota.
+     * - Permitir políticas por categoria (ex.: diferentes limites).
+     */
     // Upload de imagens/vídeos para GridFS
     async uploadFiles(req: AuthRequest, res: Response, next: NextFunction) {
         try {
@@ -205,6 +285,20 @@ export const uploadController: UploadController = {
         }
     },
 
+    /**
+     * Download/stream de arquivo do GridFS com suporte a Range (HTTP 206).
+     *
+     * Comportamento:
+     * - Valida o ObjectId.
+     * - Retorna 404 se não encontrado, 503 se storage indisponível.
+     * - Quando há header Range válido, responde com partial content.
+     *
+     * Futuras melhorias:
+     * - Caching com ETag/If-None-Match e Last-Modified.
+     * - Limitar velocidade (throttling) para evitar abuso.
+     * - Cabeçalho Content-Security-Policy para contextos web.
+     * - Verificação de autorização por arquivo (ACL).
+     */
     // Download de arquivo do GridFS
     async downloadFile(req: Request, res: Response, next: NextFunction) {
         try {
@@ -321,6 +415,18 @@ export const uploadController: UploadController = {
         }
     },
 
+    /**
+     * Lista arquivos do usuário autenticado com paginação.
+     *
+     * Parâmetros de query:
+     * - page (default 1)
+     * - limit (default 10)
+     *
+     * Futuras melhorias:
+     * - Ordenação e filtros (tipo, data, tamanho, categoria).
+     * - Suporte a cursor-based pagination.
+     * - Regras de privacidade (arquivos públicos/privados/compartilhados).
+     */
     // Listar arquivos do usuário
     async getUserFiles(req: AuthRequest, res: Response, next: NextFunction) {
         try {
@@ -349,6 +455,16 @@ export const uploadController: UploadController = {
         }
     },
 
+    /**
+     * Exclui um arquivo do usuário.
+     * - Valida o ObjectId.
+     * - uploadService.deleteFile deve verificar propriedade/permissão.
+     *
+     * Futuras melhorias:
+     * - Soft-delete com período de restauração (lixeira).
+     * - Auditoria detalhada: quem deletou, quando e de onde (IP).
+     * - Políticas de retenção por categoria.
+     */
     // Deletar arquivo
     async deleteFile(req: AuthRequest, res: Response, next: NextFunction) {
         try {
@@ -386,6 +502,15 @@ export const uploadController: UploadController = {
         }
     },
 
+    /**
+     * Obtém metadados de um arquivo.
+     * Retorna informações básicas e metadados armazenados no GridFS.
+     *
+     * Futuras melhorias:
+     * - Normalizar estrutura de metadados e expor apenas campos seguros.
+     * - Controle de acesso por arquivo (somente dono ou compartilhados).
+     * - Expandir para incluir URLs de preview/thumbnail quando aplicável.
+     */
     // Obter informações do arquivo
     async getFileInfo(req: Request, res: Response, next: NextFunction) {
         try {
