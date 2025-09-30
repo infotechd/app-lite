@@ -1,14 +1,24 @@
+// Serviço HTTP (Axios) central do app mobile.
+// - Define baseURL dinâmica em desenvolvimento (autodetecção dos IPs locais)
+// - Configura headers e timeouts padrão
+// - Gerencia token JWT em memória e via AsyncStorage
+// - Intercepta requests/responses para anexar token e tratar erros comuns
+// - Fornece utilitários para sobrepor a baseURL manualmente em debug
+
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * Autodetecção de IPs do backend em desenvolvimento
- * - Casa: 192.168.15.12 (comentado abaixo)
- * - Trabalho: 192.168.1.12 (comentado abaixo)
- * - Emulador Android: 10.0.2.2
+ * Autodetecção de IPs do backend em desenvolvimento.
+ * - Casa: 192.168.15.12 (exemplo)
+ * - Trabalho: 192.168.1.12 (exemplo)
+ * - Emulador Android: 10.0.2.2 (IP especial que aponta para o host)
  * - iOS Simulator: 127.0.0.1
  *
- * Em produção, a URL permanece fixa (configure seu domínio de produção).
+ * Em produção, a URL deve permanecer fixa (domínio público do backend).
+ *
+ * MELHORIA: Tornar essa lista configurável por ambiente (.env) e/ou por plataforma
+ * (ex.: usando react-native-config), evitando editar código para cada rede.
  */
 const CANDIDATE_BASE_URLS: string[] = [
     'http://192.168.15.12:4000/api', // Casa — IP da sua casa
@@ -18,11 +28,23 @@ const CANDIDATE_BASE_URLS: string[] = [
     'http://localhost:4000/api'
 ];
 
-// Endpoint leve já existente no backend
+// Endpoint leve já existente no backend para checagem de saúde (health-check).
+// Espera-se que GET /api/health responda rapidamente com 200 OK.
 const HEALTH_PATH = '/health'; // GET /api/health
+
+// Tempo máximo de espera por URL ao fazer ping.
+// MELHORIA: Tornar esse timeout configurável e/ou aumentar em redes lentas.
 const PING_TIMEOUT_MS = 1200;
+
+// Chave de cache para salvar a baseURL detectada no AsyncStorage.
+// MELHORIA: Incluir versão do app na chave para invalidar cache em upgrades.
 const CACHE_KEY = 'api_base_url_selected';
 
+/**
+ * Faz um "ping" HTTP ao endpoint de saúde para verificar se a URL responde.
+ * Retorna true se a resposta for ok (status 2xx), false caso contrário.
+ * Usa AbortController para limitar o tempo de espera (timeout).
+ */
 async function ping(url: string): Promise<boolean> {
     try {
         const ctl = new AbortController();
@@ -35,6 +57,16 @@ async function ping(url: string): Promise<boolean> {
     }
 }
 
+/**
+ * Seleciona a primeira baseURL alcançável:
+ * 1) Tenta a URL em cache (se existir e responder)
+ * 2) Testa as URLs candidatas na ordem definida
+ * 3) Se todas falharem, usa o fallback (primeira da lista)
+ *
+ * Ao encontrar uma URL válida, salva no AsyncStorage para acelerar próximos inícios.
+ *
+ * MELHORIA: Testar as URLs em paralelo (Promise.any) para acelerar a detecção.
+ */
 async function pickReachableBaseURL(): Promise<string> {
     // 1) Tenta cache
     try {
@@ -60,24 +92,35 @@ async function pickReachableBaseURL(): Promise<string> {
     return fallback;
 }
 
-// Base inicial: em dev usa a primeira candidata (Casa) até autodetecção ajustar;
-// em produção, use sua URL pública.
+// Base inicial:
+// - Em desenvolvimento, começamos com a primeira candidata (Casa) até a autodetecção ajustar.
+// - Em produção, defina sua URL pública fixa do backend.
+// MELHORIA: Pegar a URL de produção de uma variável de ambiente segura.
 const API_BASE_URL = __DEV__
     ? CANDIDATE_BASE_URLS[0] // Casa — inicial até detectar melhor opção
     : 'https://your-production-api.com/api';
 
+// Instância principal do Axios que será usada em todo o app.
 export const api = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 10000,
+    timeout: 10000, // Timeout padrão para requests
     headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json', // Padrão para JSON
+        // MELHORIA: Não fixar globalmente para permitir multipart/form-data sem conflito.
+        // Alternativas: definir por request ou usar transformRequest.
     },
 });
 
 // Mantém um token em memória para evitar leituras frequentes do AsyncStorage
+// MELHORIA: Armazenar o token em storage seguro (Keychain/Keystore) via libs como
+// react-native-keychain ou expo-secure-store; AsyncStorage não é criptografado.
 let currentToken: string | null = null;
 
-// Helpers para gerenciar o token no cliente HTTP
+/**
+ * Define (ou remove) o token de autenticação no cliente Axios e no cache em memória.
+ * - Atualiza Authorization em api.defaults.headers para requests subsequentes.
+ * - Suporta tanto AxiosHeaders (com .set/.delete) quanto objeto simples.
+ */
 export function setAuthToken(token: string | null): void {
     currentToken = token ?? null;
     const authHeader = token ? `Bearer ${token}` : undefined;
@@ -98,11 +141,14 @@ export function setAuthToken(token: string | null): void {
     }
 }
 
+/**
+ * Remove o token atual tanto do cache em memória quanto do header default do Axios.
+ */
 export function clearAuthToken(): void {
     setAuthToken(null);
 }
 
-// Interceptor para adicionar token
+// Interceptor para adicionar token e garantir baseURL correta em dev.
 api.interceptors.request.use(async (config) => {
     // Aguarda autodetecção inicial em desenvolvimento, para evitar 1ª requisição no IP errado
     if (__DEV__ && detectionPromise) {
@@ -110,10 +156,13 @@ api.interceptors.request.use(async (config) => {
     }
 
     // Usa token em memória; se não houver, tenta resgatar do AsyncStorage uma única vez
+    // MELHORIA: Carregar o token em memória assim que o app inicia para evitar custo aqui.
     if (!currentToken) {
         const stored = await AsyncStorage.getItem('token');
         if (stored) setAuthToken(stored);
     }
+
+    // Anexa o header Authorization, compatível com AxiosHeaders ou objeto simples
     if (currentToken) {
         const authValue = `Bearer ${currentToken}`;
         if (config.headers && typeof (config.headers as any).set === 'function') {
@@ -128,11 +177,13 @@ api.interceptors.request.use(async (config) => {
     return config;
 });
 
-// Interceptor para tratar erros
+// Interceptor para tratar erros de resposta (ex.: 401 não autorizado)
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
         if (error.response?.status === 401) {
+            // Token inválido/expirado: limpa credenciais locais.
+            // MELHORIA: Implementar fluxo de refresh token antes de deslogar o usuário.
             clearAuthToken();
             await AsyncStorage.removeItem('token');
             await AsyncStorage.removeItem('user');
@@ -146,6 +197,8 @@ api.interceptors.response.use(
  * - Testa o cache e depois os IPs: Casa, Trabalho, Emuladores
  * - Atualiza api.defaults.baseURL assim que encontrar um que responda
  * - Salva a escolha no AsyncStorage para os próximos inícios
+ *
+ * MELHORIA: Logar/telerastrear quando a baseURL for trocada para facilitar debug.
  */
 let detectionPromise: Promise<void> | null = null;
 if (__DEV__) {
@@ -154,6 +207,7 @@ if (__DEV__) {
             const base = await pickReachableBaseURL();
             if (base && base !== api.defaults.baseURL) {
                 api.defaults.baseURL = base;
+                // console.log(`[API] baseURL detectada: ${base}`);
             }
         } catch {
             // Mantém base inicial se falhar a autodetecção
@@ -162,6 +216,7 @@ if (__DEV__) {
 }
 
 // Helper opcional para mudar manualmente a base (ex.: tela de debug)
+// Também persiste a escolha no AsyncStorage para reutilização futura.
 export async function overrideBaseURL(url: string) {
     api.defaults.baseURL = url;
     await AsyncStorage.setItem(CACHE_KEY, url);

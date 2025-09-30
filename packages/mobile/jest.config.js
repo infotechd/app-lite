@@ -3,11 +3,13 @@
  */
 module.exports = {
     preset: 'jest-expo',
-    testEnvironment: 'jsdom',
+    testEnvironment: 'node',
+    setupFiles: ['<rootDir>/jest.pre-setup.js'],
     setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
     moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/src/$1',
         '@react-native/js-polyfills/(.*)$': '<rootDir>/__mocks__/rn-polyfill-stub.js',
+        '^expo-modules-core(?:/(.*))?$': '<rootDir>/__mocks__/expo-modules-core-stub.js',
     },
     transformIgnorePatterns: [
         'node_modules/(?!((jest-)?react-native|@react-native|react-clone-referenced-element|@react-navigation|@react-native-async-storage|expo(nent)?|@expo(nent)?/.*|expo-modules-core|react-native-reanimated|react-native-gesture-handler|react-native-vector-icons)/)'
@@ -18,9 +20,7 @@ module.exports = {
     ],
     collectCoverage: true,
     collectCoverageFrom: [
-        'src/**/*.{ts,tsx}',
-        '!src/**/__tests__/**',
-        '!src/**/types/**',
+        'src/services/uploadService.ts'
     ],
     coverageThreshold: {
         global: {

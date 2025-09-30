@@ -1,25 +1,76 @@
+/*
+ Serviço: Upload de Arquivos usando MongoDB GridFS
+ ---------------------------------------------------------------------------
+ - Responsabilidade: encapsular operações de upload, leitura, listagem e
+   remoção de arquivos armazenados no GridFS.
+ - Observabilidade: usa logger e loggerUtils para registrar operações e
+   sucesso/erro por tipo de ação (CRUD) no bucket de arquivos.
+ - Segurança: valida tipo e tamanho antes de enviar; verifique sempre
+   permissões ao deletar.
+ - Escalabilidade: GridFS divide arquivos em chunks; chunkSizeBytes pode ser
+   ajustado via variável de ambiente para equilibrar memória e throughput.
+ - Convenções: todos os comentários foram escritos em Português do Brasil.
+
+ Pontos de melhoria (ideias futuras):
+ - TODO: adicionar verificação de integridade (checksum/MD5/SHA-256) no upload
+   e após o término, armazenando o hash em metadata.
+ - TODO: considerar antivírus/clamav/varredura de malware antes de persistir
+   o arquivo.
+ - TODO: suportar cancelamento/timeout em uploads longos (AbortController) e
+   retropressão (backpressure) quando necessário.
+ - TODO: deduplicação por hash (evitar salvar o mesmo arquivo repetidas vezes).
+ - TODO: assinar URLs de download quando necessário (expiração, escopo) para
+   cenários públicos.
+*/
+
 import mongoose from 'mongoose';
 import { getDatabase } from '../config/database';
 import { logger, loggerUtils } from '../utils/logger';
 import { BadRequestError, PayloadTooLargeError } from '../utils/errors';
 
+/**
+ * Metadados persistidos junto ao arquivo no GridFS.
+ */
 interface FileMetadata {
+    /** Nome original do arquivo enviado pelo cliente */
     originalName: string;
+    /** MIME type detectado/fornecido pelo cliente (ex.: image/png) */
     mimetype: string;
+    /** Tamanho do arquivo em bytes */
     size: number;
+    /** ID do usuário que realizou o upload (opcional) */
     uploadedBy?: string;
+    /** Categoria de classificação do arquivo (opcional) */
     categoria?: string;
+    /** Descrição livre do arquivo (opcional) */
     descricao?: string;
+    /** Data/hora do upload (gerada no backend) */
     uploadedAt: Date;
 }
 
+/**
+ * Resultado padronizado retornado após um upload com sucesso.
+ */
 interface UploadResult {
+    /** ObjectId do GridFS em formato string */
     fileId: string;
+    /** Nome do arquivo salvo no GridFS (único) */
     filename: string;
+    /** Metadados salvos juntamente com o arquivo */
     metadata: FileMetadata;
 }
 
+/**
+ * Serviço de Upload que concentra as operações com GridFS.
+ */
 export class UploadService {
+    /**
+     * Obtém uma instância do GridFSBucket usando a conexão do MongoDB atual.
+     * - Usa variáveis de ambiente para nome do bucket e tamanho do chunk.
+     * - chunkSizeBytes padrão (261120 bytes ~ 255 KB) balanceia custo de I/O e memória.
+     *
+     * TODO: considerar retry para operações de rede e health check da conexão.
+     */
     private getBucket(): mongoose.mongo.GridFSBucket {
         const db = getDatabase();
         return new mongoose.mongo.GridFSBucket(db, {
@@ -29,7 +80,21 @@ export class UploadService {
     }
 
     /**
-     * Upload de arquivo para GridFS
+     * Upload de arquivo para GridFS.
+     *
+     * Parâmetros:
+     * - buffer: conteúdo binário do arquivo.
+     * - filename: nome original (usado como base para o nome único salvo).
+     * - metadata: metadados a serem persistidos no GridFS.
+     *
+     * Retorna: UploadResult contendo o id do arquivo, nome salvo e metadados.
+     *
+     * Observações:
+     * - É gerado um nome único prefixado com timestamp para evitar colisão.
+     * - Eventos 'finish' e 'error' do stream definem a resolução/rejeição.
+     * - loggerUtils registra a operação de criação no banco para auditoria.
+     *
+     * TODO: adicionar timeout/cancelamento; calcular checksum e salvar no metadata.
      */
     async uploadToGridFS(
         buffer: Buffer,
@@ -39,17 +104,18 @@ export class UploadService {
         try {
             const bucket = this.getBucket();
 
-            // Gerar nome único para o arquivo
+            // Gerar nome único para o arquivo (timestamp + nome original)
             const uniqueFilename = `${Date.now()}_${filename}`;
 
-            // Criar stream de upload
+            // Criar stream de upload para o GridFS com os metadados
             const uploadStream = bucket.openUploadStream(uniqueFilename, {
                 metadata
             });
 
-            // Promise para aguardar o upload
+            // Promise para aguardar a conclusão do stream de upload
             const uploadPromise = new Promise<UploadResult>((resolve, reject) => {
                 uploadStream.on('finish', () => {
+                    // Log de sucesso com dados úteis para auditoria
                     logger.info('Arquivo enviado para GridFS', {
                         fileId: uploadStream.id.toString(),
                         filename: uniqueFilename,
@@ -57,6 +123,7 @@ export class UploadService {
                     });
                     loggerUtils.logDatabase('create', `${process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'}.files`, true);
 
+                    // Retornar dados do arquivo salvo
                     resolve({
                         fileId: uploadStream.id.toString(),
                         filename: uniqueFilename,
@@ -65,18 +132,21 @@ export class UploadService {
                 });
 
                 uploadStream.on('error', (error) => {
+                    // Log de erro com contexto para troubleshooting
                     logger.error('Erro no upload para GridFS', { error, filename });
                     loggerUtils.logDatabase('create', `${process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'}.files`, false, error as any);
                     reject(error);
                 });
             });
 
-            // Escrever buffer no stream
+            // Enviar o conteúdo do arquivo para o stream do GridFS
             uploadStream.end(buffer);
 
+            // Esperar o término do upload
             return await uploadPromise;
 
         } catch (error) {
+            // Falhas não relacionadas ao stream (ex.: inicialização do bucket)
             logger.error('Erro no serviço de upload', { error, filename });
             loggerUtils.logDatabase('create', `${process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'}.files`, false, error as any);
             throw error;
@@ -84,7 +154,11 @@ export class UploadService {
     }
 
     /**
-     * Obter informações do arquivo
+     * Obter informações de um arquivo no GridFS pelo seu ID.
+     * Retorna o documento do arquivo (ou null) conforme o resultado da busca.
+     *
+     * TODO: tratar caso de ObjectId inválido com BadRequestError.
+     * TODO: usar projeção para retornar apenas campos necessários.
      */
     async getFileInfo(fileId: string) {
         try {
@@ -103,7 +177,13 @@ export class UploadService {
     }
 
     /**
-     * Listar arquivos do usuário
+     * Listar arquivos de um usuário com paginação.
+     * - Ordena por data de upload (descendente).
+     * - Retorna também informações de paginação (total e totalPages).
+     *
+     * TODO: validar parâmetros page/limit (mínimos/máximos) antes da consulta.
+     * TODO: adicionar filtros por categoria, mimetype e período.
+     * TODO: garantir índices adequados em metadata.uploadedBy e uploadDate.
      */
     async getUserFiles(userId: string, page = 1, limit = 10) {
         try {
@@ -131,6 +211,7 @@ export class UploadService {
                     mimetype: file.metadata?.mimetype,
                     size: file.length,
                     uploadedAt: file.uploadDate,
+                    // URL pública para servir o arquivo via endpoint HTTP
                     url: `/api/upload/file/${file._id}`
                 })),
                 pagination: {
@@ -149,7 +230,13 @@ export class UploadService {
     }
 
     /**
-     * Deletar arquivo do GridFS
+     * Deletar arquivo do GridFS.
+     * - Se userId for fornecido, valida se o arquivo pertence ao usuário.
+     * - Retorna true em caso de sucesso; false quando não autorizado ou erro controlado.
+     *
+     * TODO: implementar soft delete (marcação) ao invés de remoção definitiva
+     *       para permitir recuperação e auditoria.
+     * TODO: registrar auditoria detalhada (quem, quando, motivo) em coleção separada.
      */
     async deleteFile(fileId: string, userId?: string): Promise<boolean> {
         try {
@@ -178,7 +265,9 @@ export class UploadService {
     }
 
     /**
-     * Gerar URL pública para arquivo
+     * Gerar URL pública para arquivo para uso em frontend/API.
+     *
+     * TODO: considerar URLs assinadas/temporárias para conteúdos sensíveis.
      */
     generateFileUrl(fileId: string): string {
         const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
@@ -186,7 +275,12 @@ export class UploadService {
     }
 
     /**
-     * Validar tipo de arquivo
+     * Validar tipo de arquivo com base na whitelist de MIME types.
+     * - Usa a variável de ambiente ALLOWED_FILE_TYPES (separada por vírgulas)
+     *   ou um conjunto padrão.
+     *
+     * TODO: centralizar a lista de tipos aceitos em um módulo de configuração.
+     * TODO: complementar com validação por extensão quando apropriado.
      */
     isValidFileType(mimetype: string): boolean {
         const allowedTypes = process.env.ALLOWED_FILE_TYPES?.split(',') || [
@@ -199,15 +293,26 @@ export class UploadService {
     }
 
     /**
-     * Validar tamanho do arquivo
+     * Validar tamanho do arquivo (bytes) contra o limite máximo.
+     * - MAX_FILE_SIZE por padrão é 10 MB (10485760 bytes) se não informado.
+     *
+     * TODO: expor esse limite em documentação/config e padronizar unidade (MB).
      */
     isValidFileSize(size: number): boolean {
-        const maxSize = parseInt(process.env.MAX_FILE_SIZE || '10485760'); // 10MB
+        const maxSize = parseInt(process.env.MAX_FILE_SIZE || '10485760'); // 10 MB padrão
         return size <= maxSize;
     }
 
     /**
-     * Upload múltiplo com validação
+     * Upload múltiplo com validação de negócio e I/O.
+     * - Valida quantidade, tipo e tamanho antes de iniciar os uploads.
+     * - Realiza todos os uploads em paralelo e retorna a lista de resultados.
+     *
+     * TODO: limitar concorrência (ex.: p-limit) para proteger o servidor.
+     * TODO: orquestrar "transação lógica"/rollback em caso de falhas parciais
+     *       (ex.: deletar arquivos enviados com sucesso quando outros falharem,
+     *       se o caso de uso exigir atomicidade).
+     * TODO: incluir dados de correlação (requestId) nos logs para rastreabilidade.
      */
     async uploadMultipleFiles(
         files: { buffer: Buffer; originalname: string; mimetype: string; size: number }[],
@@ -215,7 +320,7 @@ export class UploadService {
         categoria?: string,
         descricao?: string
     ): Promise<UploadResult[]> {
-        // Regras de negócio e validações fora do try/catch
+        // Regras de negócio e validações fora do try/catch (erros 4xx para cliente)
         if (files.length > 5) {
             throw new BadRequestError(`Limite de 5 arquivos por upload. Recebidos: ${files.length}`);
         }
@@ -229,9 +334,9 @@ export class UploadService {
             }
         }
 
-        // Captura apenas erros de I/O durante o upload em si
+        // Captura apenas erros de I/O durante o upload em si (5xx)
         try {
-            // Upload de todos os arquivos
+            // Enfileirar uploads (Promise.all executa em paralelo)
             const uploadPromises = files.map(file => {
                 const metadata: FileMetadata = {
                     originalName: file.originalname,
@@ -262,4 +367,5 @@ export class UploadService {
     }
 }
 
+// Exporta uma instância reutilizável do serviço para uso em controllers/rotas
 export const uploadService = new UploadService();
