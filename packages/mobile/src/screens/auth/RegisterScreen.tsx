@@ -35,6 +35,8 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     // Estado de loading para o botão "Registrar"
     const [submitting, setSubmitting] = React.useState(false);
+    // Ref síncrono para prevenir reenvio simultâneo
+    const submittingRef = React.useRef(false);
     // Estado do Snackbar para mostrar mensagens para o usuário
     const [snack, setSnack] = React.useState<{ visible: boolean; message: string }>(
         { visible: false, message: '' }
@@ -61,6 +63,9 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     // - Exibe mensagem de sucesso e redireciona para Login
     // - Em caso de erro, mostra o motivo e, se for de e-mail, marca o campo como inválido
     const onSubmit = async (data: RegisterFormData) => {
+        // Previne reenvio: usa ref síncrona para bloquear múltiplos submits no mesmo tick/render
+        if (submittingRef.current) return;
+        submittingRef.current = true;
         try {
             setSubmitting(true); // ativa loading do botão
             await AuthService.register(data); // chamada à API de registro
@@ -77,6 +82,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 setError('email', { type: 'server', message: msg });
             }
         } finally {
+            submittingRef.current = false;
             setSubmitting(false); // desativa loading
         }
     };
@@ -214,9 +220,9 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                             value={value}
                             onValueChange={onChange}
                             buttons={[
-                                { value: 'buyer', label: 'Comprador' },
-                                { value: 'provider', label: 'Prestador' },
-                                { value: 'advertiser', label: 'Anunciante' },
+                                { value: 'buyer', label: 'Comprador', testID: 'seg-buyer' },
+                                { value: 'provider', label: 'Prestador', testID: 'seg-provider' },
+                                { value: 'advertiser', label: 'Anunciante', testID: 'seg-advertiser' },
                             ]}
                         />
                         {/* Mensagem de erro do campo Tipo */}

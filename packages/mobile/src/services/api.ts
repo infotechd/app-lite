@@ -96,7 +96,7 @@ async function pickReachableBaseURL(): Promise<string> {
 // - Em desenvolvimento, começamos com a primeira candidata (Casa) até a autodetecção ajustar.
 // - Em produção, defina sua URL pública fixa do backend.
 // MELHORIA: Pegar a URL de produção de uma variável de ambiente segura.
-const API_BASE_URL = __DEV__
+const API_BASE_URL = (typeof __DEV__ !== 'undefined' && __DEV__)
     ? CANDIDATE_BASE_URLS[0] // Casa — inicial até detectar melhor opção
     : 'https://your-production-api.com/api';
 
