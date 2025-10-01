@@ -45,7 +45,7 @@ export async function uploadFiles(mediaFiles: MediaFile[]): Promise<UploadFilesR
         //  - alguns pickers retornam sem prefixo -> também prefixamos com file://
         // Observação: no iOS geralmente vêm como file://
         let uri = f.uri;
-        if (Platform.OS === 'android') {
+        if ((Platform as any)?.OS === 'android') {
             if (uri.startsWith('content://')) {
                 // mantém content:// como está
                 // TODO: (Melhoria) considerar suporte robusto a content:// usando bibliotecas como
