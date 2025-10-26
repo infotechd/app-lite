@@ -1,134 +1,230 @@
-// Serviço de Upload de Arquivos (Mobile)
-// Este módulo encapsula a lógica de montar um FormData com arquivos locais
-// (imagens e vídeos) e enviá‑los para o backend. Os comentários abaixo explicam
-// cada parte do código e apontam melhorias futuras onde aplicável.
+// Serviço de Upload para o app mobile
+// Este módulo centraliza as operações de upload, listagem e exclusão de arquivos
+// integradas ao backend (que por sua vez utiliza Cloudinary).
+//
+// Objetivos:
+// - Oferecer funções simples para a UI enviar e gerenciar arquivos
+// - Normalizar respostas do backend/Cloudinary para um formato único
+// - Tratar particularidades de plataforma (ex.: Android) ao montar o FormData
+//
+// Ideias de melhorias futuras (TODO):
+// - TODO: Implementar relatório de progresso (onUploadProgress) para mostrar barra de progresso ao usuário
+// - TODO: Suportar cancelamento de upload (AbortController) para o usuário poder cancelar
+// - TODO: Validar tamanho e tipo de arquivo antes do envio (limites e MIME whitelist)
+// - TODO: Adicionar tentativas com backoff exponencial em falhas transitórias (rede/timeout)
+// - TODO: Tornar o timeout configurável via env ou parâmetros
+// - TODO: Internacionalizar mensagens de erro e padronizar codes para melhor UX
+// - TODO: Melhorar tipagem das respostas do backend (evitar uso de any e caminhos alternativos)
+// - TODO: Cachear listagem de arquivos e/ou usar SWR/React Query para revalidação
+// - TODO: Log estruturado (com IDs de correlação) para facilitar debug em produção
 
-import api from './api'; // Instância HTTP (Axios) configurada para o app
-import type { MediaFile } from '@/utils/validation'; // Tipo de arquivo de mídia selecionado no app
-import { Platform } from 'react-native'; // Usado para tratar diferenças entre Android e iOS
+import api from './api';
+import type { MediaFile } from '@/utils/validation';
+import { Platform } from 'react-native';
 
-// Interface com as informações normalizadas que o backend retorna para cada arquivo
+/**
+ * Modelo de metadados de um arquivo armazenado na nuvem.
+ * Mantém campos necessários para exibição e controle no app.
+ */
 export interface UploadedFileInfo {
-    fileId: string; // ID do arquivo no backend (ex.: GridFS ID)
-    filename: string; // Nome do arquivo armazenado
-    url: string; // URL relativa para acessar o arquivo (ex.: /api/upload/file/:id)
-    mimetype: string; // Tipo MIME (ex.: image/jpeg, video/mp4)
-    size: number; // Tamanho em bytes
+    fileId: string; // Public ID do Cloudinary (alias/compatibilidade)
+    filename: string; // Nome do arquivo (pode vir do dispositivo ou do provedor)
+    url: string; // URL segura (HTTPS) para acessar o arquivo
+    mimetype: string; // MIME Type (ex.: image/jpeg, video/mp4)
+    size: number; // Tamanho em bytes (quando disponível)
+    publicId: string; // Public ID do Cloudinary (chave principal)
+    resourceType: 'image' | 'video' | 'raw'; // Tipo de recurso no Cloudinary
 }
 
-// Estrutura do retorno principal da função de upload
+/**
+ * Estrutura de retorno padronizada para uploads múltiplos.
+ * - images e videos retornam apenas URLs para uso rápido
+ * - raw contém a lista completa de metadados normalizados
+ */
 export interface UploadFilesResponse {
-    images: string[]; // URLs apenas de imagens (filtradas pelo mimetype)
-    videos: string[]; // URLs apenas de vídeos (filtradas pelo mimetype)
-    raw: UploadedFileInfo[]; // Lista completa de arquivos com metadados normalizados
+    images: string[]; // URLs de imagens enviadas
+    videos: string[]; // URLs de vídeos enviados
+    raw: UploadedFileInfo[]; // Lista completa normalizada
 }
 
-// Realiza upload dos arquivos selecionados para o endpoint do backend (GridFS)
-// O backend espera o campo multipart com o nome "files"
-// e responde no formato { success, data: { files: [...] } } (ou variações compatíveis)
+/**
+ * Realiza upload dos arquivos selecionados para o backend (Cloudinary via API).
+ *
+ * Parâmetros:
+ * - mediaFiles: lista de arquivos selecionados pelo usuário, seguindo o tipo MediaFile
+ *
+ * Retorno:
+ * - UploadFilesResponse contendo URLs separadas por tipo e a lista completa de metadados
+ *
+ * Observações:
+ * - Realiza normalização de URIs no Android para evitar erros do FormData
+ * - Define nomes default para arquivos quando necessário
+ * - Normaliza a resposta do backend para um formato consistente
+ */
 export async function uploadFiles(mediaFiles: MediaFile[]): Promise<UploadFilesResponse> {
-    // Guarda de segurança: se não houver arquivos, retorna estruturas vazias
+    // Curto-circuito: sem arquivos, retorna estruturas vazias
     if (!Array.isArray(mediaFiles) || mediaFiles.length === 0) {
         return { images: [], videos: [], raw: [] };
     }
 
-    // Cria a instância de FormData que será enviada no corpo da requisição
+    // FormData que será enviado ao endpoint /upload/files
     const form = new FormData();
-    
-    // Itera sobre cada arquivo selecionado pelo usuário
+
+    // Montagem do payload: um campo 'files' por item
     for (const f of mediaFiles) {
-        // Ajuste de URI para React Native (especialmente no Android)
-        // Em Android, podemos encontrar formatos diferentes:
-        //  - content:// -> mantemos como está (pode exigir tratamento especial no backend ou libs específicas)
-        //  - file:// -> já é um caminho de arquivo válido
-        //  - caminhos absolutos ("/") sem prefixo -> prefixamos com file://
-        //  - alguns pickers retornam sem prefixo -> também prefixamos com file://
-        // Observação: no iOS geralmente vêm como file://
         let uri = f.uri;
+
+        // Normalização de URI para Android
+        // Em Android, URIs podem vir como content://, file:// ou caminhos absolutos.
+        // O fetch/FormData geralmente espera file:// ou content://.
         if ((Platform as any)?.OS === 'android') {
             if (uri.startsWith('content://')) {
-                // mantém content:// como está
-                // TODO: (Melhoria) considerar suporte robusto a content:// usando bibliotecas como
-                //       react-native-blob-util ou soluções equivalentes, caso o backend não aceite
-                //       diretamente esse esquema. Também avaliar conversão para file:// quando necessário.
+                // Mantém content:// como está (permitido pelo RN/Android)
             } else if (uri.startsWith('file://')) {
-                // já OK para multipart
+                // Já está OK (nada a fazer)
             } else if (uri.startsWith('/')) {
-                // path absoluto: garantir o prefixo file:// para o FormData
+                // Caminho absoluto -> prefixa com file:// para compatibilidade
                 uri = `file://${uri}`;
             } else {
-                // alguns pickers retornam sem prefixo: garantir file://
+                // Qualquer outro caso: força file:// como fallback seguro
                 uri = `file://${uri}`;
             }
         }
-        // TODO: (Melhoria) Considerar normalização também específica para iOS, se necessário,
-        //       e validar se o caminho existe/é acessível antes de enviar.
 
-        // Inferimos se é vídeo pelo MIME type para definir um nome padrão adequado
+        // Heurística simples para nome default baseado no tipo MIME
         const isVideo = (f.type || '').startsWith('video/');
         const defaultName = isVideo ? 'video.mp4' : 'image.jpg';
 
-        // Objeto de arquivo no formato esperado pelo FormData do React Native
+        // Objeto compatível com FormData para React Native
         const fileObject = {
-            uri,                 // caminho/URI do arquivo local
-            type: f.type,        // MIME type
-            name: f.name || defaultName, // nome do arquivo (fallback caso não venha do picker)
-        } as any; // as any: compatibilidade com implementações RN/axios
-        // TODO: (Melhoria) Remover "as any" criando um tipo mais estrito para o arquivo
-        //       (ex.: { uri: string; type: string; name: string }) e garantindo compatibilidade.
+            uri, // caminho/uri do arquivo no dispositivo
+            type: f.type, // MIME type informado pela origem (ImagePicker, etc.)
+            name: f.name || defaultName, // fallback caso não haja nome
+        } as any;
 
-        // CRÍTICO: o backend espera exatamente o campo 'files' no multipart
+        // Adiciona o arquivo no campo 'files' (o backend deve aceitar múltiplos)
         form.append('files', fileObject);
     }
 
-    // Envia como multipart/form-data
-    // OBS: Definir manualmente 'Content-Type' força o Axios a usar esse valor; em alguns casos
-    // é preferível deixar o Axios preencher (com boundary) automaticamente.
-    // TODO: (Melhoria) Avaliar remover o header explícito e deixar Axios definir o boundary:
-    //       api.post(url, form) sem headers, caso não haja middleware exigindo manualmente.
-    const response = await api.post('/upload/files', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        // TODO: (Melhoria) Considerar adicionar timeout, onUploadProgress e sinal de cancelamento
-        //       (AbortController) para melhor UX e robustez.
-    });
+    try {
+        // Envia o FormData ao backend; o backend cuidará do upload no Cloudinary
+        const response = await api.post('/upload/files', form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 60000, // 60 segundos para upload (TODO: torná-lo configurável)
+            // TODO: adicionar onUploadProgress quando suportado pela stack atual
+        });
 
-    // Em Axios, a resposta já vem serializada em response.data
-    const data = response.data;
+        // A API pode retornar em diferentes formatos (data.data.files ou data.files)
+        const data = response.data;
+        const filesArr = (data?.data?.files ?? data?.files ?? []) as any[];
 
-    // O backend pode responder em data.data.files ou data.files; suportamos ambas as variações
-    const filesArr = (data?.data?.files ?? data?.files ?? []) as any[];
-    // TODO: (Melhoria) Tipar melhor a resposta do backend (criar uma interface de resposta
-    //       específica) e padronizar o contrato no servidor para evitar checagens alternativas.
+        // Normalizar resposta do Cloudinary/Backend para UploadedFileInfo
+        const normalized: UploadedFileInfo[] = Array.isArray(filesArr)
+            ? filesArr.map((it) => ({
+                fileId: String(it.fileId ?? it.publicId ?? it.id ?? ''), // caminhos alternativos por compatibilidade
+                filename: String(it.filename ?? it.name ?? ''), // aceita 'name' como fallback
+                url: String(it.url ?? ''), // URL do arquivo (espera-se HTTPS)
+                mimetype: String(it.mimetype ?? it.resourceType ?? ''), // alguns backends enviam resourceType
+                size: Number(it.size ?? 0), // pode não vir, então default 0
+                publicId: String(it.publicId ?? it.fileId ?? ''), // garante publicId preenchido
+                resourceType: (it.resourceType ?? 'image') as 'image' | 'video' | 'raw', // default image
+            }))
+            : [];
 
-    // Normaliza cada item para UploadedFileInfo, fornecendo defaults seguros
-    const normalized: UploadedFileInfo[] = Array.isArray(filesArr)
-        ? filesArr.map((it) => ({
-            fileId: String(it.fileId ?? it.id ?? ''),
-            filename: String(it.filename ?? it.name ?? ''),
-            url: String(it.url ?? ''),
-            mimetype: String(it.mimetype ?? ''),
-            size: Number(it.size ?? 0),
-        }))
-        : [];
+        // Separar por tipo para uso mais prático na UI
+        const images = normalized
+            .filter((f) => f.resourceType === 'image' || f.mimetype.startsWith('image/'))
+            .map((f) => f.url);
 
-    // Separa URLs de imagens e vídeos com base no mimetype
-    const images = normalized
-        .filter((f) => f.mimetype.startsWith('image/'))
-        .map((f) => f.url);
+        const videos = normalized
+            .filter((f) => f.resourceType === 'video' || f.mimetype.startsWith('video/'))
+            .map((f) => f.url);
 
-    const videos = normalized
-        .filter((f) => f.mimetype.startsWith('video/'))
-        .map((f) => f.url);
-
-    // Retorna os arrays filtrados e a lista completa normalizada
-    return { images, videos, raw: normalized };
-
-    // TODO: (Melhoria) Adicionar try/catch envolvendo toda a operação para capturar e
-    //       traduzir erros (rede, validação, resposta inesperada), retornando um formato
-    //       consistente ou lançando erros com mensagens amigáveis.
-    // TODO: (Melhoria) Validar tamanho/tipo antes do envio (ex.: bloquear > X MB ou tipos não suportados)
-    // TODO: (Melhoria) Implementar retry com backoff exponencial para falhas transitórias de rede
+        // Retorna URLs categorizadas e o array completo normalizado
+        return { images, videos, raw: normalized };
+    } catch (error: any) {
+        // Log para diagnóstico (evitar expor detalhes sensíveis ao usuário final)
+        console.error('Upload error:', error);
+        // Propaga erro com mensagem amigável; backend pode retornar message customizada
+        throw new Error(
+            error?.response?.data?.message ||
+            error?.message ||
+            'Erro ao fazer upload dos arquivos'
+        );
+    }
 }
 
-// Export default para facilitar import em outras partes do app
-export default { uploadFiles };
+/**
+ * Deleta um arquivo do Cloudinary.
+ *
+ * Parâmetros:
+ * - publicId: identificador público do recurso no Cloudinary
+ * - resourceType: tipo do recurso (image, video ou raw); default 'image'
+ *
+ * Retorno:
+ * - boolean indicando sucesso da operação
+ *
+ * Observações:
+ * - O publicId é codificado na URL para evitar problemas com caracteres especiais
+ */
+export async function deleteFile(publicId: string, resourceType: 'image' | 'video' | 'raw' = 'image'): Promise<boolean> {
+    try {
+        const response = await api.delete(`/upload/file/${encodeURIComponent(publicId)}`, {
+            params: { resourceType }
+        });
+        // Alguns backends retornam { success: true } sob data
+        return response.data?.success ?? false;
+    } catch (error: any) {
+        console.error('Delete error:', error);
+        throw new Error(
+            error?.response?.data?.message ||
+            error?.message ||
+            'Erro ao deletar arquivo'
+        );
+    }
+}
+
+/**
+ * Lista arquivos do usuário autenticado.
+ *
+ * Retorno:
+ * - Lista normalizada de UploadedFileInfo
+ *
+ * Observações:
+ * - Normaliza a resposta, aceitando tanto data.data.files quanto data.files
+ */
+export async function getUserFiles(): Promise<UploadedFileInfo[]> {
+    try {
+        const response = await api.get('/upload/files');
+        const data = response.data;
+        const filesArr = (data?.data?.files ?? data?.files ?? []) as any[];
+
+        // Mapeia para o modelo UploadedFileInfo garantindo defaults
+        return Array.isArray(filesArr)
+            ? filesArr.map((it) => ({
+                fileId: String(it.fileId ?? it.publicId ?? ''),
+                filename: String(it.filename ?? ''),
+                url: String(it.url ?? ''),
+                mimetype: String(it.mimetype ?? ''),
+                size: Number(it.size ?? 0),
+                publicId: String(it.publicId ?? it.fileId ?? ''),
+                resourceType: (it.resourceType ?? 'image') as 'image' | 'video' | 'raw',
+            }))
+            : [];
+    } catch (error: any) {
+        console.error('Get files error:', error);
+        throw new Error(
+            error?.response?.data?.message ||
+            error?.message ||
+            'Erro ao listar arquivos'
+        );
+    }
+}
+
+// Exporta as funções do serviço para uso em outras partes do app
+export default {
+    uploadFiles,
+    deleteFile,
+    getUserFiles
+};
+

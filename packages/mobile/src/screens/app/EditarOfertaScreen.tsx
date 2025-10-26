@@ -14,7 +14,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types'; // Tipos da navegação
 import { maskCurrencyInput, parseCurrencyBRLToNumber, formatCurrencyBRL } from '@/utils/currency'; // Utilidades de moeda BRL
 
-import { CATEGORIES } from '@/constants/categories'; // Lista de categorias disponíveis
+import { CATEGORY_NAMES } from '@/constants/categories'; // Lista de categorias disponíveis
 import CategoryChips from '@/components/CategoryChips'; // Componente de chips para seleção de categoria
 import EstadoSelect from '@/components/EstadoSelect'; // Componente de seleção de UF (+ capital)
 import MediaChips from '@/components/MediaChips'; // Componente para visualizar/adicionar/remover mídias novas
@@ -249,7 +249,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             {!!errors.precoText && <HelperText type="error">{errors.precoText}</HelperText>}
 
             {/* Seleção de categoria por chips */}
-            <CategoryChips categories={CATEGORIES} value={form.categoria} onChange={(cat) => setField('categoria', cat)} />
+            <CategoryChips categories={CATEGORY_NAMES} value={form.categoria} onChange={(cat) => setField('categoria', cat)} />
             {!!errors.categoria && <HelperText type="error">{errors.categoria}</HelperText>}
 
             {/* Seleção de UF (define cidade automaticamente com capital, se disponível) */}

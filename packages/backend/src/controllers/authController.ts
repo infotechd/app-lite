@@ -3,6 +3,7 @@ import User from '../models';
 import logger, { loggerUtils, signAccessToken } from '../utils';
 import { AuthRequest } from '../middleware/auth';
 import { RegisterInput, LoginInput } from '../validation/authValidation';
+import { emailService } from '../services/emailService';
 
 interface AuthenticatedRequest extends AuthRequest {
     body: RegisterInput | LoginInput;
@@ -72,6 +73,11 @@ export const register = async (req: AuthenticatedRequest, res: Response): Promis
         });
 
         await user.save();
+
+        // Enviar e-mail de confirmação de registro (assíncrono, não bloqueante)
+        emailService
+            .sendRegistrationConfirmationEmail(user.email, user.nome)
+            .catch(error => logger.error('Email error', { error }));
 
         // Gerar token (HS256, exp padrão 7d)
         const token = signAccessToken({ userId: user._id });

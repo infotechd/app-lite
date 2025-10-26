@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { VALIDATION_CONFIG, MESSAGES } from '@/constants';
 import { parseCurrencyBRLToNumber } from '@/utils/currency';
+import { removeNonNumeric } from './phoneFormatter';
 
 // Schema de login
 export const loginSchema = z.object({
@@ -29,11 +30,14 @@ export const registerSchema = z.object({
         .string()
         .min(1, MESSAGES.VALIDATION.REQUIRED)
         .min(VALIDATION_CONFIG.PASSWORD_MIN_LENGTH, MESSAGES.VALIDATION.PASSWORD_MIN),
-    telefone: z
-        .string()
-        .regex(VALIDATION_CONFIG.PHONE_REGEX, MESSAGES.VALIDATION.PHONE_INVALID)
-        .optional()
-        .or(z.literal('')),
+    telefone: z.string().optional().refine(
+        (val) => {
+            if (!val || val.trim() === '') return true;
+            const numbers = removeNonNumeric(val);
+            return numbers.length === 10 || numbers.length === 11;
+        },
+        { message: 'Telefone inválido' }
+    ),
     tipo: z.enum(['buyer', 'provider', 'advertiser']),
 });
 
@@ -77,6 +81,7 @@ export const criarOfertaSchema = z.object({
         .refine((v) => /\d/.test(v), 'Preço inválido')
         .refine((v) => parseCurrencyBRLToNumber(v) > 0, 'Preço deve ser maior que 0'),
     categoria: z.string().min(1, 'Selecione uma categoria'),
+    subcategoria: z.string().optional(),
     cidade: z.string().min(1, MESSAGES.VALIDATION.REQUIRED),
     estado: z.string().min(2, 'UF inválida').max(2, 'Use UF, ex: SP'),
     mediaFiles: z

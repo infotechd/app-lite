@@ -16,7 +16,7 @@ import { uploadFiles } from '@/services/uploadService';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';
 // Componentes visuais reutilizáveis
-import CategoryChips from '@/components/CategoryChips';
+import CategorySubcategoryPicker from '@/components/CategorySubcategoryPicker';
 import EstadoSelect from '@/components/EstadoSelect';
 import MediaChips from '@/components/MediaChips';
 // Serviço para abrir galeria/câmera e selecionar mídias
@@ -24,7 +24,6 @@ import { pickMedia } from '@/services/mediaPickerService';
 // Funções utilitárias para máscara e parse de moeda (R$)
 import { maskCurrencyInput, parseCurrencyBRLToNumber } from '@/utils/currency';
 
-import { CATEGORIES } from '@/constants/categories';
 // Handler que trata o resultado da seleção de mídias (cancelamentos, limites, etc.)
 import { handleMediaPickResult } from '@/utils/mediaPickHandlers';
 
@@ -191,6 +190,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                 localizacao: { cidade: form.cidade, estado: form.estado },
                 imagens: imageUrls,
             };
+            if (form.subcategoria) payload.subcategoria = form.subcategoria;
             if (videoUrls.length) payload.videos = videoUrls; // inclui vídeos apenas se houver
 
             // 3) Cria a oferta na API e navega para o detalhe da oferta criada
@@ -209,6 +209,9 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             setSubmitting(false);
         }
     };
+
+    // No formulário: ID de categoria selecionada (adaptado de watch)
+    const categoriaId = form.categoria;
 
     // Renderização do formulário dentro de um ScrollView para comportar telas pequenas
     // MELHORIA: considerar KeyboardAvoidingView para melhor UX com teclado aberto.
@@ -254,11 +257,12 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             />
             {!!errors.precoText && <HelperText type="error">{errors.precoText}</HelperText>}
 
-            {/* Seleção de categoria via chips */}
-            <CategoryChips
-                categories={CATEGORIES}
-                value={form.categoria}
-                onChange={(cat) => setField('categoria', cat)}
+            {/* Seleção de categoria e subcategoria */}
+            <CategorySubcategoryPicker
+                selectedCategoryId={categoriaId}
+                selectedSubcategoryId={form.subcategoria}
+                onCategoryChange={(id) => setField('categoria', id)}
+                onSubcategoryChange={(id) => setField('subcategoria', id)}
             />
             {!!errors.categoria && <HelperText type="error">{errors.categoria}</HelperText>}
 
