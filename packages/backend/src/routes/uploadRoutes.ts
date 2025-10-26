@@ -2,14 +2,9 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { uploadController } from '../controllers/uploadController';
 import { authMiddleware } from '../middleware/auth';
-import { ensureStorageAvailable } from '../middleware/ensureStorage';
 import rateLimit from 'express-rate-limit';
 
 const router: Router = Router();
-
-// Observação: rotas públicas e privadas
-// NÃO aplicamos autenticação globalmente aqui para manter o download público.
-// A autenticação será aplicada por rota apenas onde necessário.
 
 // Rate limiting específico para upload
 const uploadRateLimit = rateLimit({
@@ -21,56 +16,48 @@ const uploadRateLimit = rateLimit({
     }
 });
 
-// Wrapper compatível com tipos do Express (resolve TS2769)
+// Wrapper compatível com tipos do Express
 const uploadRateLimitMw: RequestHandler = (req, res, next) => {
     return (uploadRateLimit as unknown as RequestHandler)(req, res, next);
 };
 
 /**
  * @route   POST /api/upload/files
- * @desc    Upload múltiplo de arquivos para GridFS
+ * @desc    Upload múltiplo de arquivos para Cloudinary
  * @access  Private
  * @body    files: File[], categoria?: string, descricao?: string
  */
 router.post('/files',
     authMiddleware,
     uploadRateLimitMw,
-    ensureStorageAvailable,
     uploadController.uploadMultiple,
     uploadController.uploadFiles
 );
 
 /**
- * @route   GET /api/upload/file/:fileId
- * @desc    Download de arquivo do GridFS
- * Acesso: público (visualização de imagens/vídeos)
- * @params  fileId: string
- */
-router.get('/file/:fileId', uploadController.downloadFile);
-
-/**
- * @route   GET /api/upload/my-files
+ * @route   GET /api/upload/files
  * @desc    Listar arquivos do usuário logado
  * @access  Private
  * @query   page?: number, limit?: number
  */
-router.get('/my-files', authMiddleware, ensureStorageAvailable, uploadController.getUserFiles);
+router.get('/files', authMiddleware, uploadController.getUserFiles);
 
 /**
- * @route   GET /api/upload/info/:fileId
+ * @route   GET /api/upload/file/:publicId
  * @desc    Obter informações detalhadas do arquivo
  * @access  Private
- * @params  fileId: string
+ * @params  publicId: string (URL encoded)
  */
-router.get('/info/:fileId', authMiddleware, ensureStorageAvailable, uploadController.getFileInfo);
+router.get('/file/:publicId', authMiddleware, uploadController.getFileInfo);
 
 /**
- * @route   DELETE /api/upload/file/:fileId
- * @desc    Deletar arquivo do GridFS
+ * @route   DELETE /api/upload/file/:publicId
+ * @desc    Deletar arquivo do Cloudinary
  * @access  Private
- * @params  fileId: string
+ * @params  publicId: string (URL encoded)
+ * @query   resourceType?: 'image' | 'video' | 'raw'
  */
-router.delete('/file/:fileId', authMiddleware, ensureStorageAvailable, uploadController.deleteFile);
+router.delete('/file/:publicId', authMiddleware, uploadController.deleteFile);
 
 /**
  * @route   POST /api/upload/image
@@ -81,7 +68,6 @@ router.delete('/file/:fileId', authMiddleware, ensureStorageAvailable, uploadCon
 router.post('/image',
     authMiddleware,
     uploadRateLimitMw,
-    ensureStorageAvailable,
     uploadController.uploadMultiple,
     uploadController.uploadFiles
 );
@@ -95,9 +81,9 @@ router.post('/image',
 router.post('/video',
     authMiddleware,
     uploadRateLimitMw,
-    ensureStorageAvailable,
     uploadController.uploadMultiple,
     uploadController.uploadFiles
 );
 
 export default router;
+

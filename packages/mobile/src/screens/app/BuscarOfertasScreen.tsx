@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, FlatList, StyleSheet, RefreshControl, Alert, ScrollView } from 'react-native';
-import { Searchbar, Card, Text, FAB, Chip, ActivityIndicator, Button, Portal, Modal, TextInput, HelperText, Divider } from 'react-native-paper';
-import { OfertaServico, OfertaFilters } from '@/types/oferta';
+import { Searchbar, Card, Text, FAB, Chip, ActivityIndicator, Button, Portal, Modal, TextInput, HelperText, Divider, Menu, Switch, SegmentedButtons } from 'react-native-paper';
+import { OfertaServico, OfertaFilters, SortOption } from '@/types/oferta';
 import { ofertaService } from '@/services/ofertaService';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing } from '@/styles/theme';
@@ -11,6 +11,15 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';
 import { openAuthModal } from '@/navigation/RootNavigation';
 import { formatCurrencyBRL } from '@/utils/currency';
+
+// Rótulos para opções de ordenação
+const SORT_LABELS: Record<SortOption, string> = {
+    relevancia: '🎯 Mais Relevante',
+    preco_menor: '💰 Menor Preço',
+    preco_maior: '💎 Maior Preço',
+    avaliacao: '⭐ Melhor Avaliação',
+    recente: '🆕 Mais Recente',
+};
 
 const BuscarOfertasScreen: React.FC = () => {
     const [ofertas, setOfertas] = useState<OfertaServico[]>([]);
@@ -30,6 +39,12 @@ const BuscarOfertasScreen: React.FC = () => {
     const [estado, setEstado] = useState<string | undefined>(undefined);
     const [total, setTotal] = useState<number>(0);
 
+    // Novos filtros avançados
+    const [sortBy, setSortBy] = useState<SortOption>('relevancia');
+    const [comMidia, setComMidia] = useState<boolean>(false);
+    const [tipoPessoa, setTipoPessoa] = useState<'PF' | 'PJ' | undefined>(undefined);
+    const [isSortMenuVisible, setIsSortMenuVisible] = useState(false);
+
     // Filters modal visibility and draft values
     const [isFiltersVisible, setIsFiltersVisible] = useState(false);
     const [draftCategoria, setDraftCategoria] = useState<string | undefined>(undefined);
@@ -37,6 +52,8 @@ const BuscarOfertasScreen: React.FC = () => {
     const [draftPrecoMax, setDraftPrecoMax] = useState<string>('');
     const [draftCidade, setDraftCidade] = useState<string>('');
     const [draftEstado, setDraftEstado] = useState<string | undefined>(undefined);
+    const [draftComMidia, setDraftComMidia] = useState<boolean>(false);
+    const [draftTipoPessoa, setDraftTipoPessoa] = useState<'PF' | 'PJ' | 'todos'>('todos');
 
     const { user, isAuthenticated, setPendingRedirect } = useAuth();
     // Mostrar CTA de criar oferta para convidados; se autenticado, somente para provider
@@ -74,6 +91,9 @@ const BuscarOfertasScreen: React.FC = () => {
                 precoMax,
                 cidade,
                 estado,
+                sort: sortBy,
+                comMidia,
+                tipoPessoa,
             };
 
             const response = await ofertaService.getOfertas(filters, pageNum, 10);
@@ -98,8 +118,9 @@ const BuscarOfertasScreen: React.FC = () => {
             setTotal(totalCount);
         } catch (error: any) {
             if (requestId === requestIdRef.current) {
-                Alert.alert('Erro', 'Erro ao carregar ofertas');
-                console.error('Erro ao carregar ofertas:', error);
+                // Em caso de falha de rede ou servidor, não interromper com alerta.
+                // Mantemos o estado atual e deixamos a UI exibir o estado vazio amigável quando aplicável.
+                console.warn?.('Falha ao carregar ofertas (rede/servidor):', error);
             } else {
                 // Stale request failed; ignore silently
                 console.debug?.('Stale ofertas request failed, ignoring:', error);
@@ -111,7 +132,7 @@ const BuscarOfertasScreen: React.FC = () => {
                 setIsRefreshing(false);
             }
         }
-    }, [debouncedQuery, selectedCategory, precoMin, precoMax, cidade, estado]);
+    }, [debouncedQuery, selectedCategory, precoMin, precoMax, cidade, estado, sortBy, comMidia, tipoPessoa]);
 
     // Debounce: update debouncedQuery 400ms after user stops typing
     useEffect(() => {
@@ -154,6 +175,8 @@ const BuscarOfertasScreen: React.FC = () => {
         setDraftPrecoMax(typeof precoMax === 'number' ? String(precoMax) : '');
         setDraftCidade(cidade ?? '');
         setDraftEstado(estado);
+        setDraftComMidia(comMidia);
+        setDraftTipoPessoa(tipoPessoa ?? 'todos');
         setIsFiltersVisible(true);
     };
 
@@ -182,6 +205,9 @@ const BuscarOfertasScreen: React.FC = () => {
         setPrecoMax(max);
         setCidade(draftCidade.trim() || undefined);
         setEstado(ufRaw ? ufRaw : undefined);
+        // novos filtros
+        setComMidia(draftComMidia === true);
+        setTipoPessoa(draftTipoPessoa === 'todos' ? undefined : draftTipoPessoa);
         setIsFiltersVisible(false);
         // Carregamento será disparado pelo useEffect que depende de loadOfertas
     };
@@ -192,19 +218,25 @@ const BuscarOfertasScreen: React.FC = () => {
         setPrecoMax(undefined);
         setCidade(undefined);
         setEstado(undefined);
+        setComMidia(false);
+        setTipoPessoa(undefined);
         setIsFiltersVisible(false);
         setDraftCategoria(undefined);
         setDraftPrecoMin('');
         setDraftPrecoMax('');
         setDraftCidade('');
         setDraftEstado(undefined);
+        setDraftComMidia(false);
+        setDraftTipoPessoa('todos');
     };
 
-    const clearFilter = (key: 'categoria' | 'cidade' | 'estado' | 'preco') => {
+    const clearFilter = (key: 'categoria' | 'cidade' | 'estado' | 'preco' | 'comMidia' | 'tipoPessoa') => {
         if (key === 'categoria') setSelectedCategory(undefined);
         if (key === 'cidade') setCidade(undefined);
         if (key === 'estado') setEstado(undefined);
         if (key === 'preco') { setPrecoMin(undefined); setPrecoMax(undefined); }
+        if (key === 'comMidia') setComMidia(false);
+        if (key === 'tipoPessoa') setTipoPessoa(undefined);
         // Carregamento será disparado pelo useEffect que depende de loadOfertas
     };
 
@@ -255,9 +287,9 @@ const BuscarOfertasScreen: React.FC = () => {
     const renderEmpty = () => (
         <View style={styles.emptyContainer}>
             <Icon name="store-search" size={64} color={colors.textSecondary} />
-            <Text style={styles.emptyText}>Nenhuma oferta encontrada</Text>
+            <Text style={styles.emptyText}>Não há ofertas para exibir no momento.</Text>
             <Text style={styles.emptySubtext}>
-                Tente ajustar os filtros ou buscar por outros termos
+                Assim que novas ofertas forem cadastradas, elas aparecerão aqui. Você pode ajustar os filtros ou buscar por outros termos.
             </Text>
             {canCreateOffer && (
                 <Button
@@ -285,9 +317,37 @@ const BuscarOfertasScreen: React.FC = () => {
 
             <View style={styles.filtersHeader}>
                 <View style={styles.filtersRow}>
-                    <Button mode="outlined" icon="filter-variant" onPress={openFilters} accessibilityLabel="Abrir filtros">
-                        Filtros
-                    </Button>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Button mode="outlined" icon="filter-variant" onPress={openFilters} accessibilityLabel="Abrir filtros">
+                            Filtros
+                        </Button>
+                        <Menu
+                            visible={isSortMenuVisible}
+                            onDismiss={() => setIsSortMenuVisible(false)}
+                            anchor={
+                                <Button
+                                    mode="outlined"
+                                    icon="sort"
+                                    onPress={() => setIsSortMenuVisible(true)}
+                                    style={{ marginLeft: spacing.xs }}
+                                >
+                                    {SORT_LABELS[sortBy]}
+                                </Button>
+                            }
+                        >
+                            {Object.entries(SORT_LABELS).map(([key, label]) => (
+                                <Menu.Item
+                                    key={key}
+                                    onPress={() => {
+                                        setSortBy(key as SortOption);
+                                        setIsSortMenuVisible(false);
+                                    }}
+                                    title={label}
+                                    leadingIcon={sortBy === (key as SortOption) ? 'check' : undefined}
+                                />
+                            ))}
+                        </Menu>
+                    </View>
                     <Text style={styles.resultCount}>{total} resultados</Text>
                 </View>
                 <View style={styles.appliedChipsContainer}>
@@ -309,6 +369,21 @@ const BuscarOfertasScreen: React.FC = () => {
                     {(typeof precoMin === 'number' || typeof precoMax === 'number') ? (
                         <Chip mode="outlined" onClose={() => clearFilter('preco')} style={styles.appliedChip}>
                             {`R$ ${typeof precoMin === 'number' ? precoMin : 0}${typeof precoMax === 'number' ? `–${precoMax}` : '+'}`}
+                        </Chip>
+                    ) : null}
+                    {comMidia ? (
+                        <Chip mode="outlined" icon="image" onClose={() => clearFilter('comMidia')} style={styles.appliedChip}>
+                            Com mídia
+                        </Chip>
+                    ) : null}
+                    {tipoPessoa ? (
+                        <Chip mode="outlined" onClose={() => clearFilter('tipoPessoa')} style={styles.appliedChip}>
+                            {tipoPessoa}
+                        </Chip>
+                    ) : null}
+                    {(selectedCategory || cidade || estado || typeof precoMin === 'number' || typeof precoMax === 'number' || comMidia || tipoPessoa) ? (
+                        <Chip mode="outlined" icon="close-circle" onPress={clearAllFilters} style={styles.appliedChip}>
+                            Limpar
                         </Chip>
                     ) : null}
                 </View>
@@ -376,6 +451,24 @@ const BuscarOfertasScreen: React.FC = () => {
                                 </Chip>
                             ))}
                         </View>
+
+                        <Divider style={{ marginVertical: spacing.md }} />
+                        <Text variant="titleMedium" style={styles.sectionTitle}>Preferências</Text>
+                        <View style={[styles.row, { justifyContent: 'space-between', marginBottom: spacing.sm }]}>
+                            <Text>Apenas com fotos/vídeos</Text>
+                            <Switch value={draftComMidia} onValueChange={setDraftComMidia} />
+                        </View>
+                        <Text variant="labelMedium" style={{ marginBottom: spacing.xs }}>Tipo de Prestador</Text>
+                        <SegmentedButtons
+                            value={draftTipoPessoa}
+                            onValueChange={(val) => setDraftTipoPessoa((val as 'PF' | 'PJ' | 'todos') ?? 'todos')}
+                            buttons={[
+                                { value: 'todos', label: 'Todos' },
+                                { value: 'PF', label: 'Pessoa Física' },
+                                { value: 'PJ', label: 'Pessoa Jurídica' },
+                            ]}
+                            style={{ marginBottom: spacing.sm }}
+                        />
 
                         <View style={styles.actionRow}>
                             <Button mode="text" onPress={clearAllFilters}>Limpar</Button>

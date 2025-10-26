@@ -9,6 +9,19 @@ export interface OfertasResponse {
     totalPages: number;
 }
 
+export interface ListOfertasParams {
+    busca?: string;
+    categoria?: string;
+    subcategoria?: string;
+    estado?: string;
+    cidade?: string;
+    sort?: 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente';
+    comMidia?: boolean;
+    tipoPessoa?: 'PF' | 'PJ';
+    page?: number;
+    limit?: number;
+}
+
 // Funções auxiliares para normalizar dados da API para tipos estritos
 // TODO: Validar esquemas de resposta (ex.: Zod) antes do mapeamento para maior robustez
 /**
@@ -65,11 +78,15 @@ export const ofertaService = {
         const params = new URLSearchParams();
 
         if (filters?.categoria) params.append('categoria', filters.categoria);
-        if (filters?.precoMin) params.append('precoMin', filters.precoMin.toString());
-        if (filters?.precoMax) params.append('precoMax', filters.precoMax.toString());
+        if (filters?.precoMin !== undefined) params.append('precoMin', filters.precoMin.toString());
+        if (filters?.precoMax !== undefined) params.append('precoMax', filters.precoMax.toString());
         if (filters?.cidade) params.append('cidade', filters.cidade);
         if (filters?.estado) params.append('estado', filters.estado);
         if (filters?.busca) params.append('busca', filters.busca);
+        // Novos filtros avançados
+        if (filters?.sort) params.append('sort', filters.sort);
+        if (filters?.comMidia === true) params.append('comMidia', 'true');
+        if (filters?.tipoPessoa) params.append('tipoPessoa', filters.tipoPessoa);
 
         params.append('page', page.toString());
         params.append('limit', limit.toString());
@@ -84,6 +101,12 @@ export const ofertaService = {
             page: typeof data?.page === 'number' ? data.page : page,
             totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
         };
+    },
+
+    // Método simplificado de listagem conforme solicitação
+    async list(params: ListOfertasParams) {
+        const response = await api.get('/ofertas', { params });
+        return response.data;
     },
 
     /**

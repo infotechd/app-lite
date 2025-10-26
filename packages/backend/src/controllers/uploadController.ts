@@ -1,177 +1,155 @@
-/**
- * Controller de Upload
- * Responsável por:
- * - Receber uploads (imagens/vídeos) via Multer (memória) e armazenar no GridFS.
- * - Fornecer download com suporte a range para streaming.
- * - Listar, detalhar e excluir arquivos do usuário.
- *
- * Segurança e boas práticas:
- * - Limites de tamanho/quantidade de arquivos controlados via variáveis de ambiente.
- * - Filtro de tipos MIME permitido (defesa inicial, não substitui validação profunda).
- * - Sanitização de range no download para evitar leituras fora do intervalo.
- * - Telemetria de sucesso/erro para auditoria.
- *
- * Ideias para futuras melhorias:
- * - Validação MIME por assinatura mágica (magic numbers) além do mimetype enviado pelo cliente.
- * - Verificação antivírus/antimalware antes de persistir (ex.: ClamAV).
- * - Quotas por usuário, limites diários e rate limiting por IP/usuário.
- * - Geração de miniaturas (thumbnails) e metadados adicionais (dimensões, duração).
- * - Transcodificação assíncrona de vídeos e normalização de imagens.
- * - Criptografia em repouso/cliente e controle de acesso granular por arquivo.
- * - Deduplicação por hash para economizar armazenamento.
- * - Observabilidade: métricas (Prometheus), tracing e logs estruturados.
- */
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import multer, { FileFilterCallback } from 'multer';
-import mongoose from 'mongoose';
-const { GridFSBucket } = mongoose.mongo;
-const { ObjectId } = mongoose.Types;
-import { getDatabase } from '../config/database';
 import { uploadService } from '../services/uploadService';
-import { logger, loggerUtils } from '../utils/logger';
+import { logger } from '../utils/logger';
 import { z } from 'zod';
 import type { AuthRequest } from '../middleware/auth';
 
 /**
- * Extrai a duração (em segundos) de um arquivo MP4 a partir do buffer, lendo o box 'mvhd'.
- * Retorna undefined quando não for possível determinar (ex.: arquivo corrompido ou container não padrão).
+ * Controller responsável por lidar com uploads de arquivos (imagens e vídeos) para o provedor (Cloudinary),
+ * assim como listar, obter informações e deletar arquivos do usuário autenticado.
  *
- * Notas:
- * - Implementação leve focada em MP4; não valida codecs/stream completos.
- * - Evita lançar exceções para não interromper o fluxo de validação do upload.
+ * Pontos principais:
+ * - Usa Multer com storage em memória (memoryStorage) para receber os arquivos via multipart/form-data.
+ * - Faz validação de tamanho, quantidade e tipos de arquivos via configuração do Multer e variáveis de ambiente.
+ * - Rejeita vídeos com duração maior que 15 segundos (extraindo duração diretamente do buffer MP4).
+ * - Depende de uploadService para operações com o provedor externo (upload/listagem/remoção/consulta).
+ * - Utiliza zod para validar dados adicionais recebidos junto aos arquivos.
+ * - Registra eventos e erros via logger centralizado.
  *
- * Futuras melhorias:
- * - Suportar outros containers (ex.: MOV, WebM) e playlists (HLS/DASH).
- * - Usar BigInt para cálculos de duração 64-bit e evitar perda de precisão.
- * - Considerar bibliotecas de metadados (ex.: mp4box, mediainfo) se requisitos aumentarem.
+ * Variáveis de ambiente utilizadas (com padrão):
+ * - MAX_FILE_SIZE: tamanho máximo de cada arquivo em bytes (padrão 10MB = 10485760).
+ * - MAX_FILES_PER_UPLOAD: quantidade máxima de arquivos por requisição (padrão 5).
+ * - ALLOWED_FILE_TYPES: lista separada por vírgula de MIME types permitidos.
+ *
+ * Possíveis melhorias futuras (TODO):
+ * - Trocar a verificação de duração de vídeo para uma solução baseada em ffprobe/MediaInfo para suportar mais containers e codecs.
+ * - Implementar upload em streaming/chunks (resumable) para suportar arquivos maiores sem estourar memória.
+ * - Adicionar verificação antivírus/antimalware (ex.: ClamAV) antes de enviar ao provedor.
+ * - Implementar limites por usuário (rate limit/quotas) e observar governança de armazenamento por plano.
+ * - Gerar thumbnails e variações de imagens/vídeos no backend (ou via transformações do provedor) e retornar no payload.
+ * - Paginação e filtros em getUserFiles (por tipo, data, tamanho) e caching quando aplicável.
+ * - Auditoria detalhada (quem enviou/deletou/visualizou) e trilhas de auditoria.
+ */
+
+/**
+ * Extrai a duração (em segundos) de um arquivo MP4 a partir do buffer.
+ *
+ * Observação: esta função faz um parse simples do box 'mvhd' do container MP4 e
+ * pode não funcionar para todos os formatos/variações. Para produção, considere
+ * usar ferramentas robustas (ffprobe) para obter metadados de mídia.
  */
 function getMp4DurationSeconds(buffer: Buffer): number | undefined {
     try {
+        // Procura o box 'mvhd' no container MP4
         const mvhdIndex = buffer.indexOf(Buffer.from('mvhd'));
         if (mvhdIndex === -1) return undefined;
-        // O header de box tem 4 bytes de tamanho + 4 bytes de tipo ('mvhd')
-        const start = mvhdIndex + 4; // aponta para version/flags
+
+        // O byte seguinte ao 'mvhd' indica a versão do header (0 ou 1)
+        const start = mvhdIndex + 4;
         const version = buffer.readUInt8(start);
+
         if (version === 1) {
-            // version(1) usa 64-bit times, pular: version(1)1 + flags(3) + ctime(8) + mtime(8)
-            const timescaleOffset = start + 1 + 3 + 8 + 8;
+            // Versão 1 utiliza campos de 64 bits para tempos
+            const timescaleOffset = start + 1 + 3 + 8 + 8; // version(1) + flags(3) + creation(8) + modification(8)
             const timescale = buffer.readUInt32BE(timescaleOffset);
             const durationHigh = buffer.readUInt32BE(timescaleOffset + 4);
             const durationLow = buffer.readUInt32BE(timescaleOffset + 8);
-            // Combinar 64-bit (alto/baixo). Como pode exceder Number.MAX_SAFE_INTEGER, aproximamos quando possível.
-            const duration = durationHigh * 2 ** 32 + durationLow;
+            const duration = durationHigh * 2 ** 32 + durationLow; // concatenação 64 bits
             if (timescale > 0) {
-                return duration / timescale;
+                return duration / timescale; // duração em segundos
             }
             return undefined;
         } else {
-            // version(0) usa 32-bit times, pular: version(1)1 + flags(3) + ctime(4) + mtime(4)
-            const timescaleOffset = start + 1 + 3 + 4 + 4;
+            // Versão 0 utiliza campos de 32 bits para tempos
+            const timescaleOffset = start + 1 + 3 + 4 + 4; // version(1) + flags(3) + creation(4) + modification(4)
             const timescale = buffer.readUInt32BE(timescaleOffset);
             const duration = buffer.readUInt32BE(timescaleOffset + 4);
             if (timescale > 0) {
-                return duration / timescale;
+                return duration / timescale; // duração em segundos
             }
             return undefined;
         }
     } catch {
+        // Em qualquer erro de leitura/parsing, retornamos undefined e tratamos acima
         return undefined;
     }
 }
 
-// Configuração do multer para upload em memória (buffer).
-// Observação: usar memória simplifica a validação prévia (ex.: duração de vídeo), mas consome RAM proporcional ao arquivo.
-// Em cargas altas ou arquivos grandes, considerar armazenamento temporário em disco/streaming direto para o GridFS.
+// Configuração do multer para upload em memória (os buffers ficam no processo Node)
+// ATENÇÃO: para arquivos grandes ou alto volume, prefira storage em disco ou streaming direto ao provedor
 const storage = multer.memoryStorage();
 
-/**
- * Configuração do middleware de upload.
- * - limits.fileSize: tamanho máximo do arquivo em bytes (env MAX_FILE_SIZE). Padrão: 10MB.
- * - limits.files: quantidade máxima de arquivos por requisição (env MAX_FILES_PER_UPLOAD).
- * - fileFilter: filtro de tipos MIME permitidos; retorna false para rejeitar silenciosamente.
- *
- * Segurança:
- * - O MIME enviado pelo cliente pode ser forjado; combine com validação por assinatura do arquivo quando necessário.
- * - Ajuste limites de forma conservadora para evitar DoS por memória.
- *
- * Futuras melhorias:
- * - Validar tipos por "magic number" (assinatura) além do mimetype.
- * - Mover para storage em disco ou stream para GridFS para reduzir uso de memória.
- * - Diferenciar limites por rota/tipo de usuário.
- */
+// Instância do Multer com limites e filtro de tipos de arquivo
 const upload = multer({
     storage,
     limits: {
+        // Tamanho máximo por arquivo, podendo ser configurado via env (padrão 10MB)
         fileSize: parseInt(process.env.MAX_FILE_SIZE || '10485760'), // 10MB
+        // Quantidade máxima de arquivos por requisição
         files: parseInt(process.env.MAX_FILES_PER_UPLOAD || '5'),
     },
     fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+        // req não é utilizado aqui; evitamos warning de variável não usada
         void req;
+        // Tipos permitidos: lidos da env ou defaults seguros
         const allowedTypes = (process.env.ALLOWED_FILE_TYPES?.split(',') || [
             'image/jpeg',
             'image/png',
-            'video/mp4'
+            'image/webp',
+            'image/gif',
+            'video/mp4',
+            'video/quicktime'
         ]).map(t => t.trim());
 
+        // Apenas aceita se o mimetype estiver permitido; do contrário, ignora o arquivo
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            // Rejeita o arquivo sem lançar erro para evitar crash no fluxo do multer
+            // Poderíamos retornar um erro para feedback mais explícito (TODO);
+            // por ora, apenas marcamos como rejeitado (false)
             cb(null, false);
         }
     },
 });
 
-// Schema de validação para upload (campos adicionais do formulário).
-// Mantém o contrato claro e evita dados inesperados.
-/**
- * Futuras melhorias no schema:
- * - Validar tamanhos máximos de strings e normalizar espaços.
- * - Adicionar campos como "tags", "privacidade", "expiraEm".
- * - Internacionalização de mensagens de erro (zod).
- */
+// Esquema de validação para metadados opcionais enviados junto aos arquivos
 const uploadSchema = z.object({
-    categoria: z.string().optional(),
-    descricao: z.string().optional(),
+    categoria: z.string().optional(), // Ex.: "avatar", "galeria", "documento"
+    descricao: z.string().optional(), // Texto descritivo do upload
 });
 
+// Interface do controller: define assinatura dos handlers
 type UploadController = {
+    // Middleware do Multer para aceitar múltiplos arquivos no campo 'files'
     uploadMultiple: RequestHandler;
+    // Handler para realizar upload
     uploadFiles: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
-    downloadFile: RequestHandler;
-    getUserFiles: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
+    // Handler para deletar arquivo
     deleteFile: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
-    getFileInfo: RequestHandler;
+    // Handler para listar arquivos do usuário
+    getUserFiles: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
+    // Handler para obter informações pontuais de um arquivo
+    getFileInfo: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
 };
 
 export const uploadController: UploadController = {
-    // Middleware para upload múltiplo
+    // Aceita até 5 arquivos no campo 'files'. Este middleware popula req.files
     uploadMultiple: upload.array('files', 5) as RequestHandler,
 
     /**
-     * Upload de imagens/vídeos para GridFS.
-     *
+     * Upload de arquivos para Cloudinary.
      * Fluxo:
-     * 1) Coleta arquivos do Multer e valida presença.
-     * 2) Valida dados adicionais via Zod.
-     * 3) Para vídeos MP4, checa duração máxima (<= 15s); rejeita excedentes.
-     * 4) Garante disponibilidade do banco e envia para GridFS com metadados.
-     * 5) Registra logs e telemetria de sucesso ou falha.
-     *
-     * Regras/limites atuais:
-     * - Tipos permitidos: ver ALLOWED_FILE_TYPES.
-     * - Tamanho máximo por arquivo: ver MAX_FILE_SIZE.
-     * - Máximo de arquivos por requisição: ver MAX_FILES_PER_UPLOAD.
-     *
-     * Futuras melhorias:
-     * - Verificação antivírus e validação de integridade (hash).
-     * - Enfileirar uploads pesados e processamentos assíncronos (thumbs/transcode).
-     * - Aplicar quotas e rate limiting por usuário/rota.
-     * - Permitir políticas por categoria (ex.: diferentes limites).
+     * 1) Normaliza req.files em um array de arquivos
+     * 2) Valida presença de arquivos e metadados (zod)
+     * 3) Rejeita vídeos com duração > 15s
+     * 4) Garante usuário autenticado
+     * 5) Envia arquivos válidos via uploadService
+     * 6) Retorna payload com dados dos uploads e vídeos inválidos (se houver)
      */
-    // Upload de imagens/vídeos para GridFS
     async uploadFiles(req: AuthRequest, res: Response, next: NextFunction) {
         try {
+            // req.files pode ser array (quando um único campo) ou um objeto (vários campos)
             const filesInput = req.files;
             const files: Express.Multer.File[] = Array.isArray(filesInput)
                 ? (filesInput as Express.Multer.File[])
@@ -179,6 +157,7 @@ export const uploadController: UploadController = {
                     ? Object.values(filesInput as { [fieldname: string]: Express.Multer.File[] }).flat()
                     : [];
 
+            // Sem arquivos => 400
             if (!files || files.length === 0) {
                 res.status(400).json({
                     success: false,
@@ -187,22 +166,26 @@ export const uploadController: UploadController = {
                 return;
             }
 
-            // Validar dados adicionais
+            // Validar dados adicionais via zod; dispara se inválido
             const validatedData = uploadSchema.parse(req.body);
 
-            // Validar e filtrar vídeos com duração > 15s (somente MP4)
+            // Regras de negócio: rejeitar vídeos com duração superior a 15s
             const invalidVideos: { name: string; reason: string }[] = [];
             const validFiles = files.filter((file) => {
-                if (file.mimetype === 'video/mp4') {
+                if (file.mimetype === 'video/mp4' || file.mimetype === 'video/quicktime') {
                     const dur = getMp4DurationSeconds(file.buffer);
                     if (typeof dur === 'number' && dur > 15) {
-                        invalidVideos.push({ name: file.originalname, reason: `duração ${dur.toFixed(1)}s > 15s` });
-                        return false;
+                        invalidVideos.push({
+                            name: file.originalname,
+                            reason: `duração ${dur.toFixed(1)}s > 15s`
+                        });
+                        return false; // exclui da lista a ser enviada
                     }
                 }
                 return true;
             });
 
+            // Se após os filtros não sobrou nada, retorna 400 informando o motivo
             if (validFiles.length === 0) {
                 res.status(400).json({
                     success: false,
@@ -213,340 +196,180 @@ export const uploadController: UploadController = {
                 return;
             }
 
-            // Verificar disponibilidade do storage/DB (defesa em profundidade)
-            const db = getDatabase();
-            if (!db) {
-                logger.warn('Upload endpoint sem DB (SKIP_DB ou desconectado)');
-                res.status(503).json({
-                    success: false,
-                    message: 'Serviço de upload indisponível (banco de dados não conectado)'
-                });
-                return;
-            }
-
-            // Fazer upload de cada arquivo válido para GridFS
-            const uploadPromises = validFiles.map(async (file) => {
-                const metadata = {
-                    originalName: file.originalname,
-                    mimetype: file.mimetype,
-                    size: file.size,
-                    uploadedBy: req.user?.id,
-                    categoria: validatedData.categoria,
-                    descricao: validatedData.descricao,
-                    uploadedAt: new Date(),
-                };
-
-                return await uploadService.uploadToGridFS(file.buffer, file.originalname, metadata);
-            });
-
-            const uploadResults = await Promise.all(uploadPromises);
-
-            logger.info('Upload realizado com sucesso', {
-                userId: req.user?.id,
-                filesCount: validFiles.length,
-                fileIds: uploadResults.map(r => r.fileId)
-            });
-
-            // Telemetria de upload padronizada
-            loggerUtils.logUpload(req.user?.id, validFiles, true);
-
-            res.status(201).json({
-                success: true,
-                message: invalidVideos.length
-                    ? `Arquivos enviados com sucesso. Alguns vídeos foram ignorados por exceder 15s: ${invalidVideos.map(v => v.name).join(', ')}`
-                    : 'Arquivos enviados com sucesso',
-                data: {
-                    files: uploadResults.map(result => {
-                        const origin = `${req.protocol}://${req.get('host')}`;
-                        return {
-                            fileId: result.fileId,
-                            filename: result.filename,
-                            url: `${origin}/api/upload/file/${result.fileId}`,
-                            mimetype: result.metadata.mimetype,
-                            size: result.metadata.size
-                        };
-                    })
-                }
-            });
-
-        } catch (error) {
-            logger.error('Erro no upload de arquivos', { error, userId: req.user?.id });
-            // Telemetria de upload com falha (não bloquear fluxo por erro de log)
-            try {
-                const filesInput = req.files as any;
-                const files: Express.Multer.File[] = Array.isArray(filesInput)
-                    ? (filesInput as Express.Multer.File[])
-                    : filesInput
-                        ? Object.values(filesInput as { [fieldname: string]: Express.Multer.File[] }).flat()
-                        : [];
-                loggerUtils.logUpload(req.user?.id, files, false);
-            } catch {}
-            next(error);
-        }
-    },
-
-    /**
-     * Download/stream de arquivo do GridFS com suporte a Range (HTTP 206).
-     *
-     * Comportamento:
-     * - Valida o ObjectId.
-     * - Retorna 404 se não encontrado, 503 se storage indisponível.
-     * - Quando há header Range válido, responde com partial content.
-     *
-     * Futuras melhorias:
-     * - Caching com ETag/If-None-Match e Last-Modified.
-     * - Limitar velocidade (throttling) para evitar abuso.
-     * - Cabeçalho Content-Security-Policy para contextos web.
-     * - Verificação de autorização por arquivo (ACL).
-     */
-    // Download de arquivo do GridFS
-    async downloadFile(req: Request, res: Response, next: NextFunction) {
-        try {
-            const { fileId } = req.params;
-
-            if (!ObjectId.isValid(fileId)) {
-                res.status(400).json({
-                    success: false,
-                    message: 'ID de arquivo inválido'
-                });
-                return;
-            }
-
-            const db = getDatabase();
-            if (!db) {
-                logger.warn('Download de mídia solicitado, porém storage indisponível (sem DB)');
-                res.status(503).json({
-                    success: false,
-                    message: 'Armazenamento de mídias indisponível no momento'
-                });
-                return;
-            }
-            const bucket = new GridFSBucket(db, {
-                bucketName: process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'
-            });
-
-            // Buscar informações do arquivo
-            const files = await bucket.find({ _id: new ObjectId(fileId) }).toArray();
-
-            if (files.length === 0) {
-                res.status(404).json({
-                    success: false,
-                    message: 'Arquivo não encontrado'
-                });
-                return;
-            }
-
-            const file = files[0];
-
-            const mime = file.metadata?.mimetype || 'application/octet-stream';
-            const fileSize = file.length as number;
-            const range = req.headers.range;
-
-            res.set({
-                'Accept-Ranges': 'bytes',
-                'Cache-Control': 'public, max-age=31536000'
-            });
-
-            if (range) {
-                // Suporta "bytes=start-" e "bytes=start-end" com validação completa
-                const match = /^bytes=(\d+)-(\d+)?$/i.exec(range);
-                if (!match) {
-                    res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();
-                    return;
-                }
-
-                let start = parseInt(match[1], 10);
-                let end = typeof match[2] !== 'undefined'
-                    ? Math.min(parseInt(match[2], 10), Math.max(fileSize - 1, 0))
-                    : Math.max(fileSize - 1, 0);
-
-                // Sanitizações
-                if (!Number.isFinite(start) || start < 0) start = 0;
-                if (!Number.isFinite(end) || end < 0) end = Math.max(fileSize - 1, 0);
-
-                if (start > end || start >= fileSize) {
-                    res.status(416).set({ 'Content-Range': `bytes */${fileSize}` }).end();
-                    return;
-                }
-
-                const chunkSize = end - start + 1;
-
-                res.status(206);
-                res.set({
-                    'Content-Type': mime,
-                    'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-                    'Content-Length': `${chunkSize}`,
-                    'Content-Disposition': `inline; filename="${file.filename}"`
-                });
-
-                const downloadStream = bucket.openDownloadStream(new ObjectId(fileId), { start, end });
-                downloadStream.on('error', (error: any) => {
-                    logger.error('Erro no download (range) do arquivo', { error: error?.message || String(error), fileId });
-                    if (!res.headersSent) {
-                        res.status(500).json({ success: false, message: 'Erro ao baixar arquivo' });
-                    } else {
-                        try { res.end(); } catch {}
-                    }
-                    try { downloadStream.destroy(); } catch {}
-                });
-                downloadStream.pipe(res);
-            } else {
-                res.set({
-                    'Content-Type': mime,
-                    'Content-Length': fileSize.toString(),
-                    'Content-Disposition': `inline; filename="${file.filename}"`
-                });
-                const downloadStream = bucket.openDownloadStream(new ObjectId(fileId));
-                downloadStream.on('error', (error: any) => {
-                    logger.error('Erro no download do arquivo', { error: error?.message || String(error), fileId });
-                    if (!res.headersSent) {
-                        res.status(500).json({ success: false, message: 'Erro ao baixar arquivo' });
-                    } else {
-                        try { res.end(); } catch {}
-                    }
-                    try { downloadStream.destroy(); } catch {}
-                });
-                downloadStream.pipe(res);
-            }
-
-        } catch (error) {
-            logger.error('Erro no download de arquivo', { error, fileId: req.params.fileId });
-            next(error);
-        }
-    },
-
-    /**
-     * Lista arquivos do usuário autenticado com paginação.
-     *
-     * Parâmetros de query:
-     * - page (default 1)
-     * - limit (default 10)
-     *
-     * Futuras melhorias:
-     * - Ordenação e filtros (tipo, data, tamanho, categoria).
-     * - Suporte a cursor-based pagination.
-     * - Regras de privacidade (arquivos públicos/privados/compartilhados).
-     */
-    // Listar arquivos do usuário
-    async getUserFiles(req: AuthRequest, res: Response, next: NextFunction) {
-        try {
+            // Checagem de autenticação (req.user preenchido por middleware de auth)
             const userId = req.user?.id;
-            const page = parseInt(req.query.page as string) || 1;
-            const limit = parseInt(req.query.limit as string) || 10;
-
             if (!userId) {
                 res.status(401).json({
                     success: false,
-                    message: 'Não autenticado'
+                    message: 'Usuário não autenticado'
                 });
                 return;
             }
 
-            const files = await uploadService.getUserFiles(userId, page, limit);
+            // Dispara upload para o provedor via service. validatedData pode levar metadados
+            const uploadedFiles = await uploadService.uploadMultipleFiles(
+                validFiles,
+                userId,
+                validatedData
+            );
 
-            res.json({
-                success: true,
-                data: files
+            // Log útil para observabilidade
+            logger.info('upload.success', {
+                userId,
+                count: uploadedFiles.length,
+                invalidCount: invalidVideos.length
             });
 
-        } catch (error) {
-            logger.error('Erro ao listar arquivos do usuário', { error, userId: req.user?.id });
+            // Resposta padronizada com os campos essenciais de cada arquivo
+            res.status(200).json({
+                success: true,
+                data: {
+                    files: uploadedFiles.map(f => ({
+                        fileId: f.fileId,
+                        filename: f.filename,
+                        url: f.secureUrl, // Usar URL segura (HTTPS)
+                        mimetype: f.mimetype,
+                        size: f.size,
+                        publicId: f.publicId,
+                        resourceType: f.resourceType
+                    })),
+                    // Retornamos a lista de vídeos inválidos (se houver) para feedback no cliente
+                    invalidVideos: invalidVideos.length > 0 ? invalidVideos : undefined
+                }
+            });
+        } catch (error: any) {
+            // Encaminhamos o erro para o middleware de erro global
+            logger.error('upload.error', { error: error.message, stack: error.stack });
             next(error);
         }
     },
 
     /**
-     * Exclui um arquivo do usuário.
-     * - Valida o ObjectId.
-     * - uploadService.deleteFile deve verificar propriedade/permissão.
-     *
-     * Futuras melhorias:
-     * - Soft-delete com período de restauração (lixeira).
-     * - Auditoria detalhada: quem deletou, quando e de onde (IP).
-     * - Políticas de retenção por categoria.
+     * Deletar arquivo do Cloudinary.
+     * Requer:
+     * - publicId no path param
+     * - resourceType opcional (image | video | raw), padrão image
+     * - Garantia de que o arquivo pertence ao usuário autenticado
      */
-    // Deletar arquivo
     async deleteFile(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            const { fileId } = req.params;
-            const userId = req.user?.id;
+            const { publicId } = req.params;
+            const { resourceType = 'image' } = req.query;
 
-            if (!ObjectId.isValid(fileId)) {
+            // Validação de parâmetros obrigatórios
+            if (!publicId) {
                 res.status(400).json({
                     success: false,
-                    message: 'ID de arquivo inválido'
+                    message: 'Public ID não fornecido'
                 });
                 return;
             }
 
-            const deleted = await uploadService.deleteFile(fileId, userId);
+            // Verificar se o arquivo pertence ao usuário (convenção do caminho no Cloudinary)
+            const userId = req.user?.id;
+            if (!publicId.includes(`app-lite/${userId}`)) {
+                res.status(403).json({
+                    success: false,
+                    message: 'Sem permissão para deletar este arquivo'
+                });
+                return;
+            }
 
-            if (!deleted) {
+            // Solicita remoção ao service
+            const deleted = await uploadService.deleteFile(
+                publicId,
+                resourceType as 'image' | 'video' | 'raw'
+            );
+
+            if (deleted) {
+                res.status(200).json({
+                    success: true,
+                    message: 'Arquivo deletado com sucesso'
+                });
+            } else {
                 res.status(404).json({
-                    success: false,
-                    message: 'Arquivo não encontrado ou sem permissão'
-                });
-                return;
-            }
-
-            logger.info('Arquivo deletado com sucesso', { fileId, userId });
-
-            res.json({
-                success: true,
-                message: 'Arquivo deletado com sucesso'
-            });
-
-        } catch (error) {
-            logger.error('Erro ao deletar arquivo', { error, fileId: req.params.fileId, userId: req.user?.id });
-            next(error);
-        }
-    },
-
-    /**
-     * Obtém metadados de um arquivo.
-     * Retorna informações básicas e metadados armazenados no GridFS.
-     *
-     * Futuras melhorias:
-     * - Normalizar estrutura de metadados e expor apenas campos seguros.
-     * - Controle de acesso por arquivo (somente dono ou compartilhados).
-     * - Expandir para incluir URLs de preview/thumbnail quando aplicável.
-     */
-    // Obter informações do arquivo
-    async getFileInfo(req: Request, res: Response, next: NextFunction) {
-        try {
-            const { fileId } = req.params;
-
-            if (!ObjectId.isValid(fileId)) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de arquivo inválido'
-                });
-            }
-
-            const fileInfo = await uploadService.getFileInfo(fileId);
-
-            if (!fileInfo) {
-                return res.status(404).json({
                     success: false,
                     message: 'Arquivo não encontrado'
                 });
             }
+        } catch (error: any) {
+            logger.error('delete.error', { error: error.message });
+            next(error);
+        }
+    },
 
-            res.json({
+    /**
+     * Listar arquivos do usuário.
+     * Requer usuário autenticado. Retorna lista com metadados essenciais.
+     * TODO: adicionar paginação, ordenação e filtros (tipo, data, tamanho), além de cache quando possível.
+     */
+    async getUserFiles(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    message: 'Usuário não autenticado'
+                });
+                return;
+            }
+
+            // Busca via service. Idealmente suportar paginação (cursor/offset + limit) no futuro
+            const files = await uploadService.listUserFiles(userId);
+
+            res.status(200).json({
                 success: true,
                 data: {
-                    fileId: fileInfo._id,
-                    filename: fileInfo.filename,
-                    mimetype: fileInfo.metadata?.mimetype,
-                    size: fileInfo.length,
-                    uploadedAt: fileInfo.uploadDate,
-                    metadata: fileInfo.metadata
+                    files: files.map(f => ({
+                        fileId: f.public_id,
+                        filename: f.context?.originalName || f.public_id,
+                        url: f.secure_url,
+                        mimetype: f.resource_type,
+                        size: f.bytes,
+                        createdAt: f.created_at,
+                        publicId: f.public_id
+                    }))
                 }
             });
+        } catch (error: any) {
+            logger.error('getUserFiles.error', { error: error.message });
+            next(error);
+        }
+    },
 
-        } catch (error) {
-            logger.error('Erro ao obter informações do arquivo', { error, fileId: req.params.fileId });
+    /**
+     * Obter informações de um arquivo específico no provedor.
+     * Requer publicId e, opcionalmente, resourceType.
+     * Útil para checar metadados após o upload ou antes de exibir/transformar no cliente.
+     */
+    async getFileInfo(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const { publicId } = req.params;
+            const { resourceType = 'image' } = req.query;
+
+            if (!publicId) {
+                res.status(400).json({
+                    success: false,
+                    message: 'Public ID não fornecido'
+                });
+                return;
+            }
+
+            const fileInfo = await uploadService.getFileInfo(
+                publicId,
+                resourceType as 'image' | 'video' | 'raw'
+            );
+
+            res.status(200).json({
+                success: true,
+                data: fileInfo
+            });
+        } catch (error: any) {
+            logger.error('getFileInfo.error', { error: error.message });
             next(error);
         }
     }
 };
+
+export default uploadController;
+

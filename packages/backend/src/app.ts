@@ -17,16 +17,26 @@ app.use(helmet());
 app.use(
     cors({
         origin: (origin, callback) => {
+            // Em desenvolvimento, permitir todas as origens
+            if (config.NODE_ENV === 'development') {
+                return callback(null, true);
+            }
+            
             // Permite ferramentas locais (sem origin) e wildcard
             if (!origin || config.CORS_ORIGIN === '*') {
                 return callback(null, true);
             }
+            
             if (config.CORS_ALLOWED_ORIGINS_SET.has(origin)) {
                 return callback(null, true);
             }
+            
+            // Em produção, bloquear origens não permitidas
             return callback(new Error('Origin not allowed by CORS'));
         },
         credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     })
 );
 

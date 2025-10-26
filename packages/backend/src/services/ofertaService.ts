@@ -5,6 +5,8 @@ import { logger } from '../utils/logger';
 
 export interface ListFilters {
     categoria?: string;
+    subcategoria?: string;
+    tipoPessoa?: 'PF' | 'PJ';
     precoMin?: number;
     precoMax?: number;
     cidade?: string;
@@ -25,6 +27,8 @@ export const ofertaService = {
     async list(filters: ListFilters = {}): Promise<PagedOfertas> {
         const {
             categoria,
+            subcategoria,
+            tipoPessoa,
             precoMin,
             precoMax,
             cidade,
@@ -37,6 +41,8 @@ export const ofertaService = {
         const query: any = { status: { $ne: 'inativo' } };
 
         if (categoria) query.categoria = categoria;
+        if (subcategoria) query.subcategoria = subcategoria;
+        if (tipoPessoa) query['prestador.tipoPessoa'] = tipoPessoa;
         if (typeof precoMin === 'number') query.preco = { ...(query.preco || {}), $gte: precoMin };
         if (typeof precoMax === 'number') query.preco = { ...(query.preco || {}), $lte: precoMax };
         if (cidade) query['localizacao.cidade'] = cidade;
@@ -53,7 +59,7 @@ export const ofertaService = {
 
         const skip = (page - 1) * limit;
 
-        logger.info('ofertas.list', { filters: { categoria, precoMin, precoMax, cidade, estado, busca }, page, limit, skip });
+        logger.info('ofertas.list', { filters: { categoria, subcategoria, tipoPessoa, precoMin, precoMax, cidade, estado, busca }, page, limit, skip });
 
         const [ofertas, total] = await Promise.all([
             OfertaServico.find(query)
@@ -97,12 +103,13 @@ export const ofertaService = {
             ...payload,
             prestador: {
                 _id: new mongoose.Types.ObjectId(userId),
-                nome: (user as any).nome,
-                avatar: (user as any).avatar,
+                nome: user.nome,
+                avatar: user.avatar,
                 avaliacao: 5.0,
+                tipoPessoa: user.tipoPessoa || 'PF',
             },
-            status: (payload as any)?.status ?? 'ativo',
-        } as any);
+            status: payload.status ?? 'ativo',
+        });
 
         logger.info('ofertas.create.success', { ofertaId: (doc as any)._id, userId });
 

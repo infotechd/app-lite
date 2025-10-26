@@ -3,8 +3,14 @@
     "name": "App Lite",
     "slug": "app-lite",
     "version": "1.0.0",
-    "assetBundlePatterns": ["**/*"],
-    "platforms": ["ios", "android", "web"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -13,6 +19,11 @@
         "projectId": "5b7d17d9-d793-4c25-ade2-e4ff466121d4"
       }
     },
-    "owner": "infotechd"
+    "owner": "infotechd",
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-secure-store"
+    ]
   }
 }

@@ -1,371 +1,274 @@
 /*
- Serviço: Upload de Arquivos usando MongoDB GridFS
- ---------------------------------------------------------------------------
- - Responsabilidade: encapsular operações de upload, leitura, listagem e
-   remoção de arquivos armazenados no GridFS.
- - Observabilidade: usa logger e loggerUtils para registrar operações e
-   sucesso/erro por tipo de ação (CRUD) no bucket de arquivos.
- - Segurança: valida tipo e tamanho antes de enviar; verifique sempre
-   permissões ao deletar.
- - Escalabilidade: GridFS divide arquivos em chunks; chunkSizeBytes pode ser
-   ajustado via variável de ambiente para equilibrar memória e throughput.
- - Convenções: todos os comentários foram escritos em Português do Brasil.
+  Serviço de Upload para Cloudinary
+  - Este módulo centraliza operações de envio, listagem, informação e exclusão
+    de arquivos no Cloudinary usando a SDK v2.
+  - Escrito em TypeScript, voltado para uso com Multer (buffer em memória).
 
- Pontos de melhoria (ideias futuras):
- - TODO: adicionar verificação de integridade (checksum/MD5/SHA-256) no upload
-   e após o término, armazenando o hash em metadata.
- - TODO: considerar antivírus/clamav/varredura de malware antes de persistir
-   o arquivo.
- - TODO: suportar cancelamento/timeout em uploads longos (AbortController) e
-   retropressão (backpressure) quando necessário.
- - TODO: deduplicação por hash (evitar salvar o mesmo arquivo repetidas vezes).
- - TODO: assinar URLs de download quando necessário (expiração, escopo) para
-   cenários públicos.
+  Requisitos de ambiente (.env):
+  - CLOUDINARY_CLOUD_NAME: nome do cloud
+  - CLOUDINARY_API_KEY: chave pública da API
+  - CLOUDINARY_API_SECRET: segredo da API
+
+  Observações de segurança e operação:
+  - Certifique-se de não commitar as variáveis de ambiente.
+  - Em produção, prefira credenciais restritas por escopo e use regras de segurança do Cloudinary.
+  - O serviço usa streaming para evitar carregar arquivos inteiros em memória durante o upload.
 */
 
-import mongoose from 'mongoose';
-import { getDatabase } from '../config/database';
-import { logger, loggerUtils } from '../utils/logger';
-import { BadRequestError, PayloadTooLargeError } from '../utils/errors';
+import { v2 as cloudinary } from 'cloudinary'; // SDK oficial do Cloudinary v2
+import { Readable } from 'stream'; // Utilizado para converter Buffer em Stream
+import { logger } from '../utils/logger'; // Logger centralizado da aplicação
 
-/**
- * Metadados persistidos junto ao arquivo no GridFS.
- */
-interface FileMetadata {
-    /** Nome original do arquivo enviado pelo cliente */
-    originalName: string;
-    /** MIME type detectado/fornecido pelo cliente (ex.: image/png) */
-    mimetype: string;
-    /** Tamanho do arquivo em bytes */
-    size: number;
-    /** ID do usuário que realizou o upload (opcional) */
-    uploadedBy?: string;
-    /** Categoria de classificação do arquivo (opcional) */
-    categoria?: string;
-    /** Descrição livre do arquivo (opcional) */
-    descricao?: string;
-    /** Data/hora do upload (gerada no backend) */
-    uploadedAt: Date;
+// Configurar Cloudinary com variáveis de ambiente
+// Possível melhoria: validar se as variáveis existem e lançar erro amigável em caso de ausência.
+// Ex.: se alguma variável estiver faltando, logar e encerrar a inicialização do serviço.
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Interface que padroniza o retorno após upload
+// Possível melhoria: separar tipos por resourceType (image/video/raw) se houver campos específicos.
+export interface UploadedFile {
+    fileId: string;        // Identificador do arquivo (usamos public_id do Cloudinary)
+    filename: string;      // Nome original do arquivo enviado pelo cliente
+    url: string;           // URL não segura (http) – manter preferencialmente a secureUrl
+    secureUrl: string;     // URL segura (https)
+    mimetype: string;      // Mimetype informado pelo Multer
+    size: number;          // Tamanho em bytes retornado pelo Cloudinary
+    publicId: string;      // public_id do Cloudinary (útil para deletar/listar)
+    resourceType: 'image' | 'video' | 'raw'; // Tipo de recurso no Cloudinary
 }
 
 /**
- * Resultado padronizado retornado após um upload com sucesso.
+ * Converte Buffer em Stream para upload no Cloudinary.
+ * - O Cloudinary aceita upload via stream; isso permite começar a enviar sem
+ *   carregar tudo em memória de uma só vez.
+ * Possíveis melhorias:
+ * - Usar PassThrough stream em vez de Readable manual em alguns cenários.
+ * - Validar tamanho máximo do buffer antes de começar (proteção contra payloads grandes).
  */
-interface UploadResult {
-    /** ObjectId do GridFS em formato string */
-    fileId: string;
-    /** Nome do arquivo salvo no GridFS (único) */
-    filename: string;
-    /** Metadados salvos juntamente com o arquivo */
-    metadata: FileMetadata;
+function bufferToStream(buffer: Buffer): Readable {
+    const readable = new Readable();
+    readable._read = () => {}; // _read é obrigatório mas não faz nada
+    readable.push(buffer); // empurra o conteúdo do buffer
+    readable.push(null);   // sinaliza fim da stream
+    return readable;
 }
 
 /**
- * Serviço de Upload que concentra as operações com GridFS.
+ * Determina o resource_type do Cloudinary baseado no mimetype.
+ * - image/* => 'image'
+ * - video/* => 'video'
+ * - default  => 'raw'
+ * Possíveis melhorias:
+ * - Tratar audio/* como 'video' (Cloudinary costuma considerar audio como video) ou criar regra específica.
+ * - Validar/whitelist de mimetypes permitidos conforme política de segurança.
  */
-export class UploadService {
-    /**
-     * Obtém uma instância do GridFSBucket usando a conexão do MongoDB atual.
-     * - Usa variáveis de ambiente para nome do bucket e tamanho do chunk.
-     * - chunkSizeBytes padrão (261120 bytes ~ 255 KB) balanceia custo de I/O e memória.
-     *
-     * TODO: considerar retry para operações de rede e health check da conexão.
-     */
-    private getBucket(): mongoose.mongo.GridFSBucket {
-        const db = getDatabase();
-        return new mongoose.mongo.GridFSBucket(db, {
-            bucketName: process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads',
-            chunkSizeBytes: parseInt(process.env.GRIDFS_CHUNK_SIZE || '261120')
+function getResourceType(mimetype: string): 'image' | 'video' | 'raw' {
+    if (mimetype.startsWith('image/')) return 'image';
+    if (mimetype.startsWith('video/')) return 'video';
+    return 'raw';
+}
+
+/**
+ * Faz upload de um arquivo para o Cloudinary.
+ * Fluxo:
+ * 1) Deduz o resource_type a partir do mimetype.
+ * 2) Gera um public_id único combinando timestamp + nome sanitizado.
+ * 3) Envia via stream para a pasta do usuário (app-lite/{userId}).
+ * 4) Loga sucesso/erro e retorna metadados úteis.
+ *
+ * @param file - Arquivo do Multer (com buffer)
+ * @param userId - ID do usuário que está fazendo upload
+ * @param metadata - Metadados adicionais (categoria, descrição)
+ * @returns Informações do arquivo enviado padronizadas (UploadedFile)
+ *
+ * Possíveis melhorias:
+ * - Validar tamanho máximo (bytes) e mime antes de enviar (defesa antecipada).
+ * - Usar um gerador de IDs (ex.: nanoid/uuid) em vez de timestamp para evitar colisões.
+ * - Implementar retries exponenciais com jitter em caso de erros transitórios de rede.
+ * - Definir limites de transformação e presets (upload presets) no Cloudinary para segurança.
+ * - Configurar pasta com prefixo de ambiente (ex.: prod/ ou dev/) para evitar colisões entre ambientes.
+ * - Considerar uploads assinados (signed) quando a origem for cliente, reforçando segurança.
+ */
+export async function uploadFile(
+    file: Express.Multer.File,
+    userId: string,
+    metadata?: { categoria?: string; descricao?: string }
+): Promise<UploadedFile> {
+    try {
+        const resourceType = getResourceType(file.mimetype);
+
+        // Criar um identificador único para o arquivo
+        const timestamp = Date.now();
+        const sanitizedFilename = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+
+        // Upload para o Cloudinary usando stream
+        const result = await new Promise<any>((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+                {
+                    resource_type: resourceType, // Define o tipo de recurso (image/video/raw)
+                    folder: `app-lite/${userId}`, // Organizar por usuário (ex.: app-lite/123)
+                    public_id: `${timestamp}_${sanitizedFilename}`, // ID público previsível
+                    context: {
+                        // Metadados personalizados para consulta posterior
+                        userId,
+                        originalName: file.originalname,
+                        categoria: metadata?.categoria || '',
+                        descricao: metadata?.descricao || '',
+                    },
+                    // Transformações automáticas para otimização de imagens
+                    transformation: resourceType === 'image' ? [
+                        { quality: 'auto', fetch_format: 'auto' }
+                    ] : undefined,
+                },
+                (error, result) => {
+                    // Callback do upload_stream: resolve em sucesso, reject em erro
+                    if (error) reject(error);
+                    else resolve(result);
+                }
+            );
+
+            // Conecta a stream do buffer ao upload do Cloudinary
+            bufferToStream(file.buffer).pipe(uploadStream);
         });
-    }
 
-    /**
-     * Upload de arquivo para GridFS.
-     *
-     * Parâmetros:
-     * - buffer: conteúdo binário do arquivo.
-     * - filename: nome original (usado como base para o nome único salvo).
-     * - metadata: metadados a serem persistidos no GridFS.
-     *
-     * Retorna: UploadResult contendo o id do arquivo, nome salvo e metadados.
-     *
-     * Observações:
-     * - É gerado um nome único prefixado com timestamp para evitar colisão.
-     * - Eventos 'finish' e 'error' do stream definem a resolução/rejeição.
-     * - loggerUtils registra a operação de criação no banco para auditoria.
-     *
-     * TODO: adicionar timeout/cancelamento; calcular checksum e salvar no metadata.
-     */
-    async uploadToGridFS(
-        buffer: Buffer,
-        filename: string,
-        metadata: FileMetadata
-    ): Promise<UploadResult> {
-        try {
-            const bucket = this.getBucket();
+        // Log estruturado de sucesso de upload
+        logger.info('cloudinary.upload.success', {
+            publicId: result.public_id,
+            userId,
+            resourceType,
+            size: result.bytes,
+        });
 
-            // Gerar nome único para o arquivo (timestamp + nome original)
-            const uniqueFilename = `${Date.now()}_${filename}`;
-
-            // Criar stream de upload para o GridFS com os metadados
-            const uploadStream = bucket.openUploadStream(uniqueFilename, {
-                metadata
-            });
-
-            // Promise para aguardar a conclusão do stream de upload
-            const uploadPromise = new Promise<UploadResult>((resolve, reject) => {
-                uploadStream.on('finish', () => {
-                    // Log de sucesso com dados úteis para auditoria
-                    logger.info('Arquivo enviado para GridFS', {
-                        fileId: uploadStream.id.toString(),
-                        filename: uniqueFilename,
-                        size: metadata.size
-                    });
-                    loggerUtils.logDatabase('create', `${process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'}.files`, true);
-
-                    // Retornar dados do arquivo salvo
-                    resolve({
-                        fileId: uploadStream.id.toString(),
-                        filename: uniqueFilename,
-                        metadata
-                    });
-                });
-
-                uploadStream.on('error', (error) => {
-                    // Log de erro com contexto para troubleshooting
-                    logger.error('Erro no upload para GridFS', { error, filename });
-                    loggerUtils.logDatabase('create', `${process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'}.files`, false, error as any);
-                    reject(error);
-                });
-            });
-
-            // Enviar o conteúdo do arquivo para o stream do GridFS
-            uploadStream.end(buffer);
-
-            // Esperar o término do upload
-            return await uploadPromise;
-
-        } catch (error) {
-            // Falhas não relacionadas ao stream (ex.: inicialização do bucket)
-            logger.error('Erro no serviço de upload', { error, filename });
-            loggerUtils.logDatabase('create', `${process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'}.files`, false, error as any);
-            throw error;
-        }
-    }
-
-    /**
-     * Obter informações de um arquivo no GridFS pelo seu ID.
-     * Retorna o documento do arquivo (ou null) conforme o resultado da busca.
-     *
-     * TODO: tratar caso de ObjectId inválido com BadRequestError.
-     * TODO: usar projeção para retornar apenas campos necessários.
-     */
-    async getFileInfo(fileId: string) {
-        try {
-            const bucket = this.getBucket();
-            const files = await bucket.find({ _id: new mongoose.Types.ObjectId(fileId) }).toArray();
-            const bucketName = process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads';
-            loggerUtils.logDatabase('read', `${bucketName}.files`, true);
-
-            return files.length > 0 ? files[0] : null;
-
-        } catch (error) {
-            logger.error('Erro ao obter informações do arquivo', { error, fileId });
-            loggerUtils.logDatabase('read', `${process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'}.files`, false, error as any);
-            throw error;
-        }
-    }
-
-    /**
-     * Listar arquivos de um usuário com paginação.
-     * - Ordena por data de upload (descendente).
-     * - Retorna também informações de paginação (total e totalPages).
-     *
-     * TODO: validar parâmetros page/limit (mínimos/máximos) antes da consulta.
-     * TODO: adicionar filtros por categoria, mimetype e período.
-     * TODO: garantir índices adequados em metadata.uploadedBy e uploadDate.
-     */
-    async getUserFiles(userId: string, page = 1, limit = 10) {
-        try {
-            const bucket = this.getBucket();
-            const skip = (page - 1) * limit;
-
-            const filter = { 'metadata.uploadedBy': userId } as const;
-
-            const files = await bucket
-                .find(filter)
-                .sort({ uploadDate: -1 })
-                .skip(skip)
-                .limit(limit)
-                .toArray();
-
-            const db = getDatabase();
-            const bucketName = process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads';
-            const total = await db.collection(`${bucketName}.files`).countDocuments(filter);
-
-            loggerUtils.logDatabase('read', `${bucketName}.files`, true);
-            return {
-                files: files.map(file => ({
-                    fileId: file._id.toString(),
-                    filename: file.filename,
-                    mimetype: file.metadata?.mimetype,
-                    size: file.length,
-                    uploadedAt: file.uploadDate,
-                    // URL pública para servir o arquivo via endpoint HTTP
-                    url: `/api/upload/file/${file._id}`
-                })),
-                pagination: {
-                    page,
-                    limit,
-                    total,
-                    totalPages: Math.ceil(total / limit)
-                }
-            };
-
-        } catch (error) {
-            logger.error('Erro ao listar arquivos do usuário', { error, userId });
-            loggerUtils.logDatabase('read', `${process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'}.files`, false, error as any);
-            throw error;
-        }
-    }
-
-    /**
-     * Deletar arquivo do GridFS.
-     * - Se userId for fornecido, valida se o arquivo pertence ao usuário.
-     * - Retorna true em caso de sucesso; false quando não autorizado ou erro controlado.
-     *
-     * TODO: implementar soft delete (marcação) ao invés de remoção definitiva
-     *       para permitir recuperação e auditoria.
-     * TODO: registrar auditoria detalhada (quem, quando, motivo) em coleção separada.
-     */
-    async deleteFile(fileId: string, userId?: string): Promise<boolean> {
-        try {
-            const bucket = this.getBucket();
-
-            // Verificar se o arquivo existe e se o usuário tem permissão
-            if (userId) {
-                const file = await this.getFileInfo(fileId);
-                if (!file || file.metadata?.uploadedBy !== userId) {
-                    return false;
-                }
-            }
-
-            await bucket.delete(new mongoose.Types.ObjectId(fileId));
-
-            const bucketName = process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads';
-            logger.info('Arquivo deletado do GridFS', { fileId, userId });
-            loggerUtils.logDatabase('delete', `${bucketName}.files`, true);
-            return true;
-
-        } catch (error) {
-            logger.error('Erro ao deletar arquivo', { error, fileId, userId });
-            loggerUtils.logDatabase('delete', `${process.env.GRIDFS_BUCKET_NAME || 'super_app_uploads'}.files`, false, error as any);
-            return false;
-        }
-    }
-
-    /**
-     * Gerar URL pública para arquivo para uso em frontend/API.
-     *
-     * TODO: considerar URLs assinadas/temporárias para conteúdos sensíveis.
-     */
-    generateFileUrl(fileId: string): string {
-        const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
-        return `${baseUrl}/api/upload/file/${fileId}`;
-    }
-
-    /**
-     * Validar tipo de arquivo com base na whitelist de MIME types.
-     * - Usa a variável de ambiente ALLOWED_FILE_TYPES (separada por vírgulas)
-     *   ou um conjunto padrão.
-     *
-     * TODO: centralizar a lista de tipos aceitos em um módulo de configuração.
-     * TODO: complementar com validação por extensão quando apropriado.
-     */
-    isValidFileType(mimetype: string): boolean {
-        const allowedTypes = process.env.ALLOWED_FILE_TYPES?.split(',') || [
-            'image/jpeg',
-            'image/png',
-            'video/mp4'
-        ];
-
-        return allowedTypes.includes(mimetype);
-    }
-
-    /**
-     * Validar tamanho do arquivo (bytes) contra o limite máximo.
-     * - MAX_FILE_SIZE por padrão é 10 MB (10485760 bytes) se não informado.
-     *
-     * TODO: expor esse limite em documentação/config e padronizar unidade (MB).
-     */
-    isValidFileSize(size: number): boolean {
-        const maxSize = parseInt(process.env.MAX_FILE_SIZE || '10485760'); // 10 MB padrão
-        return size <= maxSize;
-    }
-
-    /**
-     * Upload múltiplo com validação de negócio e I/O.
-     * - Valida quantidade, tipo e tamanho antes de iniciar os uploads.
-     * - Realiza todos os uploads em paralelo e retorna a lista de resultados.
-     *
-     * TODO: limitar concorrência (ex.: p-limit) para proteger o servidor.
-     * TODO: orquestrar "transação lógica"/rollback em caso de falhas parciais
-     *       (ex.: deletar arquivos enviados com sucesso quando outros falharem,
-     *       se o caso de uso exigir atomicidade).
-     * TODO: incluir dados de correlação (requestId) nos logs para rastreabilidade.
-     */
-    async uploadMultipleFiles(
-        files: { buffer: Buffer; originalname: string; mimetype: string; size: number }[],
-        userId: string,
-        categoria?: string,
-        descricao?: string
-    ): Promise<UploadResult[]> {
-        // Regras de negócio e validações fora do try/catch (erros 4xx para cliente)
-        if (files.length > 5) {
-            throw new BadRequestError(`Limite de 5 arquivos por upload. Recebidos: ${files.length}`);
-        }
-
-        for (const file of files) {
-            if (!this.isValidFileType(file.mimetype)) {
-                throw new BadRequestError(`Tipo de arquivo não permitido: ${file.mimetype}`);
-            }
-            if (!this.isValidFileSize(file.size)) {
-                throw new PayloadTooLargeError(`Arquivo muito grande: ${file.originalname}`);
-            }
-        }
-
-        // Captura apenas erros de I/O durante o upload em si (5xx)
-        try {
-            // Enfileirar uploads (Promise.all executa em paralelo)
-            const uploadPromises = files.map(file => {
-                const metadata: FileMetadata = {
-                    originalName: file.originalname,
-                    mimetype: file.mimetype,
-                    size: file.size,
-                    uploadedBy: userId,
-                    categoria,
-                    descricao,
-                    uploadedAt: new Date()
-                };
-
-                return this.uploadToGridFS(file.buffer, file.originalname, metadata);
-            });
-
-            const results = await Promise.all(uploadPromises);
-
-            logger.info('Upload múltiplo realizado', {
-                userId,
-                filesCount: files.length,
-                fileIds: results.map(r => r.fileId)
-            });
-
-            return results;
-        } catch (error) {
-            logger.error('Erro no upload múltiplo', { error, userId });
-            throw error;
-        }
+        // Padroniza o retorno do serviço
+        return {
+            fileId: result.public_id, // Usar public_id como identificador
+            filename: file.originalname,
+            url: result.url,
+            secureUrl: result.secure_url,
+            mimetype: file.mimetype,
+            size: result.bytes,
+            publicId: result.public_id,
+            resourceType,
+        };
+    } catch (error) {
+        // Log estruturado de erro e exceção amigável para camadas superiores
+        logger.error('cloudinary.upload.error', { error, userId, filename: file.originalname });
+        throw new Error(`Erro ao fazer upload para Cloudinary: ${(error as Error).message}`);
     }
 }
 
-// Exporta uma instância reutilizável do serviço para uso em controllers/rotas
-export const uploadService = new UploadService();
+/**
+ * Faz upload de múltiplos arquivos.
+ * - Mapeia cada arquivo para a função de upload unitário e aguarda todos terminarem.
+ * Possíveis melhorias:
+ * - Limitar a concorrência (ex.: p-limit) para evitar sobrecarga da rede/API.
+ * - Tratar erros parcialmente (retornar sucesso/erro por arquivo em vez de falhar tudo).
+ */
+export async function uploadMultipleFiles(
+    files: Express.Multer.File[],
+    userId: string,
+    metadata?: { categoria?: string; descricao?: string }
+): Promise<UploadedFile[]> {
+    const uploadPromises = files.map(file => uploadFile(file, userId, metadata));
+    return Promise.all(uploadPromises);
+}
+
+/**
+ * Deleta um arquivo do Cloudinary.
+ * - Usa o public_id para localizar e deletar o recurso.
+ *
+ * @param publicId - Public ID do arquivo no Cloudinary
+ * @param resourceType - Tipo do recurso (image, video, raw)
+ * @returns boolean indicando sucesso (true quando 'ok')
+ *
+ * Possíveis melhorias:
+ * - Deletar transformações/derivatives associados (quando aplicável).
+ * - Usar invalidate: true para invalidar CDN (conforme plano e necessidade).
+ */
+export async function deleteFile(publicId: string, resourceType: 'image' | 'video' | 'raw' = 'image'): Promise<boolean> {
+    try {
+        const result = await cloudinary.uploader.destroy(publicId, {
+            resource_type: resourceType,
+            // invalidate: true, // Possível ativar se precisar invalidar cache CDN
+        });
+
+        logger.info('cloudinary.delete.success', { publicId, result });
+        return result.result === 'ok';
+    } catch (error) {
+        logger.error('cloudinary.delete.error', { error, publicId });
+        throw new Error(`Erro ao deletar arquivo do Cloudinary: ${(error as Error).message}`);
+    }
+}
+
+/**
+ * Lista arquivos de um usuário no Cloudinary.
+ * - Filtra por prefixo de pasta (app-lite/{userId}).
+ *
+ * @param userId - ID do usuário
+ * @param maxResults - Número máximo de resultados (padrão: 100)
+ * @returns Array de recursos (conforme retorno da API do Cloudinary)
+ *
+ * Possíveis melhorias:
+ * - Implementar paginação via next_cursor (Cloudinary retorna cursor para continuar a listagem).
+ * - Filtrar por resource_type, tags ou context (ex.: categoria) conforme necessidade.
+ * - Adicionar cache ou indexação local (ex.: banco) para buscas frequentes.
+ */
+export async function listUserFiles(userId: string, maxResults: number = 100): Promise<any[]> {
+    try {
+        const result = await cloudinary.api.resources({
+            type: 'upload',
+            prefix: `app-lite/${userId}`, // pasta do usuário
+            max_results: maxResults,
+            context: true, // inclui metadados enviados no upload
+        });
+
+        logger.info('cloudinary.list.success', { userId, count: result.resources.length });
+        return result.resources;
+    } catch (error) {
+        logger.error('cloudinary.list.error', { error, userId });
+        throw new Error(`Erro ao listar arquivos do Cloudinary: ${(error as Error).message}`);
+    }
+}
+
+/**
+ * Obtém informações detalhadas de um arquivo.
+ * - Útil para checar metadados, dimensões, tamanho, etc.
+ *
+ * @param publicId - Public ID do arquivo
+ * @param resourceType - Tipo do recurso
+ * @returns Objeto com informações do recurso
+ *
+ * Possíveis melhorias:
+ * - Solicitar apenas campos necessários (se/quando a API permitir) para reduzir payload.
+ * - Cachear respostas temporariamente para evitar chamadas repetidas.
+ */
+export async function getFileInfo(publicId: string, resourceType: 'image' | 'video' | 'raw' = 'image'): Promise<any> {
+    try {
+        const result = await cloudinary.api.resource(publicId, {
+            resource_type: resourceType,
+            context: true,
+        });
+
+        logger.info('cloudinary.info.success', { publicId });
+        return result;
+    } catch (error) {
+        logger.error('cloudinary.info.error', { error, publicId });
+        throw new Error(`Erro ao obter informações do arquivo: ${(error as Error).message}`);
+    }
+}
+
+// Exporta o serviço agregando as funções disponibilizadas
+export const uploadService = {
+    uploadFile,
+    uploadMultipleFiles,
+    deleteFile,
+    listUserFiles,
+    getFileInfo,
+};
+
+export default uploadService;
+

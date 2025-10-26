@@ -5,11 +5,13 @@ export interface IOfertaServico extends Document {
     descricao: string;
     preco: number;
     categoria: string;
+    subcategoria?: string;
     prestador: {
         _id: mongoose.Types.ObjectId;
         nome: string;
         avatar?: string;
         avaliacao: number;
+        tipoPessoa: 'PF' | 'PJ';
     };
     imagens: string[]; // ⚠️ IMPORTANTE: Array de URLs das imagens no GridFS
     videos?: string[]; // Array de URLs dos vídeos no GridFS
@@ -82,6 +84,11 @@ const OfertaServicoSchema = new Schema<IOfertaServico>({
         }
     },
 
+    subcategoria: {
+        type: String,
+        trim: true,
+    },
+
     prestador: {
         _id: {
             type: Schema.Types.ObjectId,
@@ -98,6 +105,11 @@ const OfertaServicoSchema = new Schema<IOfertaServico>({
             default: 5.0,
             min: 0,
             max: 5
+        },
+        tipoPessoa: {
+            type: String,
+            enum: ['PF', 'PJ'],
+            default: 'PF'
         }
     },
 
@@ -213,10 +225,12 @@ const OfertaServicoSchema = new Schema<IOfertaServico>({
 
 // Índices para busca otimizada
 OfertaServicoSchema.index({ categoria: 1, status: 1 });
+OfertaServicoSchema.index({ categoria: 1, subcategoria: 1, status: 1 });
 OfertaServicoSchema.index({ 'localizacao.cidade': 1, 'localizacao.estado': 1 });
 OfertaServicoSchema.index({ preco: 1 });
 OfertaServicoSchema.index({ createdAt: -1 });
 OfertaServicoSchema.index({ 'prestador._id': 1 });
+OfertaServicoSchema.index({ 'prestador.tipoPessoa': 1 });
 OfertaServicoSchema.index({
     titulo: 'text',
     descricao: 'text',

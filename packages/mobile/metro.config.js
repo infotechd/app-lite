@@ -8,16 +8,17 @@ const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
 
 // Observa o diretório raiz do monorepo (para hot reload)
-config.watchFolders = [workspaceRoot];
+// Mescla com watchFolders padrão do Expo (se houver)
+config.watchFolders = [
+    ...(config.watchFolders || []),
+    workspaceRoot
+];
 
 // Permite resolução a partir do app e também do monorepo (para pnpm hoisting)
 config.resolver.nodeModulesPaths = [
     path.resolve(projectRoot, 'node_modules'),
     path.resolve(workspaceRoot, 'node_modules'),
 ];
-
-// Não desabilitar lookup hierárquico; isso pode quebrar resolução de deps transitivas com pnpm
-// config.resolver.disableHierarchicalLookup = true;
 
 // Habilita resolução via symlinks (necessário para pnpm/monorepo)
 config.resolver.unstable_enableSymlinks = true;

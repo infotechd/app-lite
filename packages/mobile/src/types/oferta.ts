@@ -21,6 +21,8 @@ export interface OfertaServico {
     updatedAt: string;
 }
 
+export type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente';
+
 export interface CreateOfertaInput {
     titulo: string;
     descricao: string;
@@ -42,4 +44,8 @@ export interface OfertaFilters {
     cidade?: string;
     estado?: string;
     busca?: string;
+    // Novos filtros avançados (opcionais)
+    sort?: SortOption;
+    comMidia?: boolean;
+    tipoPessoa?: 'PF' | 'PJ';
 }
