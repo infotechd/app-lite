@@ -3,6 +3,9 @@ import { OfertaServico, IOfertaServico } from '../models/OfertaServico';
 import User from '../models/User';
 import { logger } from '../utils/logger';
 
+// --- INÍCIO DA CORREÇÃO 1 ---
+type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente';
+
 export interface ListFilters {
     categoria?: string;
     subcategoria?: string;
@@ -12,9 +15,12 @@ export interface ListFilters {
     cidade?: string;
     estado?: string;
     busca?: string;
+    sort?: SortOption; // Adicionado
+    comMidia?: boolean; // Adicionado
     page?: number;
     limit?: number;
 }
+// --- FIM DA CORREÇÃO 1 ---
 
 export interface PagedOfertas {
     ofertas: IOfertaServico[];
@@ -25,6 +31,7 @@ export interface PagedOfertas {
 
 export const ofertaService = {
     async list(filters: ListFilters = {}): Promise<PagedOfertas> {
+        // --- INÍCIO DA CORREÇÃO 2 ---
         const {
             categoria,
             subcategoria,
@@ -34,9 +41,12 @@ export const ofertaService = {
             cidade,
             estado,
             busca,
+            sort = 'relevancia', // Adicionado
+            comMidia, // Adicionado
             page = 1,
             limit = 10,
         } = filters;
+        // --- FIM DA CORREÇÃO 2 ---
 
         const query: any = { status: { $ne: 'inativo' } };
 
@@ -47,6 +57,11 @@ export const ofertaService = {
         if (typeof precoMax === 'number') query.preco = { ...(query.preco || {}), $lte: precoMax };
         if (cidade) query['localizacao.cidade'] = cidade;
         if (estado) query['localizacao.estado'] = estado;
+
+        // Filtro comMidia (se comMidia=true, busca ofertas que tenham 'imagens' não nulas ou com arrays não vazios)
+        if (comMidia === true) {
+            query.imagens = { $exists: true, $ne: [] };
+        }
 
         if (busca && busca.trim().length > 0) {
             const regex = new RegExp(busca.trim(), 'i');
@@ -59,11 +74,40 @@ export const ofertaService = {
 
         const skip = (page - 1) * limit;
 
-        logger.info('ofertas.list', { filters: { categoria, subcategoria, tipoPessoa, precoMin, precoMax, cidade, estado, busca }, page, limit, skip });
+        // --- INÍCIO DA CORREÇÃO 3: Lógica de Ordenação ---
+        let sortOptions: any = {};
+
+        switch (sort) {
+            case 'preco_menor':
+                sortOptions = { preco: 1 }; // 1 para ASC (Ascendente)
+                break;
+            case 'preco_maior':
+                sortOptions = { preco: -1 }; // -1 para DESC (Descendente)
+                break;
+            case 'avaliacao':
+                sortOptions = { 'prestador.avaliacao': -1 };
+                break;
+            case 'recente':
+                sortOptions = { createdAt: -1 };
+                break;
+            case 'relevancia':
+            default:
+                // TODO: Implementar lógica de relevância
+                sortOptions = { createdAt: -1 };
+                if (sort === 'relevancia') {
+                    logger.warn(`Ordenação 'relevancia' solicitada, usando 'createdAt' como fallback.`);
+                }
+        }
+        // --- FIM DA CORREÇÃO 3 ---
+
+        // --- INÍCIO DA CORREÇÃO 4: LOG CORRIGIDO ---
+        // Adicionamos 'sortOptions' ao log. Se você não vir 'sortOptions' nos seus logs, o backend está desatualizado.
+        logger.info('ofertas.list', { filters, page, limit, skip, sortOptions });
+        // --- FIM DA CORREÇÃO 4 ---
 
         const [ofertas, total] = await Promise.all([
             OfertaServico.find(query)
-                .sort({ createdAt: -1 })
+                .sort(sortOptions) // Aplicada a ordenação dinâmica
                 .skip(skip)
                 .limit(limit)
                 .lean(),
@@ -105,7 +149,7 @@ export const ofertaService = {
                 _id: new mongoose.Types.ObjectId(userId),
                 nome: user.nome,
                 avatar: user.avatar,
-                avaliacao: 5.0,
+                avaliacao: 5.0, // TODO: Puxar a avaliação real do usuário
                 tipoPessoa: user.tipoPessoa || 'PF',
             },
             status: payload.status ?? 'ativo',

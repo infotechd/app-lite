@@ -1,5 +1,27 @@
 import { z } from 'zod';
 
+// Função auxiliar para capitalizar a primeira letra, deixar o resto em minúsculo E remover acentos
+const capitalizeAndNormalize = (s: string | undefined): string | undefined => {
+    if (!s) return s;
+    // 1. Remove acentos (normalização)
+    const normalized = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    // 2. Capitaliza a primeira letra e deixa o resto em minúsculo
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+};
+
+// --- INÍCIO DA CORREÇÃO ---
+// 1. Definir as opções de sort e tipoPessoa permitidas (baseado no seu frontend)
+const SORT_OPTIONS = [
+    'relevancia',
+    'preco_menor',
+    'preco_maior',
+    'avaliacao',
+    'recente'
+] as const;
+
+const TIPO_PESSOA_OPTIONS = ['PF', 'PJ'] as const;
+// --- FIM DA CORREÇÃO ---
+
 // Filtros para listagem de ofertas
 export const ofertaFiltersSchema = z.object({
     query: z.object({
@@ -11,6 +33,18 @@ export const ofertaFiltersSchema = z.object({
         busca: z.string().min(1).max(200).optional(),
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(50).default(10),
+
+        // --- INÍCIO DA CORREÇÃO ---
+        // 2. Adicionar os campos que faltavam para que o validador não os remova:
+
+        // z.enum() garante que só os valores da lista serão aceitos.
+        sort: z.enum(SORT_OPTIONS).optional(),
+
+        // z.coerce.boolean() converte a string "true" (da query param) para o boolean 'true'.
+        comMidia: z.coerce.boolean().optional(),
+
+        tipoPessoa: z.enum(TIPO_PESSOA_OPTIONS).optional(),
+        // --- FIM DA CORREÇÃO ---
     })
 });
 
@@ -38,15 +72,23 @@ const midiasSuperRefine = (data: unknown, ctx: z.RefinementCtx) => {
     }
 };
 
+// CATEGORIAS SEM ACENTO PARA VALIDAÇÃO NO BACKEND
+const CATEGORIAS_VALIDAS = [
+    'Tecnologia', 'Saude', 'Educacao', 'Beleza', 'Limpeza', 'Consultoria', 'Construcao', 'Jardinagem', 'Transporte', 'Alimentacao', 'Eventos', 'Outros'
+] as const;
+
+
 // Create oferta
 export const createOfertaSchema = z.object({
     body: z.object({
         titulo: z.string().min(3).max(100),
         descricao: z.string().min(10).max(1000),
         preco: z.number().nonnegative(),
-        categoria: z.enum([
-            'Tecnologia','Saúde','Educação','Beleza','Limpeza','Consultoria','Construção','Jardinagem','Transporte','Alimentação','Eventos','Outros'
-        ]),
+        // CORREÇÃO DEFINITIVA DE CATEGORIA: Normaliza, capitaliza e valida contra enum sem acento
+        categoria: z.string()
+            .transform(s => s ? s.toLowerCase() : s)
+            .transform(capitalizeAndNormalize)
+            .pipe(z.enum(CATEGORIAS_VALIDAS)),
         imagens: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
         videos: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
         localizacao: localizacaoBase,
@@ -68,9 +110,11 @@ export const updateOfertaSchema = z.object({
         titulo: z.string().min(3).max(100).optional(),
         descricao: z.string().min(10).max(1000).optional(),
         preco: z.number().nonnegative().optional(),
-        categoria: z.enum([
-            'Tecnologia','Saúde','Educação','Beleza','Limpeza','Consultoria','Construção','Jardinagem','Transporte','Alimentação','Eventos','Outros'
-        ]).optional(),
+        // CORREÇÃO DEFINITIVA DE CATEGORIA: Normaliza, capitaliza e valida contra enum sem acento
+        categoria: z.string().optional()
+            .transform(s => s ? s.toLowerCase() : s)
+            .transform(capitalizeAndNormalize)
+            .pipe(z.enum(CATEGORIAS_VALIDAS)).optional(),
         imagens: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
         videos: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
         localizacao: localizacaoBase.optional(),
