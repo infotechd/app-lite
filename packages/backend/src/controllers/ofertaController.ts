@@ -4,10 +4,37 @@ import ofertaService, { ListFilters } from '../services/ofertaService';
 import { logger } from '../utils/logger';
 import { OfertaFiltersInput, CreateOfertaInput, UpdateOfertaInput } from '../validation/ofertaValidation';
 
+// --- INÍCIO DA CORREÇÃO 1 ---
+// Definimos os valores permitidos para 'sort', espelhando o que o service e o frontend esperam.
+type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente';
+const ALLOWED_SORT_OPTIONS: SortOption[] = ['relevancia', 'preco_menor', 'preco_maior', 'avaliacao', 'recente'];
+// --- FIM DA CORREÇÃO 1 ---
+
 export const ofertaController = {
     async getOfertas(req: AuthRequest, res: Response) {
         try {
-            const q = (req.query || {}) as unknown as OfertaFiltersInput;
+            // 1. Ler a query de entrada. 'q.sort' aqui é (string | undefined)
+            const q = (req.query || {}) as unknown as OfertaFiltersInput & { sort?: string };
+
+            // --- INÍCIO DA CORREÇÃO 2 ---
+            // 2. Validar e tipar o 'sort'
+            let sortValue: SortOption | undefined = undefined;
+
+            if (q.sort) {
+                // Verificamos se o valor recebido está na lista de valores permitidos
+                if (ALLOWED_SORT_OPTIONS.includes(q.sort as SortOption)) {
+                    sortValue = q.sort as SortOption;
+                } else {
+                    // Se o frontend enviar um valor inválido, logamos e usamos o padrão
+                    logger.warn(`Parâmetro 'sort' inválido recebido: "${q.sort}". Usando padrão 'relevancia'.`);
+                    sortValue = 'relevancia'; // Fallback
+                }
+            } else {
+                // Se nenhum sort for enviado, usamos o padrão
+                sortValue = 'relevancia';
+            }
+
+            // 3. Montar o objeto de filtros com o tipo 'ListFilters' correto
             const filters: ListFilters = {
                 categoria: q.categoria,
                 precoMin: q.precoMin,
@@ -17,13 +44,22 @@ export const ofertaController = {
                 busca: q.busca,
                 page: q.page ?? 1,
                 limit: q.limit ?? 10,
-            };
+                // 4. Passar o valor validado
+                sort: sortValue,
 
+                // Passando os outros filtros que estavam no seu frontend
+               // comMidia: q.comMidia === true,
+              //  tipoPessoa: q.tipoPessoa,
+            };
+            // --- FIM DA CORREÇÃO 2 ---
+
+            // Agora 'filters' tem o tipo exato que 'ofertaService.list' espera
             const result = await ofertaService.list(filters);
 
             res.status(200).json({
                 success: true,
                 message: 'Ofertas recuperadas com sucesso',
+                // O 'result' já vem no formato { ofertas, total, page, totalPages }
                 data: result,
             });
         } catch (error: any) {

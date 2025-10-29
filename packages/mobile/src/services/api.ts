@@ -21,7 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * (ex.: usando react-native-config), evitando editar código para cada rede.
  */
 const CANDIDATE_BASE_URLS: string[] = [
-    'http://192.168.15.12:4000/api', // Casa — IP da sua casa
+    'http://192.168.1.54:4000/api', // Casa — IP da sua casa
     'http://192.168.1.12:4000/api',  // Trabalho — IP do seu trabalho
     'http://10.0.2.2:4000/api',      // Emulador Android (host do PC)
     'http://127.0.0.1:4000/api',     // iOS Simulator (host local)
