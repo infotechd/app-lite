@@ -19,7 +19,8 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
     const { user } = useAuth();
     const prestadorIdRaw: any = oferta?.prestador?._id as any;
     const prestadorId = typeof prestadorIdRaw === 'object' && prestadorIdRaw?._id ? String(prestadorIdRaw._id) : String(prestadorIdRaw);
-    const isOwner = !!user && String(user._id) === prestadorId;
+    const userId = user?.id ?? (user as any)?._id;
+    const isOwner = !!userId && String(userId) === prestadorId;
 
     const preco = oferta.preco;
     const prestadorNome = oferta?.prestador?.nome ?? 'Prestador';

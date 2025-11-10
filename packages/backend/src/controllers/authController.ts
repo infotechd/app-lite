@@ -1,15 +1,17 @@
 import { Response } from 'express';
-import User from '../models';
+import User from '../models'; // O seu User.ts (Model) já está correto e pronto
 import logger, { loggerUtils, signAccessToken } from '../utils';
 import { AuthRequest } from '../middleware/auth';
 import { RegisterInput, LoginInput } from '../validation/authValidation';
 import { emailService } from '../services/emailService';
 
 interface AuthenticatedRequest extends AuthRequest {
+    // O body agora é corretamente tipado pela validação
     body: RegisterInput | LoginInput;
 }
 
 // Mapeia o tipo do usuário do modelo (pt) para o padrão da API (en)
+// Esta função continua útil para formatar a RESPOSTA
 const mapTipoToApi = (tipo: any): 'buyer' | 'provider' | 'advertiser' => {
     switch (tipo) {
         case 'comprador':
@@ -26,65 +28,39 @@ const mapTipoToApi = (tipo: any): 'buyer' | 'provider' | 'advertiser' => {
     }
 };
 
-// Mapeia tipo da API (en) para o modelo (pt)
-const mapApiToModelTipo = (tipo: any): 'comprador' | 'prestador' | 'anunciante' => {
-    switch (tipo) {
-        case 'buyer':
-            return 'comprador';
-        case 'provider':
-            return 'prestador';
-        case 'advertiser':
-            return 'anunciante';
-        case 'comprador':
-        case 'prestador':
-        case 'anunciante':
-            return tipo;
-        default:
-            return 'comprador';
-    }
-};
-
 // Registrar usuario
 export const register = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-        const { nome, email, senha, telefone, tipo } = req.body as RegisterInput;
+        const registerData = req.body as RegisterInput;
 
         // Verificar se utilizador já existe
-        const existingUser = await User.findOne({ email });
+        const existingUser = await User.findOne({ email: registerData.email });
         if (existingUser) {
-            // Auditoria de autenticação - registro duplicado
-            loggerUtils.logAuth('register', undefined, email, false);
-            res.status(400).json({
+            // Auditoria
+            loggerUtils.logAuth('register', undefined, registerData.email, false);
+            res.status(409).json({
                 success: false,
                 message: 'Email já cadastrado'
             });
             return;
         }
 
-        const tipoDb = mapApiToModelTipo(tipo);
-
-        // Criar usuario
-        const user = new User({
-            nome,
-            email,
-            senha,
-            telefone,
-            tipo: tipoDb
-        });
+        // Criar usuário passando todos os dados
+        const user = new User(registerData);
 
         await user.save();
 
-        // Enviar e-mail de confirmação de registro (assíncrono, não bloqueante)
+        // Enviar e-mail de confirmação (não bloqueante)
         emailService
             .sendRegistrationConfirmationEmail(user.email, user.nome)
             .catch(error => logger.error('Email error', { error }));
 
-        // Gerar token (HS256, exp padrão 7d)
+        // Gerar token
         const token = signAccessToken({ userId: user._id });
 
-        // Auditoria de autenticação - sucesso de registro
-        loggerUtils.logAuth('register', String(user._id), email, true);
-        logger.info('Usuário registrado:', { userId: user._id, email });
+        // Auditoria
+        loggerUtils.logAuth('register', String(user._id), user.email, true);
+        logger.info('Usuário registrado:', { userId: user._id, email: user.email });
 
         res.status(201).json({
             success: true,
@@ -96,13 +72,44 @@ export const register = async (req: AuthenticatedRequest, res: Response): Promis
                     nome: user.nome,
                     email: user.email,
                     tipo: mapTipoToApi(user.tipo),
-                    telefone: user.telefone
+                    telefone: user.telefone,
+                    tipoPessoa: user.tipoPessoa,
+                    cpf: user.cpf,
+                    cnpj: user.cnpj,
+                    razaoSocial: user.razaoSocial,
+                    nomeFantasia: user.nomeFantasia,
+                    ativo: user.ativo,
+                    createdAt: user.createdAt,
+                    updatedAt: user.updatedAt,
                 }
             }
         });
-    } catch (error) {
+    } catch (error: any) {
+        // Tratar erros de validação do Mongoose
+        if (error.name === 'ValidationError') {
+            logger.warn('Erro de validação Mongoose:', { error: error.message });
+            // ✅ CORREÇÃO TS2322: Separar 'res.json' do 'return'
+            res.status(400).json({ success: false, message: error.message });
+            return;
+        }
+
+        // Tratar erro de chave duplicada (E11000)
+        if (error.code === 11000) {
+            logger.warn('Erro de duplicidade:', { error: error.keyValue });
+            const field = Object.keys(error.keyValue || {})[0] || '';
+            const message: string = (() => {
+                if (/cnpj/i.test(field) || /cnpj/i.test(String(error.message))) return 'CNPJ já cadastrado';
+                if (/cpf/i.test(field) || /cpf/i.test(String(error.message))) return 'CPF já cadastrado';
+                if (/email/i.test(field) || /email/i.test(String(error.message))) return 'Email já cadastrado';
+                return `O campo '${field || 'valor'}' já está em uso.`;
+            })();
+            const isConflict = /cnpj|cpf|email/i.test(field || '') || /cnpj|cpf|email/i.test(String(error.message));
+            const statusCode = isConflict ? 409 : 400;
+            res.status(statusCode).json({ success: false, message });
+            return;
+        }
+
         logger.error('Erro no registro:', error);
-        // Auditoria de autenticação - falha no registro (erro interno)
         loggerUtils.logAuth('register', undefined, (req.body as any)?.email, false);
         res.status(500).json({
             success: false,
@@ -119,7 +126,6 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
         // Buscar utilizador com senha
         const user = await User.findOne({ email }).select('+senha');
         if (!user) {
-            // Auditoria de autenticação - login com email não encontrado
             loggerUtils.logAuth('login', undefined, email, false);
             res.status(400).json({
                 success: false,
@@ -130,7 +136,6 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
 
         // Verificar se conta está ativa
         if (!user.ativo) {
-            // Auditoria de autenticação - conta desativada
             loggerUtils.logAuth('login', String(user._id), email, false);
             res.status(400).json({
                 success: false,
@@ -142,7 +147,6 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
         // Verificar senha
         const isMatch = await user.comparePassword(senha);
         if (!isMatch) {
-            // Auditoria de autenticação - senha incorreta
             loggerUtils.logAuth('login', String(user._id), email, false);
             res.status(400).json({
                 success: false,
@@ -151,10 +155,9 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
             return;
         }
 
-        // Gerar token (HS256, exp padrão 7d)
+        // Gerar token
         const token = signAccessToken({ userId: user._id });
 
-        // Auditoria de autenticação - sucesso de login
         loggerUtils.logAuth('login', String(user._id), email, true);
         logger.info('Login realizado:', { userId: user._id, email });
 
@@ -168,13 +171,20 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
                     nome: user.nome,
                     email: user.email,
                     tipo: mapTipoToApi(user.tipo),
-                    telefone: user.telefone
+                    telefone: user.telefone,
+                    tipoPessoa: user.tipoPessoa,
+                    cpf: user.cpf,
+                    cnpj: user.cnpj,
+                    razaoSocial: user.razaoSocial,
+                    nomeFantasia: user.nomeFantasia,
+                    ativo: user.ativo,
+                    createdAt: user.createdAt,
+                    updatedAt: user.updatedAt,
                 }
             }
         });
     } catch (error) {
         logger.error('Erro no login:', error);
-        // Auditoria de autenticação - falha no login (erro interno)
         loggerUtils.logAuth('login', undefined, (req.body as any)?.email, false);
         res.status(500).json({
             success: false,
@@ -216,7 +226,12 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
                     tipo: mapTipoToApi(user.tipo),
                     ativo: user.ativo,
                     createdAt: user.createdAt,
-                    updatedAt: user.updatedAt
+                    updatedAt: user.updatedAt,
+                    tipoPessoa: user.tipoPessoa,
+                    cpf: user.cpf,
+                    cnpj: user.cnpj,
+                    razaoSocial: user.razaoSocial,
+                    nomeFantasia: user.nomeFantasia,
                 }
             }
         });
