@@ -1,13 +1,11 @@
 /**
  * Tela de Registro Completa - Com tipoPessoa e campos dinâmicos
- * 
- * Funcionalidades:
+ * * Funcionalidades:
  * - Seleção de tipo de pessoa (PF/PJ)
  * - Campos dinâmicos baseados no tipo selecionado
  * - Formatação automática de CPF/CNPJ
  * - Formatação automática de telefone
- * 
- * Localização: packages/mobile/src/screens/auth/RegisterScreen.tsx
+ * * Localização: packages/mobile/src/screens/auth/RegisterScreen.tsx
  */
 
 import React, { useState } from 'react';
@@ -50,39 +48,50 @@ function formatCNPJ(value: string): string {
     return `${numbers.slice(0, 2)}.${numbers.slice(2, 5)}.${numbers.slice(5, 8)}/${numbers.slice(8, 12)}-${numbers.slice(12)}`;
 }
 
-// ✅ SCHEMA DE VALIDAÇÃO DINÂMICO
-const createRegisterSchema = (tipoPessoa: 'PF' | 'PJ') => {
-    const baseSchema = {
-        nome: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres').max(100),
-        email: z.string().email('Email inválido').toLowerCase(),
-        password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
-        telefone: z.string().optional(),
-        tipo: z.enum(['buyer', 'provider', 'advertiser']),
-        tipoPessoa: z.enum(['PF', 'PJ']),
-    };
+// ✅ SCHEMA DE VALIDAÇÃO ÚNICO COM REGRA CONDICIONAL
+const registerSchema = z.object({
+    email: z.string().email('Email inválido').toLowerCase(),
+    password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
+    telefone: z.string().optional(),
+    tipo: z.enum(['buyer', 'provider', 'advertiser']),
+    tipoPessoa: z.enum(['PF', 'PJ']),
 
-    if (tipoPessoa === 'PF') {
-        return z.object({
-            ...baseSchema,
-            cpf: z.string().min(11, 'CPF inválido').refine(
-                (val) => val.replace(/\D/g, '').length === 11,
-                'CPF deve ter 11 dígitos'
-            ),
-        });
-    } else {
-        return z.object({
-            ...baseSchema,
-            cnpj: z.string().min(14, 'CNPJ inválido').refine(
-                (val) => val.replace(/\D/g, '').length === 14,
-                'CNPJ deve ter 14 dígitos'
-            ),
-            razaoSocial: z.string().min(2, 'Razão social é obrigatória'),
-            nomeFantasia: z.string().optional(),
-        });
+    // Campos que variam por tipoPessoa
+    nome: z.string().default(''), // obrigatório quando PF; default garante tipo string
+    cpf: z.string().optional(),
+    razaoSocial: z.string().optional(), // obrigatório quando PJ
+    nomeFantasia: z.string().optional(),
+    cnpj: z.string().optional(),
+})
+.superRefine((data, ctx) => {
+    // Regras para PF
+    if (data.tipoPessoa === 'PF') {
+        const nome = data.nome ?? '';
+        if (nome.trim().length < 2) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['nome'], message: 'Nome deve ter no mínimo 2 caracteres' });
+        }
+        const cpfDigits = (data.cpf ?? '').replace(/\D/g, '');
+        if (cpfDigits.length !== 11) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF deve ter 11 dígitos' });
+        }
     }
-};
+    // Regras para PJ
+    if (data.tipoPessoa === 'PJ') {
+        const rz = data.razaoSocial ?? '';
+        if (rz.trim().length < 2) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['razaoSocial'], message: 'Razão social é obrigatória' });
+        }
+        const cnpjDigits = (data.cnpj ?? '').replace(/\D/g, '');
+        if (cnpjDigits.length !== 14) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cnpj'], message: 'CNPJ deve ter 14 dígitos' });
+        }
+    }
+})
+// Garante que, se PJ, o backend receba 'nome' preenchido com a razão social
+.transform((data) => (data.tipoPessoa === 'PJ' ? { ...data, nome: data.razaoSocial } : data));
 
-type RegisterFormData = z.infer<ReturnType<typeof createRegisterSchema>>;
+// Tipo do formulário
+type RegisterFormData = z.infer<typeof registerSchema>;
 
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     const [submitting, setSubmitting] = useState(false);
@@ -91,12 +100,18 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         visible: false,
         message: ''
     });
-    
-    // ✅ ESTADO PARA TIPO DE PESSOA
+
     const [tipoPessoa, setTipoPessoa] = useState<'PF' | 'PJ'>('PF');
 
-    const { control, handleSubmit, formState: { errors }, setError, reset } = useForm<any>({
-        resolver: zodResolver(createRegisterSchema(tipoPessoa)),
+    const {
+        control,
+        handleSubmit,
+        formState: { errors },
+        setError,
+        reset,
+        getValues
+    } = useForm<RegisterFormData>({
+        resolver: zodResolver(registerSchema),
         defaultValues: {
             nome: '',
             email: '',
@@ -112,26 +127,48 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         mode: 'onChange',
     });
 
-    // ✅ ATUALIZAR SCHEMA QUANDO TIPO DE PESSOA MUDAR
-    const handleTipoPessoaChange = (newTipo: 'PF' | 'PJ') => {
-        setTipoPessoa(newTipo);
-        // Resetar campos específicos
+    // ✅ CORREÇÃO (BUG Original): Usar useEffect para resetar o form DEPOIS que o estado mudar
+    React.useEffect(() => {
+        const currentValues = getValues();
+
         reset({
-            ...control._formValues,
-            tipoPessoa: newTipo,
+            // Limpa campos específicos de PF/PJ
+            nome: '',
             cpf: '',
             cnpj: '',
             razaoSocial: '',
             nomeFantasia: '',
+
+            // Mantém campos comuns
+            email: currentValues.email,
+            password: currentValues.password,
+            telefone: currentValues.telefone,
+            tipo: currentValues.tipo,
+
+            // Define o novo tipo de pessoa
+            tipoPessoa: tipoPessoa,
         });
+    }, [tipoPessoa, reset, getValues]);
+
+    // Handler agora só deve mudar o estado
+    const handleTipoPessoaChange = (newTipo: 'PF' | 'PJ') => {
+        if (newTipo && newTipo !== tipoPessoa) {
+            setTipoPessoa(newTipo);
+        }
     };
 
-    const onSubmit = async (data: any) => {
+    // 'data' aqui já virá com o 'nome' preenchido (seja por PF ou pelo transform de PJ)
+    const onSubmit = async (data: RegisterFormData) => {
         if (submittingRef.current) return;
         submittingRef.current = true;
         try {
             setSubmitting(true);
+
+            // O 'data' agora está 100% correto para o backend
+            // Se PF: data.nome = "Nome da Pessoa"
+            // Se PJ: data.nome = "Razão Social da Empresa" (devido ao .transform)
             await AuthService.register(data);
+
             setSnack({ visible: true, message: MESSAGES.SUCCESS.REGISTER });
             setTimeout(() => {
                 navigation.replace('Login');
@@ -139,8 +176,15 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         } catch (e: any) {
             const msg = e?.response?.data?.message || e?.message || MESSAGES.ERROR.GENERIC;
             setSnack({ visible: true, message: msg });
-            if (/email/i.test(String(msg))) {
+            const m = String(msg);
+            if (/email/i.test(m)) {
                 setError('email', { type: 'server', message: msg });
+            }
+            if (/cnpj/i.test(m)) {
+                setError('cnpj', { type: 'server', message: msg });
+            }
+            if (/cpf/i.test(m)) {
+                setError('cpf', { type: 'server', message: msg });
             }
         } finally {
             submittingRef.current = false;
@@ -153,14 +197,13 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.content}>
                 <Text variant="headlineSmall" style={styles.title}>Criar conta</Text>
 
-                {/* ✅ SELETOR DE TIPO DE PESSOA */}
                 <View style={styles.section}>
                     <Text variant="labelLarge" style={styles.sectionLabel}>
                         Tipo de Cadastro
                     </Text>
                     <SegmentedButtons
                         value={tipoPessoa}
-                        onValueChange={handleTipoPessoaChange}
+                        onValueChange={(value) => handleTipoPessoaChange(value as 'PF' | 'PJ')}
                         buttons={[
                             { value: 'PF', label: 'Pessoa Física', icon: 'account' },
                             { value: 'PJ', label: 'Pessoa Jurídica', icon: 'domain' },
@@ -181,7 +224,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                     <TextInput
                                         mode="outlined"
                                         label="Nome Completo *"
-                                        value={value}
+                                        value={value ?? ''}
                                         onChangeText={onChange}
                                         onBlur={onBlur}
                                         style={styles.input}
@@ -204,7 +247,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                     <TextInput
                                         mode="outlined"
                                         label="CPF *"
-                                        value={value}
+                                        value={value ?? ''}
                                         onChangeText={(text) => onChange(formatCPF(text))}
                                         onBlur={onBlur}
                                         keyboardType="number-pad"
@@ -234,7 +277,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                     <TextInput
                                         mode="outlined"
                                         label="Razão Social *"
-                                        value={value}
+                                        value={value ?? ''}
                                         onChangeText={onChange}
                                         onBlur={onBlur}
                                         style={styles.input}
@@ -256,7 +299,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                 <TextInput
                                     mode="outlined"
                                     label="Nome Fantasia (opcional)"
-                                    value={value}
+                                    value={value ?? ''}
                                     onChangeText={onChange}
                                     onBlur={onBlur}
                                     style={styles.input}
@@ -272,7 +315,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                     <TextInput
                                         mode="outlined"
                                         label="CNPJ *"
-                                        value={value}
+                                        value={value ?? ''}
                                         onChangeText={(text) => onChange(formatCNPJ(text))}
                                         onBlur={onBlur}
                                         keyboardType="number-pad"
@@ -300,7 +343,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                             <TextInput
                                 mode="outlined"
                                 label="E-mail *"
-                                value={value}
+                                value={value ?? ''}
                                 onChangeText={onChange}
                                 onBlur={onBlur}
                                 autoCapitalize="none"
@@ -325,7 +368,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                             <TextInput
                                 mode="outlined"
                                 label="Telefone (opcional)"
-                                value={value}
+                                value={value ?? ''}
                                 onChangeText={(text) => onChange(formatPhoneNumber(text))}
                                 onBlur={onBlur}
                                 placeholder="(11) 99999-9999"
@@ -351,7 +394,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                             <TextInput
                                 mode="outlined"
                                 label="Senha *"
-                                value={value}
+                                value={value ?? ''}
                                 onChangeText={onChange}
                                 onBlur={onBlur}
                                 secureTextEntry

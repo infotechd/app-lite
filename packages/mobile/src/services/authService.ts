@@ -1,6 +1,7 @@
 import api from './api';
 import { API_CONFIG } from '@/constants/config';
-import type { RegisterData, User } from '@/types';
+// ✅ Importa os tipos corretos (que já corrigimos em user.ts)
+import type { RegisterData, User, LoginData } from '@/types';
 
 // Tipos de apoio
 export interface AuthResponse {
@@ -11,19 +12,6 @@ export interface AuthResponse {
 type BackendUserTipo = 'comprador' | 'prestador' | 'anunciante';
 
 type AnyObject = Record<string, any>;
-
-// Mapeia o tipo do app (en-US) para o backend (pt-BR)
-const toBackendTipo = (t: User['tipo']): BackendUserTipo => {
-    switch (t) {
-        case 'buyer':
-            return 'comprador';
-        case 'provider':
-            return 'prestador';
-        case 'advertiser':
-        default:
-            return 'anunciante';
-    }
-};
 
 // Converte o tipo do backend para o app (aceita pt-BR e en-US)
 const toAppTipo = (t: string): User['tipo'] => {
@@ -39,14 +27,14 @@ const toAppTipo = (t: string): User['tipo'] => {
         case 'advertiser':
             return 'advertiser';
         default:
-            // fallback seguro quando valor ausente ou desconhecido
             return 'buyer';
     }
 };
 
 // Normaliza o usuário retornado pelo backend para o tipo do app
+// ✅ CORREÇÃO: Atualizado para incluir os novos campos de PF/PJ
 const normalizeUser = (u: AnyObject): User => ({
-    _id: String(u._id ?? u.id ?? ''),
+    id: String(u._id ?? u.id ?? ''), // Garante 'id'
     nome: String(u.nome ?? u.name ?? ''),
     email: String(u.email ?? ''),
     tipo: toAppTipo(u.tipo ?? u.role ?? ''),
@@ -55,6 +43,15 @@ const normalizeUser = (u: AnyObject): User => ({
     localizacao: u.localizacao ?? u.location ?? undefined,
     avaliacao: u.avaliacao ?? u.rating ?? undefined,
     createdAt: String(u.createdAt ?? new Date().toISOString()),
+    updatedAt: String(u.updatedAt ?? new Date().toISOString()),
+
+    // ✅ NOVO: Campos de PF/PJ
+    tipoPessoa: (u.tipoPessoa === 'PJ') ? 'PJ' : 'PF',
+    cpf: u.cpf ?? undefined,
+    cnpj: u.cnpj ?? undefined,
+    razaoSocial: u.razaoSocial ?? undefined,
+    nomeFantasia: u.nomeFantasia ?? undefined,
+    ativo: u.ativo ?? false,
 });
 
 // Extrai { token, user } de respostas variadas do backend
@@ -74,7 +71,13 @@ const extractAuthResponse = (data: AnyObject): AuthResponse => {
     const token: string = String(inner.token ?? inner.accessToken ?? inner.jwt ?? '');
     const rawUser: AnyObject = inner.user ?? inner.data ?? {};
 
-    if (!token || !rawUser) {
+    if (!token || !rawUser.id) { // Checa se o 'id' existe no usuário normalizado
+        // Se não houver 'id', tenta normalizar
+        const normalizedUser = normalizeUser(rawUser);
+        if (token && normalizedUser.id) {
+            return { token, user: normalizedUser };
+        }
+        // Se ainda falhar, lança o erro
         throw new Error('Resposta de autenticação inválida.');
     }
 
@@ -82,11 +85,11 @@ const extractAuthResponse = (data: AnyObject): AuthResponse => {
 };
 
 export const AuthService = {
-    // Login com mapeamento password -> senha
-    async login(payload: { email: string; password: string }): Promise<AuthResponse> {
+    // ✅ CORREÇÃO: Login agora envia 'password', como o backend (authValidation.ts) espera
+    async login(payload: LoginData): Promise<AuthResponse> {
         try {
-            const body = { email: payload.email, senha: payload.password };
-            const { data } = await api.post(`${API_CONFIG.endpoints.auth}/login`, body);
+            // O backend authValidation.ts espera 'password' e o transforma em 'senha'
+            const { data } = await api.post(`${API_CONFIG.endpoints.auth}/login`, payload);
             return extractAuthResponse(data);
         } catch (err: any) {
             const message = err?.response?.data?.message || err?.message || 'Erro ao fazer login.';
@@ -94,18 +97,21 @@ export const AuthService = {
         }
     },
 
-    // Registro com mapeamento password -> senha e tipo en-US -> pt-BR
+    // ✅ CORREÇÃO: Registro agora envia o 'payload' COMPLETO
     async register(payload: RegisterData): Promise<AuthResponse> {
         try {
-            const body: AnyObject = {
-                nome: payload.nome,
-                email: payload.email,
-                senha: payload.password,
-                tipo: toBackendTipo(payload.tipo),
-            };
-            if (payload.telefone && payload.telefone.trim() !== '') {
-                body.telefone = payload.telefone;
+            // Normaliza documentos (CPF/CNPJ) e envia apenas o relevante
+            const onlyDigits = (s?: string) => (s ?? '').replace(/\D/g, '');
+            const body: Record<string, any> = { ...payload };
+
+            if (payload.tipoPessoa === 'PJ') {
+                body.cnpj = onlyDigits(payload.cnpj);
+                delete body.cpf; // evita enviar CPF quando PJ
+            } else {
+                body.cpf = onlyDigits(payload.cpf);
+                delete body.cnpj; // evita enviar CNPJ quando PF
             }
+
             const { data } = await api.post(`${API_CONFIG.endpoints.auth}/register`, body);
             return extractAuthResponse(data);
         } catch (err: any) {

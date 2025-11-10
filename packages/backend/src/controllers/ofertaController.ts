@@ -48,8 +48,8 @@ export const ofertaController = {
                 sort: sortValue,
 
                 // Passando os outros filtros que estavam no seu frontend
-               // comMidia: q.comMidia === true,
-              //  tipoPessoa: q.tipoPessoa,
+                comMidia: q.comMidia === true,
+                tipoPessoa: q.tipoPessoa,
             };
             // --- FIM DA CORREÇÃO 2 ---
 
