@@ -7,6 +7,13 @@
 
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import envConfig from '@/constants/config';
+
+// Garante que a baseURL do Axios sempre termine com '/'
+function ensureTrailingSlash(u: string): string {
+    return u.endsWith('/') ? u : `${u}/`;
+}
 
 /**
  * Autodetecção de IPs do backend em desenvolvimento.
@@ -20,13 +27,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * MELHORIA: Tornar essa lista configurável por ambiente (.env) e/ou por plataforma
  * (ex.: usando react-native-config), evitando editar código para cada rede.
  */
-const CANDIDATE_BASE_URLS: string[] = [
+// Monta lista de URLs candidatas, priorizando a do ambiente (config.ts) quando em dev
+const env = envConfig;
+const baseCandidates: string[] = [
+    env?.apiUrl || '',
     'http://192.168.1.54:4000/api', // Casa — IP da sua casa
     'http://192.168.1.12:4000/api',  // Trabalho — IP do seu trabalho
+    'http://192.168.15.12:4000/api', // Casa — faixa alternativa 192.168.15.x
+    'http://192.168.15.1:4000/api',  // Casa — gateway/roteador comum
     'http://10.0.2.2:4000/api',      // Emulador Android (host do PC)
     'http://127.0.0.1:4000/api',     // iOS Simulator (host local)
     'http://localhost:4000/api'
 ];
+// Remove vazios e duplicados preservando a ordem
+const CANDIDATE_BASE_URLS: string[] = Array.from(new Set(baseCandidates.filter(Boolean)));
 
 // Endpoint leve já existente no backend para checagem de saúde (health-check).
 // Espera-se que GET /api/health responda rapidamente com 200 OK.
@@ -34,7 +48,7 @@ const HEALTH_PATH = '/health'; // GET /api/health
 
 // Tempo máximo de espera por URL ao fazer ping.
 // MELHORIA: Tornar esse timeout configurável e/ou aumentar em redes lentas.
-const PING_TIMEOUT_MS = 1200;
+const PING_TIMEOUT_MS = 3000;
 
 // Chave de cache para salvar a baseURL detectada no AsyncStorage.
 // MELHORIA: Incluir versão do app na chave para invalidar cache em upgrades.
@@ -47,11 +61,12 @@ const CACHE_KEY = 'api_base_url_selected';
  */
 async function ping(url: string): Promise<boolean> {
     try {
-        const ctl = new AbortController();
-        const id = setTimeout(() => ctl.abort(), PING_TIMEOUT_MS);
-        const res = await fetch(url, { method: 'GET', signal: ctl.signal });
-        clearTimeout(id);
-        return res.ok;
+        const res = await axios.get(url, {
+            timeout: PING_TIMEOUT_MS,
+            headers: { 'Cache-Control': 'no-cache' },
+            // Evita uso de baseURL global; URL absoluta garante request direto
+        });
+        return res.status >= 200 && res.status < 300;
     } catch {
         return false;
     }
@@ -68,12 +83,14 @@ async function ping(url: string): Promise<boolean> {
  * MELHORIA: Testar as URLs em paralelo (Promise.any) para acelerar a detecção.
  */
 async function pickReachableBaseURL(): Promise<string> {
-    // 1) Tenta cache
+    // 1) Tenta cache e limpa se estiver inválido
     try {
         const cached = await AsyncStorage.getItem(CACHE_KEY);
         if (cached) {
             const ok = await ping(`${cached}${HEALTH_PATH}`);
             if (ok) return cached;
+            // Remove cache inválido para evitar reaproveitar URL ruim
+            await AsyncStorage.removeItem(CACHE_KEY);
         }
     } catch {}
 
@@ -86,10 +103,12 @@ async function pickReachableBaseURL(): Promise<string> {
         }
     }
 
-    // 3) Fallback: primeira (Casa)
-    const fallback = CANDIDATE_BASE_URLS[0];
-    await AsyncStorage.setItem(CACHE_KEY, fallback);
-    return fallback;
+    // 3) Fallback seguro: em Android prioriza 10.0.2.2 se existir; não cacheia
+    if ((Platform as any)?.OS === 'android') {
+        const emulator = CANDIDATE_BASE_URLS.find(u => u.includes('10.0.2.2'));
+        if (emulator) return emulator;
+    }
+    return CANDIDATE_BASE_URLS[0];
 }
 
 // Base inicial:
@@ -152,7 +171,7 @@ export function clearAuthToken(): void {
 api.interceptors.request.use(async (config) => {
     // Aguarda autodetecção inicial em desenvolvimento, para evitar 1ª requisição no IP errado
     if (__DEV__ && detectionPromise) {
-        try { await detectionPromise; } catch {} finally { detectionPromise = null; }
+        try { await detectionPromise; } catch {}
     }
 
     // Usa token em memória; se não houver, tenta resgatar do AsyncStorage uma única vez

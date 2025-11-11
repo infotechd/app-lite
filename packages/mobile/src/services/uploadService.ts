@@ -108,7 +108,7 @@ export async function uploadFiles(mediaFiles: MediaFile[]): Promise<UploadFilesR
 
     try {
         // Envia o FormData ao backend; o backend cuidará do upload no Cloudinary
-        const response = await api.post('/upload/files', form, {
+        const response = await api.post('upload/files', form, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 60000, // 60 segundos para upload (TODO: torná-lo configurável)
             // TODO: adicionar onUploadProgress quando suportado pela stack atual
@@ -195,7 +195,7 @@ export async function deleteFile(publicId: string, resourceType: 'image' | 'vide
  */
 export async function getUserFiles(): Promise<UploadedFileInfo[]> {
     try {
-        const response = await api.get('/upload/files');
+        const response = await api.get('upload/files');
         const data = response.data;
         const filesArr = (data?.data?.files ?? data?.files ?? []) as any[];
 

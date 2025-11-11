@@ -91,7 +91,7 @@ export const ofertaService = {
         params.append('page', page.toString());
         params.append('limit', limit.toString());
 
-        const response = await api.get(`/ofertas?${params.toString()}`);
+        const response = await api.get(`ofertas?${params.toString()}`);
         const data = unwrapApiResponse<OfertasResponse>(response.data, { defaultValue: { ofertas: [], total: 0, page, totalPages: 1 } });
         // Normaliza a lista de ofertas e garante valores padrão seguros
         const ofertasNorm = mapOfertas(data?.ofertas);
@@ -105,7 +105,7 @@ export const ofertaService = {
 
     // Método simplificado de listagem conforme solicitação
     async list(params: ListOfertasParams) {
-        const response = await api.get('/ofertas', { params });
+        const response = await api.get('ofertas', { params });
         return response.data;
     },
 
@@ -113,7 +113,7 @@ export const ofertaService = {
      * Busca uma oferta específica pelo seu ID e normaliza o resultado.
      */
     async getOfertaById(id: string): Promise<OfertaServico> {
-        const response = await api.get(`/ofertas/${id}`);
+        const response = await api.get(`ofertas/${id}`);
         const data = unwrapApiResponse<OfertaServico>(response.data);
         return mapOferta(data);
     },
@@ -123,7 +123,7 @@ export const ofertaService = {
      * Possível melhoria: validar o payload antes do envio e tratar erros do backend com mensagens amigáveis.
      */
     async createOferta(data: CreateOfertaInput): Promise<OfertaServico> {
-        const response = await api.post('/ofertas', data);
+        const response = await api.post('ofertas', data);
         const payload = unwrapApiResponse<OfertaServico>(response.data);
         return mapOferta(payload);
     },
@@ -134,7 +134,7 @@ export const ofertaService = {
      * Possíveis melhorias: limitar tamanho/quantidade de arquivos, progresso de upload e compressão de mídia.
      */
     async createOfertaMultipart(formData: FormData): Promise<OfertaServico> {
-        const response = await api.post('/ofertas', formData, {
+        const response = await api.post('ofertas', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             maxBodyLength: Infinity,
         });
@@ -146,7 +146,7 @@ export const ofertaService = {
      * Atualiza parcialmente uma oferta existente e normaliza a resposta.
      */
     async updateOferta(id: string, data: Partial<CreateOfertaInput>): Promise<OfertaServico> {
-        const response = await api.put(`/ofertas/${id}`, data);
+        const response = await api.put(`ofertas/${id}`, data);
         const payload = unwrapApiResponse<OfertaServico>(response.data);
         return mapOferta(payload);
     },
@@ -156,7 +156,7 @@ export const ofertaService = {
      * Possível melhoria: tratar UI de forma otimista (optimistic update) e confirmar remoção.
      */
     async deleteOferta(id: string): Promise<void> {
-        await api.delete(`/ofertas/${id}`);
+        await api.delete(`ofertas/${id}`);
     },
 
     /**
@@ -164,7 +164,7 @@ export const ofertaService = {
      * Lida com diferentes formatos de resposta retornados pela API.
      */
     async getMinhasOfertas(): Promise<OfertaServico[]> {
-        const response = await api.get('/ofertas/minhas');
+        const response = await api.get('ofertas/minhas');
         const data = unwrapApiResponse<OfertaServico[] | { ofertas: OfertaServico[] }>(response.data);
         // Aceita tanto um array puro quanto um objeto com a propriedade "ofertas"
         const list = Array.isArray(data)
