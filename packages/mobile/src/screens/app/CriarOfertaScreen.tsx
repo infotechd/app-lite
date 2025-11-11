@@ -249,7 +249,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                 label="Preço"
                 value={form.precoText}
                 onChangeText={(t) => setField('precoText', maskCurrencyInput(t))}
-                style={styles.input}
+                style={[styles.input, { width: '50%', alignSelf: 'flex-start' }]}
                 mode="outlined"
                 keyboardType="numeric"
                 error={!!errors.precoText}
