@@ -3,8 +3,8 @@
 // explicam cada parte e trazem observações de melhorias potenciais.
 
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Alert } from 'react-native';
-import { Button, Text, TextInput, HelperText } from 'react-native-paper';
+import { ScrollView, StyleSheet, Alert, View } from 'react-native';
+import { Button, Text, TextInput, HelperText, Chip } from 'react-native-paper';
 // Tema (cores e espaçamentos) centralizados do app
 import { colors, spacing } from '@/styles/theme';
 // Esquema de validação Zod, tipo do formulário e config de mídias
@@ -37,6 +37,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         titulo: '',
         descricao: '',
         precoText: '',
+        priceUnit: 'pacote',
         categoria: '',
         cidade: '',
         estado: '',
@@ -62,6 +63,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             form.categoria.trim().length > 0 &&
             form.cidade.trim().length > 0 &&
             form.estado.trim().length === 2 &&
+            !!form.priceUnit &&
             !submitting
         );
     }, [form, submitting]);
@@ -186,6 +188,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                 titulo: form.titulo.trim(),
                 descricao: form.descricao.trim(),
                 preco,
+                unidadePreco: form.priceUnit,
                 categoria: form.categoria,
                 localizacao: { cidade: form.cidade, estado: form.estado },
                 imagens: imageUrls,
@@ -244,18 +247,44 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             />
             {!!errors.descricao && <HelperText type="error">{errors.descricao}</HelperText>}
 
-            {/* Campo: Preço com máscara BRL */}
-            <TextInput
-                label="Preço"
-                value={form.precoText}
-                onChangeText={(t) => setField('precoText', maskCurrencyInput(t))}
-                style={[styles.input, { width: '50%', alignSelf: 'flex-start' }]}
-                mode="outlined"
-                keyboardType="numeric"
-                error={!!errors.precoText}
-                // MELHORIA: em iOS/Android, avaliar usar keyboardType apropriado (decimal-pad)
-            />
+            {/* Preço + unidade lado a lado para melhor usabilidade */}
+            <View style={styles.row}>
+                <TextInput
+                    label="Preço"
+                    value={form.precoText}
+                    onChangeText={(t) => setField('precoText', maskCurrencyInput(t))}
+                    style={[styles.input, styles.priceInput]}
+                    mode="outlined"
+                    keyboardType="numeric"
+                    error={!!errors.precoText}
+                    // MELHORIA: em iOS/Android, avaliar usar keyboardType apropriado (decimal-pad)
+                />
+
+                <View style={styles.priceUnitContainer}>
+                    <Text style={styles.label}>Preço por</Text>
+                    {/* Lista horizontal e compacta para evitar overflow em telas estreitas */}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={{ columnGap: 8 }}>
+                        {[
+                            { value: 'hora', label: 'Hora' },
+                            { value: 'diaria', label: 'Diária' },
+                            { value: 'mes', label: 'Mês' },
+                            { value: 'aula', label: 'Aula' },
+                            { value: 'pacote', label: 'Pacote' },
+                        ].map((opt) => (
+                            <Chip
+                                key={opt.value}
+                                selected={form.priceUnit === (opt.value as any)}
+                                onPress={() => setField('priceUnit', opt.value as any)}
+                            >
+                                {opt.label}
+                            </Chip>
+                        ))}
+                    </ScrollView>
+                </View>
+            </View>
             {!!errors.precoText && <HelperText type="error">{errors.precoText}</HelperText>}
+            {!!errors.priceUnit && <HelperText type="error">{errors.priceUnit}</HelperText>}
 
             {/* Seleção de categoria e subcategoria */}
             <CategorySubcategoryPicker
@@ -338,6 +367,23 @@ const styles = StyleSheet.create({
     chip: {
         marginRight: spacing.xs,
         marginBottom: spacing.xs,
+    },
+    // Layout horizontal para Preço + Unidade
+    row: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 12,
+        flexWrap: 'wrap', // permite quebrar para a linha de baixo em telas pequenas
+    },
+    priceInput: {
+        flexBasis: '45%',
+        flexGrow: 0,
+        flexShrink: 0,
+        alignSelf: 'auto',
+    },
+    priceUnitContainer: {
+        flex: 1,
+        minWidth: 180,
     },
     submit: {
         marginTop: spacing.md,

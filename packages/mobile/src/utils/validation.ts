@@ -72,6 +72,9 @@ const mediaFileSchema = z.object({
     }
 });
 
+export const PRICE_UNITS = ['hora','diaria','mes','aula','pacote'] as const;
+export type PriceUnit = typeof PRICE_UNITS[number];
+
 export const criarOfertaSchema = z.object({
     titulo: z.string().min(3, 'Mínimo 3 caracteres').max(100, 'Máximo 100 caracteres'),
     descricao: z.string().min(10, 'Mínimo 10 caracteres').max(2000, 'Máximo 2000 caracteres'),
@@ -80,6 +83,7 @@ export const criarOfertaSchema = z.object({
         .min(1, MESSAGES.VALIDATION.REQUIRED)
         .refine((v) => /\d/.test(v), 'Preço inválido')
         .refine((v) => parseCurrencyBRLToNumber(v) > 0, 'Preço deve ser maior que 0'),
+    priceUnit: z.enum(PRICE_UNITS, { required_error: 'Selecione a unidade do preço' }),
     categoria: z.string().min(1, 'Selecione uma categoria'),
     subcategoria: z.string().optional(),
     cidade: z.string().min(1, MESSAGES.VALIDATION.REQUIRED),
