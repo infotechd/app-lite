@@ -5,9 +5,9 @@
 
 import React, { useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Button, Text, TextInput, HelperText, Chip } from 'react-native-paper';
+import { Button, Text, TextInput, HelperText, Chip, RadioButton } from 'react-native-paper';
 import { colors, spacing } from '@/styles/theme'; // Tokens de tema (cores, espaçamentos)
-import { criarOfertaSchema, MediaFile, OFERTA_MEDIA_CONFIG } from '@/utils/validation'; // Schema de validação e configs de mídia
+import { criarOfertaSchema, MediaFile, OFERTA_MEDIA_CONFIG, PriceUnit } from '@/utils/validation'; // Schema de validação e configs de mídia
 import { ofertaService } from '@/services/ofertaService'; // Serviço de ofertas (API)
 import { uploadFiles } from '@/services/uploadService'; // Serviço de upload (imagens/vídeos)
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -31,6 +31,7 @@ type EditForm = {
     titulo: string; // Título da oferta
     descricao: string; // Descrição da oferta
     precoText: string; // Preço no formato texto (mascarado em BRL)
+    priceUnit: PriceUnit; // Unidade do preço
     categoria: string; // Categoria selecionada
     cidade: string; // Cidade (definida automaticamente a partir da UF selecionada)
     estado: string; // UF (sigla com 2 caracteres)
@@ -48,6 +49,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
         titulo: oferta.titulo || '',
         descricao: oferta.descricao || '',
         precoText: oferta.preco > 0 ? formatCurrencyBRL(oferta.preco) : '', // Converte número em string monetária BRL
+        priceUnit: (oferta as any)?.unidadePreco || 'pacote',
         categoria: oferta.categoria || '',
         cidade: oferta.localizacao?.cidade || '',
         estado: oferta.localizacao?.estado || '',
@@ -75,6 +77,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             form.titulo.trim().length > 0 &&
             form.descricao.trim().length > 0 &&
             price > 0 && // Garante preço válido
+            !!form.priceUnit &&
             form.categoria.trim().length > 0 &&
             form.cidade.trim().length > 0 &&
             form.estado.trim().length === 2 && // UF deve ter 2 caracteres
@@ -140,6 +143,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             titulo: form.titulo,
             descricao: form.descricao,
             precoText: form.precoText,
+            priceUnit: form.priceUnit,
             categoria: form.categoria,
             cidade: form.cidade,
             estado: form.estado,
@@ -186,6 +190,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
                 titulo: form.titulo.trim(),
                 descricao: form.descricao.trim(),
                 preco,
+                unidadePreco: form.priceUnit,
                 categoria: form.categoria,
                 localizacao: { cidade: form.cidade, estado: form.estado },
                 imagens: finalImages,
@@ -247,6 +252,17 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
                 error={!!errors.precoText}
             />
             {!!errors.precoText && <HelperText type="error">{errors.precoText}</HelperText>}
+
+            {/* Unidade de preço */}
+            <Text style={styles.label}>Preço por</Text>
+            <RadioButton.Group onValueChange={(v) => setField('priceUnit', v as PriceUnit)} value={form.priceUnit as any}>
+                <RadioButton.Item label="Hora" value="hora" />
+                <RadioButton.Item label="Diária" value="diaria" />
+                <RadioButton.Item label="Mês" value="mes" />
+                <RadioButton.Item label="Aula" value="aula" />
+                <RadioButton.Item label="Pacote" value="pacote" />
+            </RadioButton.Group>
+            {!!errors.priceUnit && <HelperText type="error">{errors.priceUnit}</HelperText>}
 
             {/* Seleção de categoria por chips */}
             <CategoryChips categories={CATEGORY_NAMES} value={form.categoria} onChange={(cat) => setField('categoria', cat)} />

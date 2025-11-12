@@ -252,8 +252,17 @@ const BuscarOfertasScreen: React.FC = () => {
             <Card style={styles.card} onPress={() => navigation.navigate('OfferDetail', { oferta: item })}>
                 <Card.Content>
                     <View style={styles.cardHeader}>
-                        <Text variant="titleMedium" numberOfLines={2}>{item.titulo}</Text>
-                        <Text style={styles.price}>{formatCurrencyBRL(preco)}</Text>
+                        <Text
+                            variant="titleMedium"
+                            numberOfLines={2}
+                            ellipsizeMode="tail"
+                            style={styles.cardTitle}
+                        >
+                            {item.titulo}
+                        </Text>
+                        <Text style={styles.price} numberOfLines={1} accessibilityLabel={`Preço ${formatCurrencyBRL(preco)}`}>
+                            {`${formatCurrencyBRL(preco)}${((item as any)?.unidadePreco === 'hora') ? '/hora' : ((item as any)?.unidadePreco === 'diaria') ? '/diária' : ((item as any)?.unidadePreco === 'mes') ? '/mês' : ((item as any)?.unidadePreco === 'aula') ? '/aula' : ((item as any)?.unidadePreco === 'pacote') ? ' (pacote)' : ''}`}
+                        </Text>
                     </View>
 
                     <Text numberOfLines={3} style={styles.description}>
@@ -610,10 +619,17 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
         marginBottom: spacing.sm,
     },
+    cardTitle: {
+        flex: 1,
+        flexShrink: 1,
+        marginRight: spacing.sm,
+    },
     price: {
         fontSize: 18,
         fontWeight: 'bold',
         color: colors.primary,
+        flexShrink: 0,
+        textAlign: 'right',
     },
     description: {
         marginBottom: spacing.sm,

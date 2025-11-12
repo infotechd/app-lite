@@ -23,6 +23,8 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
     const isOwner = !!userId && String(userId) === prestadorId;
 
     const preco = oferta.preco;
+    const unit: any = (oferta as any)?.unidadePreco;
+    const unitSuffix = unit === 'hora' ? '/hora' : unit === 'diaria' ? '/diária' : unit === 'mes' ? '/mês' : unit === 'aula' ? '/aula' : unit === 'pacote' ? ' (pacote)' : '';
     const prestadorNome = oferta?.prestador?.nome ?? 'Prestador';
     const avaliacaoNum = typeof oferta?.prestador?.avaliacao === 'number' ? oferta.prestador.avaliacao : Number(oferta?.prestador?.avaliacao ?? 0);
     const cidade = oferta?.localizacao?.cidade ?? 'Cidade';
@@ -68,7 +70,7 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
                 <Card.Content>
                     <View style={styles.headerRow}>
                         <Text variant="titleLarge" style={styles.title}>{oferta.titulo}</Text>
-                        <Text style={styles.price}>{formatCurrencyBRL(preco)}</Text>
+                        <Text style={styles.price}>{`${formatCurrencyBRL(preco)}${unitSuffix}`}</Text>
                     </View>
 
                     <Chip mode="outlined" style={styles.categoryChip}>{oferta.categoria}</Chip>

@@ -1,8 +1,11 @@
+import type { PriceUnit } from '@/utils/validation';
+
 export interface OfertaServico {
     _id: string;
     titulo: string;
     descricao: string;
     preco: number;
+    unidadePreco?: PriceUnit; // NOVO: unidade do preço
     categoria: string;
     prestador: {
         _id: string;
@@ -27,6 +30,7 @@ export interface CreateOfertaInput {
     titulo: string;
     descricao: string;
     preco: number;
+    unidadePreco: PriceUnit; // NOVO: obrigatório no create
     categoria: string;
     imagens?: string[];
     videos?: string[];

@@ -79,11 +79,13 @@ const CATEGORIAS_VALIDAS = [
 
 
 // Create oferta
+const PRICE_UNITS = ['hora','diaria','mes','aula','pacote'] as const;
 export const createOfertaSchema = z.object({
     body: z.object({
         titulo: z.string().min(3).max(100),
         descricao: z.string().min(10).max(1000),
         preco: z.number().nonnegative(),
+        unidadePreco: z.enum(PRICE_UNITS),
         // CORREÇÃO DEFINITIVA DE CATEGORIA: Normaliza, capitaliza e valida contra enum sem acento
         categoria: z.string()
             .transform(s => s ? s.toLowerCase() : s)
@@ -110,6 +112,7 @@ export const updateOfertaSchema = z.object({
         titulo: z.string().min(3).max(100).optional(),
         descricao: z.string().min(10).max(1000).optional(),
         preco: z.number().nonnegative().optional(),
+        unidadePreco: z.enum(PRICE_UNITS).optional(),
         // CORREÇÃO DEFINITIVA DE CATEGORIA: Normaliza, capitaliza e valida contra enum sem acento
         categoria: z.string().optional()
             .transform(s => s ? s.toLowerCase() : s)
