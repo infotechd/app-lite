@@ -30,14 +30,15 @@ const CategorySubcategoryPicker: React.FC<CategorySubcategoryPickerProps> = ({
     const [subcategoryMenuVisible, setSubcategoryMenuVisible] = useState(false);
     const [subcategories, setSubcategories] = useState<Subcategoria[]>([]);
 
-    // Atualizar subcategorias quando a categoria mudar
+    // Atualizar subcategorias quando a categoria/subcategoria mudarem e garantir consistência de estado
+    // Importante: não depende de onSubcategoryChange para evitar loops de render causados por callbacks instáveis
     useEffect(() => {
         if (selectedCategoryId) {
             const subs = getSubcategories(selectedCategoryId);
             setSubcategories(subs);
 
             // Se a subcategoria selecionada não pertence à nova categoria, limpar
-            if (selectedSubcategoryId) {
+            if (selectedSubcategoryId !== undefined) {
                 const isValid = subs.some(sub => sub.id === selectedSubcategoryId);
                 if (!isValid) {
                     onSubcategoryChange(undefined);
@@ -45,9 +46,21 @@ const CategorySubcategoryPicker: React.FC<CategorySubcategoryPickerProps> = ({
             }
         } else {
             setSubcategories([]);
-            onSubcategoryChange(undefined);
+            // Só limpar se havia alguma subcategoria setada anteriormente
+            if (selectedSubcategoryId !== undefined) {
+                onSubcategoryChange(undefined);
+            }
         }
-    }, [selectedCategoryId]);
+
+        // Sempre fechar menus ao trocar a categoria para evitar sobreposição invisível
+        setCategoryMenuVisible(false);
+        setSubcategoryMenuVisible(false);
+    }, [selectedCategoryId, selectedSubcategoryId]);
+
+    // Fechar o menu de subcategoria quando a própria seleção mudar (reforço de UX)
+    useEffect(() => {
+        setSubcategoryMenuVisible(false);
+    }, [selectedSubcategoryId]);
 
     // Obter nome da categoria selecionada
     const selectedCategory = CATEGORIES.find(cat => cat.id === selectedCategoryId);
@@ -67,13 +80,19 @@ const CategorySubcategoryPicker: React.FC<CategorySubcategoryPickerProps> = ({
                 <Menu
                     visible={categoryMenuVisible}
                     onDismiss={() => setCategoryMenuVisible(false)}
+                    anchorPosition="bottom"
                     anchor={
                         <Button
                             mode="outlined"
-                            onPress={() => !disabled && setCategoryMenuVisible(true)}
+                            onPress={() => {
+                                if (disabled) return;
+                                // Toggle para recuperar de estados travados/fora de sincronia
+                                setCategoryMenuVisible((v) => !v);
+                            }}
                             icon="chevron-down"
                             contentStyle={styles.buttonContent}
                             style={styles.button}
+                            testID="category-anchor"
                             disabled={disabled}
                         >
                             {categoryLabel}
@@ -88,6 +107,7 @@ const CategorySubcategoryPicker: React.FC<CategorySubcategoryPickerProps> = ({
                                 setCategoryMenuVisible(false);
                             }}
                             title={categoria.nome}
+                            testID={`category-item-${categoria.id}`}
                             leadingIcon={selectedCategoryId === categoria.id ? 'check' : undefined}
                         />
                     ))}
@@ -103,13 +123,18 @@ const CategorySubcategoryPicker: React.FC<CategorySubcategoryPickerProps> = ({
                     <Menu
                         visible={subcategoryMenuVisible}
                         onDismiss={() => setSubcategoryMenuVisible(false)}
+                        anchorPosition="bottom"
                         anchor={
                             <Button
                                 mode="outlined"
-                                onPress={() => !disabled && setSubcategoryMenuVisible(true)}
+                                onPress={() => {
+                                    if (disabled) return;
+                                    setSubcategoryMenuVisible((v) => !v);
+                                }}
                                 icon="chevron-down"
                                 contentStyle={styles.buttonContent}
                                 style={styles.button}
+                                testID="subcategory-anchor"
                                 disabled={disabled}
                             >
                                 {subcategoryLabel}
@@ -118,11 +143,13 @@ const CategorySubcategoryPicker: React.FC<CategorySubcategoryPickerProps> = ({
                     >
                         {/* Opção para limpar subcategoria */}
                         <Menu.Item
+                            key="subcategory-item-none"
                             onPress={() => {
                                 onSubcategoryChange(undefined);
                                 setSubcategoryMenuVisible(false);
                             }}
                             title="Nenhuma (todas)"
+                            testID={`subcategory-item-none`}
                             leadingIcon={!selectedSubcategoryId ? 'check' : undefined}
                         />
                         {subcategories.map((subcategoria) => (
@@ -133,6 +160,7 @@ const CategorySubcategoryPicker: React.FC<CategorySubcategoryPickerProps> = ({
                                     setSubcategoryMenuVisible(false);
                                 }}
                                 title={subcategoria.nome}
+                                testID={`subcategory-item-${subcategoria.id}`}
                                 leadingIcon={selectedSubcategoryId === subcategoria.id ? 'check' : undefined}
                             />
                         ))}
