@@ -64,9 +64,15 @@ if (typeof globalThis.expo.SharedRef === 'undefined') {
 jest.mock('react-native-paper', () => {
     const React = require('react');
 
+    // Provide minimal MD3LightTheme for modules that import it in tests
+    const MD3LightTheme = { colors: {} };
+
     const Provider = ({ children }) => React.createElement(React.Fragment, null, children);
 
-    const Button = (props) => React.createElement('RNPButton', props, props.children);
+    const Button = (props) => {
+        const merged = { accessibilityRole: 'button', ...props };
+        return React.createElement('RNPButton', merged, merged.children);
+    };
 
     const Text = (props) => React.createElement('RNPText', props, props.children);
     const TextInput = (props) => React.createElement('RNPTextInput', props, props.children);
@@ -74,6 +80,19 @@ jest.mock('react-native-paper', () => {
     const HelperText = ({ children, visible, ...rest }) => visible ? React.createElement('RNPHelperText', rest, children) : null;
 
     const Snackbar = ({ children, visible, ...rest }) => visible ? React.createElement('RNPSnackbar', rest, children) : null;
+
+    // Minimal Chip mock
+    const Chip = (props) => React.createElement('RNPChip', props, props.children);
+
+    // Minimal Menu mock: renders anchor always and children when visible
+    const Menu = ({ visible, anchor, children, ...rest }) => {
+        return React.createElement(
+            'RNPMenu',
+            { visible, ...rest },
+            [anchor, visible ? children : null]
+        );
+    };
+    Menu.Item = (props) => React.createElement('RNPMenuItem', props, props.title);
 
     const SegmentedButtons = ({ value, onValueChange, buttons = [], ...rest }) => {
         const items = buttons.map((btn) =>
@@ -92,7 +111,7 @@ jest.mock('react-native-paper', () => {
         return React.createElement('RNPSegmentedButtons', { testID: 'segmented-buttons', value, ...rest }, items);
     };
 
-    return { Provider, Button, Text, TextInput, HelperText, Snackbar, SegmentedButtons };
+    return { Provider, Button, Text, TextInput, HelperText, Snackbar, SegmentedButtons, Menu, Chip, MD3LightTheme };
 });
 
 // Mock expo-updates to avoid ESM import issues in tests

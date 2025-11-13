@@ -288,9 +288,14 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
 
             {/* Seleção de categoria e subcategoria */}
             <CategorySubcategoryPicker
+                key={`cat-${categoriaId || 'none'}`}
                 selectedCategoryId={categoriaId}
                 selectedSubcategoryId={form.subcategoria}
-                onCategoryChange={(id) => setField('categoria', id)}
+                onCategoryChange={(id) => {
+                    setField('categoria', id);
+                    // Ao trocar a categoria, limpamos a subcategoria para evitar estado inválido
+                    setField('subcategoria', undefined as any);
+                }}
                 onSubcategoryChange={(id) => setField('subcategoria', id)}
             />
             {!!errors.categoria && <HelperText type="error">{errors.categoria}</HelperText>}
