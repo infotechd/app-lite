@@ -15,11 +15,13 @@ export interface ListOfertasParams {
     subcategoria?: string;
     estado?: string;
     cidade?: string;
-    sort?: 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente';
+    sort?: 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente' | 'distancia';
     comMidia?: boolean;
     tipoPessoa?: 'PF' | 'PJ';
     page?: number;
     limit?: number;
+    lat?: number;
+    lng?: number;
 }
 
 // Funções auxiliares para normalizar dados da API para tipos estritos
@@ -74,10 +76,16 @@ export const ofertaService = {
      * - Normaliza a resposta e aplica valores padrão seguros.
      * Possíveis melhorias: cache por filtros/página e suporte a cancelamento (AbortController).
      */
-    async getOfertas(filters?: OfertaFilters, page = 1, limit = 10): Promise<OfertasResponse> {
+    async getOfertas(
+        filters?: OfertaFilters,
+        page = 1,
+        limit = 10,
+        signal?: AbortSignal
+    ): Promise<OfertasResponse> {
         const params = new URLSearchParams();
 
         if (filters?.categoria) params.append('categoria', filters.categoria);
+        if (filters?.subcategoria) params.append('subcategoria', filters.subcategoria);
         if (filters?.precoMin !== undefined) params.append('precoMin', filters.precoMin.toString());
         if (filters?.precoMax !== undefined) params.append('precoMax', filters.precoMax.toString());
         if (filters?.cidade) params.append('cidade', filters.cidade);
@@ -87,11 +95,15 @@ export const ofertaService = {
         if (filters?.sort) params.append('sort', filters.sort);
         if (filters?.comMidia === true) params.append('comMidia', 'true');
         if (filters?.tipoPessoa) params.append('tipoPessoa', filters.tipoPessoa);
+        if (filters?.sort === 'distancia') {
+            if (typeof filters?.lat === 'number') params.append('lat', String(filters.lat));
+            if (typeof filters?.lng === 'number') params.append('lng', String(filters.lng));
+        }
 
         params.append('page', page.toString());
         params.append('limit', limit.toString());
 
-        const response = await api.get(`ofertas?${params.toString()}`);
+        const response = await api.get(`ofertas?${params.toString()}`, { signal });
         const data = unwrapApiResponse<OfertasResponse>(response.data, { defaultValue: { ofertas: [], total: 0, page, totalPages: 1 } });
         // Normaliza a lista de ofertas e garante valores padrão seguros
         const ofertasNorm = mapOfertas(data?.ofertas);

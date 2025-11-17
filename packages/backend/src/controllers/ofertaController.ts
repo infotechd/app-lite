@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import crypto from 'crypto';
 import { AuthRequest } from '../middleware/auth';
 import ofertaService, { ListFilters } from '../services/ofertaService';
 import { logger } from '../utils/logger';
@@ -6,8 +7,8 @@ import { OfertaFiltersInput, CreateOfertaInput, UpdateOfertaInput } from '../val
 
 // --- INÍCIO DA CORREÇÃO 1 ---
 // Definimos os valores permitidos para 'sort', espelhando o que o service e o frontend esperam.
-type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente';
-const ALLOWED_SORT_OPTIONS: SortOption[] = ['relevancia', 'preco_menor', 'preco_maior', 'avaliacao', 'recente'];
+type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente' | 'distancia';
+const ALLOWED_SORT_OPTIONS: SortOption[] = ['relevancia', 'preco_menor', 'preco_maior', 'avaliacao', 'recente', 'distancia'];
 // --- FIM DA CORREÇÃO 1 ---
 
 export const ofertaController = {
@@ -37,6 +38,7 @@ export const ofertaController = {
             // 3. Montar o objeto de filtros com o tipo 'ListFilters' correto
             const filters: ListFilters = {
                 categoria: q.categoria,
+                subcategoria: (q as any).subcategoria,
                 precoMin: q.precoMin,
                 precoMax: q.precoMax,
                 cidade: q.cidade,
@@ -50,11 +52,29 @@ export const ofertaController = {
                 // Passando os outros filtros que estavam no seu frontend
                 comMidia: q.comMidia === true,
                 tipoPessoa: q.tipoPessoa,
+                // Coordenadas opcionais para sort=distancia
+                lat: q.lat,
+                lng: q.lng,
             };
             // --- FIM DA CORREÇÃO 2 ---
 
             // Agora 'filters' tem o tipo exato que 'ofertaService.list' espera
             const result = await ofertaService.list(filters);
+
+            // ETag fraca baseada na query + payload
+            const etagPayload = JSON.stringify({ q: req.query, result });
+            const etag = 'W/"' + crypto.createHash('sha1').update(etagPayload).digest('base64') + '"';
+
+            // Se o cliente enviou If-None-Match com o mesmo ETag, retornar 304
+            const inm = req.headers['if-none-match'];
+            if (inm && inm === etag) {
+                res.status(304).setHeader('ETag', etag);
+                return res.end();
+            }
+
+            // Cache curto e ETag para buscas repetidas
+            res.setHeader('ETag', etag);
+            res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=30');
 
             res.status(200).json({
                 success: true,

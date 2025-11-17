@@ -243,3 +243,57 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
         });
     }
 };
+
+// Preferências do usuário (GET)
+export const getPreferences = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const authUser = req.user;
+        if (!authUser?.id) {
+            res.status(401).json({ success: false, message: 'Não autenticado' });
+            return;
+        }
+        const user = await User.findById(authUser.id).lean();
+        if (!user) {
+            res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+            return;
+        }
+        res.json({ success: true, message: 'Preferências recuperadas', data: { preferencias: user.preferencias || {} } });
+    } catch (error) {
+        logger.error('Erro ao obter preferências:', error);
+        res.status(500).json({ success: false, message: 'Erro interno do servidor' });
+    }
+};
+
+// Preferências do usuário (PUT)
+export const updatePreferences = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const authUser = req.user;
+        if (!authUser?.id) {
+            res.status(401).json({ success: false, message: 'Não autenticado' });
+            return;
+        }
+
+        const body = (req.body || {}) as { preferencias?: { ofertas?: { sort?: string } } };
+        const prefs = body?.preferencias || {};
+
+        // Sanitizar sort se presente
+        const allowedSort = new Set(['relevancia','preco_menor','preco_maior','avaliacao','recente','distancia']);
+        if (prefs?.ofertas?.sort && !allowedSort.has(prefs.ofertas.sort)) {
+            res.status(400).json({ success: false, message: "Parâmetro 'sort' inválido" });
+            return;
+        }
+
+        const user = await User.findById(authUser.id);
+        if (!user) {
+            res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+            return;
+        }
+        const current = (user as any).preferencias || {};
+        (user as any).preferencias = { ...current, ...prefs };
+        await user.save();
+        res.json({ success: true, message: 'Preferências atualizadas', data: { preferencias: (user as any).preferencias } });
+    } catch (error) {
+        logger.error('Erro ao atualizar preferências:', error);
+        res.status(500).json({ success: false, message: 'Erro interno do servidor' });
+    }
+};

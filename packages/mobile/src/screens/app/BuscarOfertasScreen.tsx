@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Alert, ScrollView } from 'react-native';
-import { Searchbar, Card, Text, FAB, Chip, ActivityIndicator, Button, Portal, Modal, TextInput, HelperText, Divider, Menu, Switch, SegmentedButtons } from 'react-native-paper';
+import { View, FlatList, StyleSheet, RefreshControl, Alert, Text as RNText } from 'react-native';
+import { Searchbar, Card, Text, FAB, Chip, Button, Portal, Menu, Snackbar } from 'react-native-paper';
 import { OfertaServico, OfertaFilters, SortOption } from '@/types/oferta';
 import { ofertaService } from '@/services/ofertaService';
+// Telemetria e tracing
+import { captureException, addBreadcrumb, startSpan } from '@/utils/sentry';
+// import AsyncStorage from '@react-native-async-storage/async-storage'; // não utilizado aqui
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing } from '@/styles/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -11,6 +14,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';
 import { openAuthModal } from '@/navigation/RootNavigation';
 import { formatCurrencyBRL } from '@/utils/currency';
+import FiltersModal, { FiltersDraft } from '@/components/FiltersModal';
+import { CATEGORIES } from '@/constants/oferta';
+import { parseNumber, isValidUF, validatePriceRange } from '@/utils/filtersValidation';
 
 // Rótulos para opções de ordenação
 const SORT_LABELS: Record<SortOption, string> = {
@@ -19,7 +25,34 @@ const SORT_LABELS: Record<SortOption, string> = {
     preco_maior: '💎 Maior Preço',
     avaliacao: '⭐ Melhor Avaliação',
     recente: '🆕 Mais Recente',
+    distancia: '📍 Mais Próximo',
 };
+
+// Helpers de A11Y/i18n (PT-BR por enquanto)
+const getSortButtonA11yLabel = (sortBy: SortOption) => `Ordenar por: ${SORT_LABELS[sortBy]}`;
+const getSortButtonA11yHint = () => 'Abre as opções de ordenação';
+
+const getAppliedChipA11y = (label: string) => ({
+    accessibilityLabel: `Filtro aplicado: ${label}. Toque para remover`,
+    accessibilityHint: 'Remove este filtro',
+    accessibilityRole: 'button' as const,
+    accessibilityState: { selected: true },
+});
+
+// getChoiceChipA11y removido: lógica de A11y agora vive dentro do componente FiltersModal
+
+const buildOfferCardA11y = (
+    item: OfertaServico,
+    precoFmt: string,
+    avaliacao: number,
+    cidade: string,
+    estado: string,
+    distancia?: string,
+) => ({
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: `Oferta: ${item.titulo}. Preço ${precoFmt}. Prestador ${item?.prestador?.nome ?? 'Prestador'}. Avaliação ${avaliacao.toFixed(1)}. Localização ${cidade}, ${estado}${distancia ? ' • ' + distancia : ''}.`,
+    accessibilityHint: 'Abre os detalhes da oferta',
+});
 
 const BuscarOfertasScreen: React.FC = () => {
     const [ofertas, setOfertas] = useState<OfertaServico[]>([]);
@@ -31,6 +64,7 @@ const BuscarOfertasScreen: React.FC = () => {
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     // Additional filters (applied)
     const [precoMin, setPrecoMin] = useState<number | undefined>(undefined);
@@ -44,16 +78,20 @@ const BuscarOfertasScreen: React.FC = () => {
     const [comMidia, setComMidia] = useState<boolean>(false);
     const [tipoPessoa, setTipoPessoa] = useState<'PF' | 'PJ' | undefined>(undefined);
     const [isSortMenuVisible, setIsSortMenuVisible] = useState(false);
+    const [userLat, setUserLat] = useState<number | undefined>(undefined);
+    const [userLng, setUserLng] = useState<number | undefined>(undefined);
 
     // Filters modal visibility and draft values
     const [isFiltersVisible, setIsFiltersVisible] = useState(false);
-    const [draftCategoria, setDraftCategoria] = useState<string | undefined>(undefined);
-    const [draftPrecoMin, setDraftPrecoMin] = useState<string>('');
-    const [draftPrecoMax, setDraftPrecoMax] = useState<string>('');
-    const [draftCidade, setDraftCidade] = useState<string>('');
-    const [draftEstado, setDraftEstado] = useState<string | undefined>(undefined);
-    const [draftComMidia, setDraftComMidia] = useState<boolean>(false);
-    const [draftTipoPessoa, setDraftTipoPessoa] = useState<'PF' | 'PJ' | 'todos'>('todos');
+    const [draft, setDraft] = useState<FiltersDraft>({
+        categoria: undefined,
+        precoMin: '',
+        precoMax: '',
+        cidade: '',
+        estado: undefined,
+        comMidia: false,
+        tipoPessoa: 'todos',
+    });
 
     const { user, isAuthenticated, setPendingRedirect } = useAuth();
     // Mostrar CTA de criar oferta para convidados; se autenticado, somente para provider
@@ -62,6 +100,9 @@ const BuscarOfertasScreen: React.FC = () => {
     const hasInitialLoadedRef = useRef(false);
     // Robustness: track latest request to avoid stale updates overriding newer ones
     const requestIdRef = useRef(0);
+    // Cancelamento: manter referência do AbortController da última requisição
+    const abortRef = useRef<AbortController | null>(null);
+    // Ref para controlar inicialização de carregamento (já usado em hasInitialLoadedRef)
 
     const onPressCriarOferta = useCallback(() => {
         if (isAuthenticated) {
@@ -73,17 +114,26 @@ const BuscarOfertasScreen: React.FC = () => {
         }
     }, [isAuthenticated, navigation, setPendingRedirect]);
 
-    const categories = ['Tecnologia','Saúde','Educação','Beleza','Limpeza','Consultoria','Construção','Jardinagem','Transporte','Alimentação','Eventos','Outros'];
+    // Categorias centralizadas em constantes
 
     const loadOfertas = useCallback(async (pageNum = 1, refresh = false) => {
         const requestId = ++requestIdRef.current;
+
+        // Aborta a requisição anterior, se existir
+        try { abortRef.current?.abort(); } catch {}
+        const controller = new AbortController();
+        abortRef.current = controller;
+
         if (refresh) {
             setIsRefreshing(true);
         } else {
             setIsLoading(true);
         }
 
+        // Span de performance (no-op se Sentry não estiver ativo)
+        const span = startSpan({ name: 'Buscar ofertas', op: 'http' });
         try {
+            setError(null); // limpa erro antes de nova tentativa
             const filters: OfertaFilters = {
                 busca: debouncedQuery || undefined,
                 categoria: selectedCategory,
@@ -96,7 +146,13 @@ const BuscarOfertasScreen: React.FC = () => {
                 tipoPessoa,
             };
 
-            const response = await ofertaService.getOfertas(filters, pageNum, 10);
+            // Incluir coordenadas quando sort for por distância
+            if (sortBy === 'distancia' && typeof userLat === 'number' && typeof userLng === 'number') {
+                filters.lat = userLat;
+                filters.lng = userLng;
+            }
+
+            const response = await ofertaService.getOfertas(filters, pageNum, 10, controller.signal);
 
             const novasOfertas = Array.isArray(response?.ofertas) ? response.ofertas : [];
             const totalPages = typeof response?.totalPages === 'number' ? response.totalPages : 1;
@@ -117,10 +173,34 @@ const BuscarOfertasScreen: React.FC = () => {
             setPage(pageNum);
             setTotal(totalCount);
         } catch (error: any) {
-            if (requestId === requestIdRef.current) {
-                // Em caso de falha de rede ou servidor, não interromper com alerta.
-                // Mantemos o estado atual e deixamos a UI exibir o estado vazio amigável quando aplicável.
+            const isAbort = error?.name === 'CanceledError' || error?.name === 'AbortError' || error?.code === 'ERR_CANCELED';
+            if (isAbort) {
+                // Silencioso: cancelada de propósito
+            } else if (requestId === requestIdRef.current) {
+                // Telemetria com contexto de filtros e paginação
+                captureException(error, {
+                    tags: {
+                        screen: 'BuscarOfertas',
+                        sort: sortBy,
+                        hasUserLocation: String(typeof userLat === 'number' && typeof userLng === 'number'),
+                    },
+                    extra: {
+                        query: debouncedQuery || undefined,
+                        categoria: selectedCategory,
+                        precoMin,
+                        precoMax,
+                        cidade,
+                        estado,
+                        comMidia,
+                        tipoPessoa,
+                        page: pageNum,
+                        refresh,
+                        hasMore,
+                    },
+                });
+
                 console.warn?.('Falha ao carregar ofertas (rede/servidor):', error);
+                setError('Não foi possível carregar as ofertas. Verifique sua conexão e tente novamente.');
             } else {
                 // Stale request failed; ignore silently
                 console.debug?.('Stale ofertas request failed, ignoring:', error);
@@ -131,8 +211,14 @@ const BuscarOfertasScreen: React.FC = () => {
                 setIsLoading(false);
                 setIsRefreshing(false);
             }
+            // Encerra o span de performance
+            try { span.end(); } catch {}
         }
-    }, [debouncedQuery, selectedCategory, precoMin, precoMax, cidade, estado, sortBy, comMidia, tipoPessoa]);
+    }, [debouncedQuery, selectedCategory, precoMin, precoMax, cidade, estado, sortBy, comMidia, tipoPessoa, userLat, userLng]);
+
+    const retry = useCallback(() => {
+        void loadOfertas(1, true);
+    }, [loadOfertas]);
 
     // Debounce: update debouncedQuery 400ms after user stops typing
     useEffect(() => {
@@ -153,6 +239,15 @@ const BuscarOfertasScreen: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Aborta requisição pendente ao desmontar a tela
+    useEffect(() => {
+        return () => {
+            try { abortRef.current?.abort(); } catch {}
+        };
+    }, []);
+
+    // A11y do modal movido para o componente FiltersModal
+
 
     const handleRefresh = () => {
         void loadOfertas(1, true);
@@ -170,44 +265,51 @@ const BuscarOfertasScreen: React.FC = () => {
 
 
     const openFilters = () => {
-        setDraftCategoria(selectedCategory);
-        setDraftPrecoMin(typeof precoMin === 'number' ? String(precoMin) : '');
-        setDraftPrecoMax(typeof precoMax === 'number' ? String(precoMax) : '');
-        setDraftCidade(cidade ?? '');
-        setDraftEstado(estado);
-        setDraftComMidia(comMidia);
-        setDraftTipoPessoa(tipoPessoa ?? 'todos');
+        setDraft({
+            categoria: selectedCategory,
+            precoMin: typeof precoMin === 'number' ? String(precoMin) : '',
+            precoMax: typeof precoMax === 'number' ? String(precoMax) : '',
+            cidade: cidade ?? '',
+            estado,
+            comMidia,
+            tipoPessoa: tipoPessoa ?? 'todos',
+        });
         setIsFiltersVisible(true);
     };
 
-    const parseNumber = (s: string): number | undefined => {
-        if (!s) return undefined;
-        const normalized = s.replace(',', '.');
-        const n = Number(normalized);
-        return Number.isFinite(n) ? n : undefined;
-    };
-
     const applyFilters = () => {
-        const min = parseNumber(draftPrecoMin);
-        const max = parseNumber(draftPrecoMax);
-        if (typeof min === 'number' && typeof max === 'number' && min > max) {
-            Alert.alert('Validação', 'Preço mínimo não pode ser maior que o máximo');
+        const min = parseNumber(draft.precoMin);
+        const max = parseNumber(draft.precoMax);
+        const priceError = validatePriceRange(min, max);
+        if (priceError) {
+            Alert.alert('Validação', priceError);
             return;
         }
-        const ufRaw = (draftEstado || '').trim().toUpperCase();
-        const ufValid = ufRaw === '' || /^[A-Z]{2}$/.test(ufRaw);
-        if (!ufValid) {
+
+        const ufRaw = (draft.estado || '').trim().toUpperCase();
+        if (!isValidUF(ufRaw)) {
             Alert.alert('Validação', 'Estado (UF) deve ter 2 letras');
             return;
         }
-        setSelectedCategory(draftCategoria);
+
+        // Breadcrumb para diagnóstico das alterações de filtro
+        addBreadcrumb('Aplicar filtros em BuscarOfertas', {
+            categoria: draft.categoria,
+            precoMin: min,
+            precoMax: max,
+            cidade: draft.cidade,
+            estado: ufRaw || undefined,
+            comMidia: draft.comMidia,
+            tipoPessoa: draft.tipoPessoa,
+        }, 'filtro', 'info');
+        setSelectedCategory(draft.categoria);
         setPrecoMin(min);
         setPrecoMax(max);
-        setCidade(draftCidade.trim() || undefined);
+        setCidade(draft.cidade.trim() || undefined);
         setEstado(ufRaw ? ufRaw : undefined);
         // novos filtros
-        setComMidia(draftComMidia === true);
-        setTipoPessoa(draftTipoPessoa === 'todos' ? undefined : draftTipoPessoa);
+        setComMidia(draft.comMidia === true);
+        setTipoPessoa(draft.tipoPessoa === 'todos' ? undefined : draft.tipoPessoa);
         setIsFiltersVisible(false);
         // Carregamento será disparado pelo useEffect que depende de loadOfertas
     };
@@ -221,13 +323,15 @@ const BuscarOfertasScreen: React.FC = () => {
         setComMidia(false);
         setTipoPessoa(undefined);
         setIsFiltersVisible(false);
-        setDraftCategoria(undefined);
-        setDraftPrecoMin('');
-        setDraftPrecoMax('');
-        setDraftCidade('');
-        setDraftEstado(undefined);
-        setDraftComMidia(false);
-        setDraftTipoPessoa('todos');
+        setDraft({
+            categoria: undefined,
+            precoMin: '',
+            precoMax: '',
+            cidade: '',
+            estado: undefined,
+            comMidia: false,
+            tipoPessoa: 'todos',
+        });
     };
 
     const clearFilter = (key: 'categoria' | 'cidade' | 'estado' | 'preco' | 'comMidia' | 'tipoPessoa') => {
@@ -240,16 +344,37 @@ const BuscarOfertasScreen: React.FC = () => {
         // Carregamento será disparado pelo useEffect que depende de loadOfertas
     };
 
-    const renderOferta = ({ item }: { item: OfertaServico }) => {
+    // Card de oferta memoizado para evitar re-renders desnecessários
+    const OfferCard = React.memo(({ item }: { item: OfertaServico }) => {
         // Defensive formatting to avoid runtime crashes from unexpected/null fields
         const preco = typeof item?.preco === 'number' ? item.preco : Number(item?.preco ?? 0);
         const prestadorNome = item?.prestador?.nome ?? 'Prestador';
         const avaliacaoNum = typeof item?.prestador?.avaliacao === 'number' ? item.prestador.avaliacao : Number(item?.prestador?.avaliacao ?? 0);
         const cidade = item?.localizacao?.cidade ?? 'Cidade';
         const estado = item?.localizacao?.estado ?? 'UF';
+        const handlePress = useCallback(() => {
+            navigation.navigate('OfferDetail', { oferta: item });
+        }, [item]);
+
+        // Distância formatada (quando disponível)
+        const distanciaM = typeof item?.distancia === 'number' ? item.distancia : undefined;
+        const distanciaStr = typeof distanciaM === 'number' ? (distanciaM >= 1000 ? `${(distanciaM/1000).toFixed(1)} km` : `${Math.round(distanciaM)} m`) : undefined;
+        const unidadeMap: Record<NonNullable<OfertaServico['unidadePreco']>, string> = {
+            hora: '/hora',
+            diaria: '/diária',
+            mes: '/mês',
+            aula: '/aula',
+            pacote: ' (pacote)',
+        } as const;
+        const unidadeLabel = item.unidadePreco ? unidadeMap[item.unidadePreco] : '';
+        const precoFmtWithUnit = `${formatCurrencyBRL(preco)}${unidadeLabel}`;
 
         return (
-            <Card style={styles.card} onPress={() => navigation.navigate('OfferDetail', { oferta: item })}>
+            <Card
+                style={styles.card}
+                onPress={handlePress}
+                {...buildOfferCardA11y(item, precoFmtWithUnit, avaliacaoNum, cidade, estado, distanciaStr)}
+            >
                 <Card.Content>
                     <View style={styles.cardHeader}>
                         <Text
@@ -260,8 +385,8 @@ const BuscarOfertasScreen: React.FC = () => {
                         >
                             {item.titulo}
                         </Text>
-                        <Text style={styles.price} numberOfLines={1} accessibilityLabel={`Preço ${formatCurrencyBRL(preco)}`}>
-                            {`${formatCurrencyBRL(preco)}${((item as any)?.unidadePreco === 'hora') ? '/hora' : ((item as any)?.unidadePreco === 'diaria') ? '/diária' : ((item as any)?.unidadePreco === 'mes') ? '/mês' : ((item as any)?.unidadePreco === 'aula') ? '/aula' : ((item as any)?.unidadePreco === 'pacote') ? ' (pacote)' : ''}`}
+                        <Text style={styles.price} numberOfLines={1} accessibilityLabel={`Preço ${precoFmtWithUnit}`}>
+                            {precoFmtWithUnit}
                         </Text>
                     </View>
 
@@ -280,7 +405,7 @@ const BuscarOfertasScreen: React.FC = () => {
                         <View style={styles.locationInfo}>
                             <Icon name="map-marker" size={16} color={colors.textSecondary} />
                             <Text style={styles.location}>
-                                {cidade}, {estado}
+                                {cidade}, {estado}{distanciaStr ? ` • ${distanciaStr}` : ''}
                             </Text>
                         </View>
                     </View>
@@ -291,7 +416,13 @@ const BuscarOfertasScreen: React.FC = () => {
                 </Card.Content>
             </Card>
         );
-    };
+    });
+
+    const renderOferta = useCallback(({ item }: { item: OfertaServico }) => (
+        <OfferCard item={item} />
+    ), []);
+
+    const keyExtractor = useCallback((item: OfertaServico) => item._id, []);
 
     const renderEmpty = () => (
         <View style={styles.emptyContainer}>
@@ -314,20 +445,50 @@ const BuscarOfertasScreen: React.FC = () => {
         </View>
     );
 
+    // Placeholder de carregamento (skeleton) para cards
+    const SkeletonCard = () => (
+        <Card style={styles.card} accessible={false} importantForAccessibility="no-hide-descendants">
+            <Card.Content>
+                <View style={styles.cardHeader}>
+                    <View style={[styles.skel, { width: '60%', height: 20 }]} />
+                    <View style={[styles.skel, { width: 90, height: 20 }]} />
+                </View>
+                <View style={[styles.skel, { width: '100%', height: 48, marginBottom: spacing.sm }]} />
+                <View style={{ marginBottom: spacing.sm }}>
+                    <View style={[styles.skel, { width: '50%', height: 14, marginBottom: spacing.xs }]} />
+                    <View style={[styles.skel, { width: '40%', height: 14 }]} />
+                </View>
+                <View style={[styles.skel, { width: 96, height: 26, borderRadius: 16 }]} />
+            </Card.Content>
+        </Card>
+    );
+
     return (
-        <View style={styles.container}>
+        <View
+            style={styles.container}
+            accessibilityElementsHidden={isFiltersVisible}
+            importantForAccessibility={isFiltersVisible ? 'no-hide-descendants' : 'auto'}
+        >
             <Searchbar
                 placeholder="Buscar serviços..."
                 onChangeText={setSearchQuery}
                 value={searchQuery}
                 style={styles.searchbar}
                 icon="magnify"
+                accessibilityLabel="Buscar serviços"
+                accessibilityHint="Digite um termo para filtrar ofertas"
             />
 
             <View style={styles.filtersHeader}>
                 <View style={styles.filtersRow}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Button mode="outlined" icon="filter-variant" onPress={openFilters} accessibilityLabel="Abrir filtros">
+                        <Button
+                            mode="outlined"
+                            icon="filter-variant"
+                            onPress={openFilters}
+                            accessibilityLabel="Abrir filtros"
+                            accessibilityHint="Abre a modal com opções de filtro"
+                        >
                             Filtros
                         </Button>
                         <Menu
@@ -339,6 +500,8 @@ const BuscarOfertasScreen: React.FC = () => {
                                     icon="sort"
                                     onPress={() => setIsSortMenuVisible(true)}
                                     style={{ marginLeft: spacing.xs }}
+                                    accessibilityLabel={getSortButtonA11yLabel(sortBy)}
+                                    accessibilityHint={getSortButtonA11yHint()}
                                 >
                                     {SORT_LABELS[sortBy]}
                                 </Button>
@@ -347,51 +510,128 @@ const BuscarOfertasScreen: React.FC = () => {
                             {Object.entries(SORT_LABELS).map(([key, label]) => (
                                 <Menu.Item
                                     key={key}
-                                    onPress={() => {
-                                        setSortBy(key as SortOption);
+                                    onPress={async () => {
+                                        const selected = key as SortOption;
                                         setIsSortMenuVisible(false);
+                                        if (selected === 'distancia') {
+                                            // Tentar obter localização do usuário
+                                            try {
+                                                const coords = await new Promise<GeolocationCoordinates>((resolve, reject) => {
+                                                    const navAny: any = navigator as any;
+                                                    const geo = navAny?.geolocation;
+                                                    if (!geo || !geo.getCurrentPosition) {
+                                                        reject(new Error('Permissão de localização não disponível neste dispositivo.'));
+                                                        return;
+                                                    }
+                                                    geo.getCurrentPosition(
+                                                        (pos: any) => resolve(pos.coords),
+                                                        (err: any) => reject(err),
+                                                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                                                    );
+                                                });
+                                                setUserLat(coords.latitude);
+                                                setUserLng(coords.longitude);
+                                                setSortBy('distancia');
+                                                addBreadcrumb('Alteração de ordenação', { sortBy: 'distancia', lat: coords.latitude, lng: coords.longitude }, 'ordenacao', 'info');
+                                                // Recarregar com as novas coordenadas
+                                                void loadOfertas(1, true);
+                                            } catch (e: any) {
+                                                setError('Não foi possível obter sua localização. Verifique as permissões.');
+                                            }
+                                        } else {
+                                            setSortBy(selected);
+                                            addBreadcrumb('Alteração de ordenação', { sortBy: selected }, 'ordenacao', 'info');
+                                        }
                                     }}
                                     title={label}
                                     leadingIcon={sortBy === (key as SortOption) ? 'check' : undefined}
+                                    accessibilityLabel={`${label}${sortBy === (key as SortOption) ? ', selecionado' : ''}`}
                                 />
                             ))}
                         </Menu>
                     </View>
-                    <Text style={styles.resultCount}>{total} resultados</Text>
+                    <RNText
+                        style={styles.resultCount}
+                        accessibilityLiveRegion="polite"
+                        accessibilityLabel={`${total} resultados`}
+                    >
+                        {total} resultados
+                    </RNText>
                 </View>
                 <View style={styles.appliedChipsContainer}>
                     {selectedCategory ? (
-                        <Chip mode="outlined" onClose={() => clearFilter('categoria')} style={styles.appliedChip}>
+                        <Chip
+                            mode="outlined"
+                            onClose={() => clearFilter('categoria')}
+                            style={styles.appliedChip}
+                            {...getAppliedChipA11y(`Categoria: ${selectedCategory}`)}
+                        >
                             Categoria: {selectedCategory}
                         </Chip>
                     ) : null}
                     {cidade ? (
-                        <Chip mode="outlined" onClose={() => clearFilter('cidade')} style={styles.appliedChip}>
+                        <Chip
+                            mode="outlined"
+                            onClose={() => clearFilter('cidade')}
+                            style={styles.appliedChip}
+                            {...getAppliedChipA11y(`Cidade: ${cidade}`)}
+                        >
                             {cidade}
                         </Chip>
                     ) : null}
                     {estado ? (
-                        <Chip mode="outlined" onClose={() => clearFilter('estado')} style={styles.appliedChip}>
+                        <Chip
+                            mode="outlined"
+                            onClose={() => clearFilter('estado')}
+                            style={styles.appliedChip}
+                            {...getAppliedChipA11y(`Estado: ${estado}`)}
+                        >
                             {estado}
                         </Chip>
                     ) : null}
                     {(typeof precoMin === 'number' || typeof precoMax === 'number') ? (
-                        <Chip mode="outlined" onClose={() => clearFilter('preco')} style={styles.appliedChip}>
+                        <Chip
+                            mode="outlined"
+                            onClose={() => clearFilter('preco')}
+                            style={styles.appliedChip}
+                            {...getAppliedChipA11y(
+                                `Faixa de preço: ${typeof precoMin === 'number' ? precoMin : 0}${typeof precoMax === 'number' ? ` a ${precoMax}` : ' ou mais'}`
+                            )}
+                        >
                             {`R$ ${typeof precoMin === 'number' ? precoMin : 0}${typeof precoMax === 'number' ? `–${precoMax}` : '+'}`}
                         </Chip>
                     ) : null}
                     {comMidia ? (
-                        <Chip mode="outlined" icon="image" onClose={() => clearFilter('comMidia')} style={styles.appliedChip}>
+                        <Chip
+                            mode="outlined"
+                            icon="image"
+                            onClose={() => clearFilter('comMidia')}
+                            style={styles.appliedChip}
+                            {...getAppliedChipA11y('Com mídia')}
+                        >
                             Com mídia
                         </Chip>
                     ) : null}
                     {tipoPessoa ? (
-                        <Chip mode="outlined" onClose={() => clearFilter('tipoPessoa')} style={styles.appliedChip}>
+                        <Chip
+                            mode="outlined"
+                            onClose={() => clearFilter('tipoPessoa')}
+                            style={styles.appliedChip}
+                            {...getAppliedChipA11y(`Tipo de prestador: ${tipoPessoa}`)}
+                        >
                             {tipoPessoa}
                         </Chip>
                     ) : null}
                     {(selectedCategory || cidade || estado || typeof precoMin === 'number' || typeof precoMax === 'number' || comMidia || tipoPessoa) ? (
-                        <Chip mode="outlined" icon="close-circle" onPress={clearAllFilters} style={styles.appliedChip}>
+                        <Chip
+                            mode="outlined"
+                            icon="close-circle"
+                            onPress={clearAllFilters}
+                            style={styles.appliedChip}
+                            accessibilityLabel="Limpar filtros"
+                            accessibilityHint="Remove todos os filtros aplicados"
+                            accessibilityRole="button"
+                        >
                             Limpar
                         </Chip>
                     ) : null}
@@ -399,120 +639,60 @@ const BuscarOfertasScreen: React.FC = () => {
             </View>
 
             <Portal>
-                <Modal visible={isFiltersVisible} onDismiss={() => setIsFiltersVisible(false)} contentContainerStyle={styles.modalContainer}>
-                    <ScrollView contentContainerStyle={styles.modalContent}>
-                        <Text variant="titleMedium" style={styles.sectionTitle}>Categoria</Text>
-                        <View style={styles.chipsGrid}>
-                            {categories.map((cat) => (
-                                <Chip
-                                    key={cat}
-                                    mode={draftCategoria === cat ? 'flat' : 'outlined'}
-                                    selected={draftCategoria === cat}
-                                    onPress={() => setDraftCategoria(draftCategoria === cat ? undefined : cat)}
-                                    style={styles.categoryChoiceChip}
-                                >
-                                    {cat}
-                                </Chip>
-                            ))}
-                        </View>
-
-                        <Divider style={{ marginVertical: spacing.md }} />
-                        <Text variant="titleMedium" style={styles.sectionTitle}>Preço</Text>
-                        <View style={styles.row}>
-                            <TextInput
-                                label="Mínimo"
-                                mode="outlined"
-                                keyboardType="numeric"
-                                value={draftPrecoMin}
-                                onChangeText={setDraftPrecoMin}
-                                style={[styles.rowItem, { marginRight: spacing.sm }]}
-                            />
-                            <TextInput
-                                label="Máximo"
-                                mode="outlined"
-                                keyboardType="numeric"
-                                value={draftPrecoMax}
-                                onChangeText={setDraftPrecoMax}
-                                style={styles.rowItem}
-                            />
-                        </View>
-                        <HelperText type="info" visible={true}>Deixe em branco para não filtrar</HelperText>
-
-                        <Divider style={{ marginVertical: spacing.md }} />
-                        <Text variant="titleMedium" style={styles.sectionTitle}>Localização</Text>
-                        <TextInput
-                            label="Cidade"
-                            mode="outlined"
-                            value={draftCidade}
-                            onChangeText={setDraftCidade}
-                            style={{ marginBottom: spacing.sm }}
-                        />
-                        <View style={styles.chipsGrid}>
-                            {['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'].map((uf) => (
-                                <Chip
-                                    key={uf}
-                                    mode={draftEstado === uf ? 'flat' : 'outlined'}
-                                    selected={draftEstado === uf}
-                                    onPress={() => setDraftEstado(draftEstado === uf ? undefined : uf)}
-                                    style={styles.categoryChoiceChip}
-                                >
-                                    {uf}
-                                </Chip>
-                            ))}
-                        </View>
-
-                        <Divider style={{ marginVertical: spacing.md }} />
-                        <Text variant="titleMedium" style={styles.sectionTitle}>Preferências</Text>
-                        <View style={[styles.row, { justifyContent: 'space-between', marginBottom: spacing.sm }]}>
-                            <Text>Apenas com fotos/vídeos</Text>
-                            <Switch value={draftComMidia} onValueChange={setDraftComMidia} />
-                        </View>
-                        <Text variant="labelMedium" style={{ marginBottom: spacing.xs }}>Tipo de Prestador</Text>
-                        <SegmentedButtons
-                            value={draftTipoPessoa}
-                            onValueChange={(val) => setDraftTipoPessoa((val as 'PF' | 'PJ' | 'todos') ?? 'todos')}
-                            buttons={[
-                                { value: 'todos', label: 'Todos' },
-                                { value: 'PF', label: 'Pessoa Física' },
-                                { value: 'PJ', label: 'Pessoa Jurídica' },
-                            ]}
-                            style={{ marginBottom: spacing.sm }}
-                        />
-
-                        <View style={styles.actionRow}>
-                            <Button mode="text" onPress={clearAllFilters}>Limpar</Button>
-                            <View style={{ flex: 1 }} />
-                            <Button mode="text" onPress={() => setIsFiltersVisible(false)}>Cancelar</Button>
-                            <Button mode="contained" onPress={applyFilters}>Aplicar</Button>
-                        </View>
-                    </ScrollView>
-                </Modal>
+                <FiltersModal
+                    visible={isFiltersVisible}
+                    onDismiss={() => setIsFiltersVisible(false)}
+                    draft={draft}
+                    onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+                    onClear={clearAllFilters}
+                    onApply={applyFilters}
+                    categories={[...CATEGORIES]}
+                />
             </Portal>
 
             {((ofertas.length === 0) && (isRefreshing || (isLoading && page === 1))) ? (
-                <View style={styles.loaderContainer} accessibilityRole="progressbar">
-                    <ActivityIndicator testID="initial-loader" animating size="large" />
+                <View style={styles.list}>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <SkeletonCard key={`skel-${i}`} />
+                    ))}
                 </View>
             ) : (
                 <FlatList
                     testID="ofertas-list"
                     data={ofertas}
                     renderItem={renderOferta}
-                    keyExtractor={(item) => item._id}
+                    keyExtractor={keyExtractor}
                     refreshControl={
                         <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
                     }
                     onEndReached={handleLoadMore}
-                    onEndReachedThreshold={0.1}
+                    onEndReachedThreshold={0.4}
                     contentContainerStyle={styles.list}
+                    initialNumToRender={8}
+                    maxToRenderPerBatch={8}
+                    windowSize={5}
+                    removeClippedSubviews
                     ListEmptyComponent={!isLoading ? renderEmpty : null}
                     ListFooterComponent={isLoadingMore ? (
-                        <View style={styles.footerLoader} accessibilityRole="progressbar">
-                            <ActivityIndicator testID="footer-loader" animating size="small" />
+                        <View>
+                            {Array.from({ length: 2 }).map((_, i) => (
+                                <SkeletonCard key={`skel-more-${i}`} />
+                            ))}
                         </View>
                     ) : null}
                 />
             )}
+
+            <Snackbar
+                visible={!!error}
+                onDismiss={() => setError(null)}
+                action={{ label: 'Tentar novamente', onPress: retry }}
+                style={{ margin: spacing.md }}
+                accessibilityLiveRegion="polite"
+                accessibilityLabel={error || 'Erro'}
+            >
+                {error}
+            </Snackbar>
 
             {canCreateOffer && (
                 <FAB
@@ -703,6 +883,10 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.md,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    skel: {
+        backgroundColor: '#E5E7EB',
+        borderRadius: 6,
     },
 });
 

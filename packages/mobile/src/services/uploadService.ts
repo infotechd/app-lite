@@ -32,8 +32,8 @@ export interface UploadedFileInfo {
     url: string; // URL segura (HTTPS) para acessar o arquivo
     mimetype: string; // MIME Type (ex.: image/jpeg, video/mp4)
     size: number; // Tamanho em bytes (quando disponível)
-    publicId: string; // Public ID do Cloudinary (chave principal)
-    resourceType: 'image' | 'video' | 'raw'; // Tipo de recurso no Cloudinary
+    publicId?: string; // Public ID do Cloudinary (opcional)
+    resourceType?: 'image' | 'video' | 'raw'; // Tipo de recurso no Cloudinary (opcional)
 }
 
 /**
@@ -108,7 +108,7 @@ export async function uploadFiles(mediaFiles: MediaFile[]): Promise<UploadFilesR
 
     try {
         // Envia o FormData ao backend; o backend cuidará do upload no Cloudinary
-        const response = await api.post('upload/files', form, {
+        const response = await api.post('/upload/files', form, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 60000, // 60 segundos para upload (TODO: torná-lo configurável)
             // TODO: adicionar onUploadProgress quando suportado pela stack atual
@@ -121,23 +121,21 @@ export async function uploadFiles(mediaFiles: MediaFile[]): Promise<UploadFilesR
         // Normalizar resposta do Cloudinary/Backend para UploadedFileInfo
         const normalized: UploadedFileInfo[] = Array.isArray(filesArr)
             ? filesArr.map((it) => ({
-                fileId: String(it.fileId ?? it.publicId ?? it.id ?? ''), // caminhos alternativos por compatibilidade
-                filename: String(it.filename ?? it.name ?? ''), // aceita 'name' como fallback
-                url: String(it.url ?? ''), // URL do arquivo (espera-se HTTPS)
-                mimetype: String(it.mimetype ?? it.resourceType ?? ''), // alguns backends enviam resourceType
-                size: Number(it.size ?? 0), // pode não vir, então default 0
-                publicId: String(it.publicId ?? it.fileId ?? ''), // garante publicId preenchido
-                resourceType: (it.resourceType ?? 'image') as 'image' | 'video' | 'raw', // default image
+                fileId: String(it.fileId ?? it.publicId ?? it.id ?? ''),
+                filename: String(it.filename ?? it.name ?? ''),
+                url: String(it.url ?? ''),
+                mimetype: String(it.mimetype ?? ''),
+                size: Number(it.size ?? 0),
             }))
             : [];
 
         // Separar por tipo para uso mais prático na UI
         const images = normalized
-            .filter((f) => f.resourceType === 'image' || f.mimetype.startsWith('image/'))
+            .filter((f) => typeof f.mimetype === 'string' && f.mimetype.startsWith('image/'))
             .map((f) => f.url);
 
         const videos = normalized
-            .filter((f) => f.resourceType === 'video' || f.mimetype.startsWith('video/'))
+            .filter((f) => typeof f.mimetype === 'string' && f.mimetype.startsWith('video/'))
             .map((f) => f.url);
 
         // Retorna URLs categorizadas e o array completo normalizado
@@ -207,8 +205,6 @@ export async function getUserFiles(): Promise<UploadedFileInfo[]> {
                 url: String(it.url ?? ''),
                 mimetype: String(it.mimetype ?? ''),
                 size: Number(it.size ?? 0),
-                publicId: String(it.publicId ?? it.fileId ?? ''),
-                resourceType: (it.resourceType ?? 'image') as 'image' | 'video' | 'raw',
             }))
             : [];
     } catch (error: any) {
