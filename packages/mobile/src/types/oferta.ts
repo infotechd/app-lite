@@ -7,6 +7,7 @@ export interface OfertaServico {
     preco: number;
     unidadePreco?: PriceUnit; // NOVO: unidade do preço
     categoria: string;
+    subcategoria?: string; // alinhado ao backend
     prestador: {
         _id: string;
         nome: string;
@@ -20,11 +21,13 @@ export interface OfertaServico {
         estado: string;
         endereco?: string;
     };
+    // Distância em metros quando ordenado por distância (opcional)
+    distancia?: number;
     createdAt: string;
     updatedAt: string;
 }
 
-export type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente';
+export type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente' | 'distancia';
 
 export interface CreateOfertaInput {
     titulo: string;
@@ -43,6 +46,7 @@ export interface CreateOfertaInput {
 
 export interface OfertaFilters {
     categoria?: string;
+    subcategoria?: string;
     precoMin?: number;
     precoMax?: number;
     cidade?: string;
@@ -52,4 +56,7 @@ export interface OfertaFilters {
     sort?: SortOption;
     comMidia?: boolean;
     tipoPessoa?: 'PF' | 'PJ';
+    // Coordenadas para sort por distância
+    lat?: number;
+    lng?: number;
 }

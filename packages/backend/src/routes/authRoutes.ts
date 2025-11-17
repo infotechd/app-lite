@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Router as ExpressRouter, RequestHandler } from 'express';
-import { register, login, getProfile } from '../controllers/authController';
+import { register, login, getProfile, getPreferences, updatePreferences } from '../controllers/authController';
 import { authMiddleware } from '../middleware/auth';
 import { authLimiter } from '../middleware/rateLimiter';
 import { validate } from '../middleware/validation';
@@ -17,5 +17,7 @@ router.post('/login', authLimiterMw, validate(loginSchema), login);
 
 // Rotas protegidas
 router.get('/profile', authMiddleware, getProfile);
+router.get('/preferences', authMiddleware, getPreferences);
+router.put('/preferences', authMiddleware, updatePreferences);
 
 export default router;

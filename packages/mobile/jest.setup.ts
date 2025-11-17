@@ -17,6 +17,31 @@ jest.mock('@react-native-async-storage/async-storage', () =>
     require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+// Mock expo-updates para evitar erro ESM no Jest e side effects
+jest.mock('expo-updates', () => ({
+    __esModule: true,
+    default: {},
+    reloadAsync: jest.fn(),
+    checkForUpdateAsync: jest.fn(),
+    fetchUpdateAsync: jest.fn(),
+}));
+
+// Mock sentry-expo e @sentry/react-native para manter no-op nos testes
+jest.mock('sentry-expo', () => ({
+    __esModule: true,
+    init: jest.fn(),
+    captureException: jest.fn(),
+    addBreadcrumb: jest.fn(),
+    startSpan: jest.fn(() => ({ end: () => {} })),
+}), { virtual: true });
+jest.mock('@sentry/react-native', () => ({
+    __esModule: true,
+    init: jest.fn(),
+    captureException: jest.fn(),
+    addBreadcrumb: jest.fn(),
+    startSpan: jest.fn(() => ({ end: () => {} })),
+}), { virtual: true });
+
 // Note: Avoid importing heavy RN modules in setup to keep service tests isolated.
 // If a UI test needs specific mocks (e.g., reanimated), consider mocking in the test file.
 

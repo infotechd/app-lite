@@ -6,6 +6,7 @@
 // - Fornece utilitários para sobrepor a baseURL manualmente em debug
 
 import axios from 'axios';
+import { captureException } from '@/utils/sentry';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import envConfig from '@/constants/config';
@@ -200,6 +201,27 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
+        // Reporta falhas HTTP (exceto cancelamentos) com contexto básico
+        try {
+            const isCanceled = error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError' || error?.name === 'AbortError';
+            if (!isCanceled) {
+                const cfg = error?.config ?? {};
+                const res = error?.response ?? {};
+                captureException(error, {
+                    tags: {
+                        layer: 'api',
+                        method: String(cfg.method || 'GET').toUpperCase(),
+                        status: String(res.status || 'unknown'),
+                    },
+                    extra: {
+                        url: cfg.baseURL ? `${cfg.baseURL}${cfg.url || ''}` : cfg.url,
+                        requestHeaders: cfg.headers,
+                        statusText: res.statusText,
+                        responseData: res.data,
+                    },
+                });
+            }
+        } catch {}
         if (error.response?.status === 401) {
             // Token inválido/expirado: limpa credenciais locais.
             // MELHORIA: Implementar fluxo de refresh token antes de deslogar o usuário.
@@ -220,7 +242,9 @@ api.interceptors.response.use(
  * MELHORIA: Logar/telerastrear quando a baseURL for trocada para facilitar debug.
  */
 let detectionPromise: Promise<void> | null = null;
-if (__DEV__) {
+// Evita autodetecção durante testes para não interferir com adapters/mocks de Axios
+const IS_TEST = typeof (globalThis as any).__TEST__ !== 'undefined' ? (globalThis as any).__TEST__ : false;
+if (__DEV__ && !IS_TEST) {
     detectionPromise = (async () => {
         try {
             const base = await pickReachableBaseURL();

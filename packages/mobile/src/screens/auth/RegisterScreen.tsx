@@ -88,7 +88,12 @@ const registerSchema = z.object({
     }
 })
 // Garante que, se PJ, o backend receba 'nome' preenchido com a razão social
-.transform((data) => (data.tipoPessoa === 'PJ' ? { ...data, nome: data.razaoSocial } : data));
+.transform((data) => (
+    data.tipoPessoa === 'PJ'
+        // garante que 'nome' seja sempre string no payload para o backend
+        ? { ...data, nome: data.razaoSocial ?? '' }
+        : data
+));
 
 // Tipo do formulário
 type RegisterFormData = z.infer<typeof registerSchema>;

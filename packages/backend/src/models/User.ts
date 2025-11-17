@@ -17,6 +17,11 @@ export interface IUser extends Document {
     nomeFantasia?: string; // Para PJ
 
     ativo: boolean;
+    preferencias?: {
+        ofertas?: {
+            sort?: 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente' | 'distancia';
+        }
+    };
     createdAt: Date;
     updatedAt: Date;
     comparePassword(password: string): Promise<boolean>;
@@ -140,6 +145,12 @@ const UserSchema = new Schema<IUser>({
     ativo: {
         type: Boolean,
         default: true
+    },
+
+    // Preferências do usuário (ex.: escolha de ordenação na lista de ofertas)
+    preferencias: {
+        type: Object,
+        default: {}
     }
 }, {
     timestamps: true

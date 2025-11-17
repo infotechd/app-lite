@@ -1,50 +1,62 @@
 import { z } from 'zod';
 
-// Função auxiliar para capitalizar a primeira letra, deixar o resto em minúsculo E remover acentos
+// Função auxiliar para capitalizar a primeira letra, deixar o resto em minúsculo (preserva acentos)
 const capitalizeAndNormalize = (s: string | undefined): string | undefined => {
     if (!s) return s;
-    // 1. Remove acentos (normalização)
-    const normalized = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    // 2. Capitaliza a primeira letra e deixa o resto em minúsculo
-    return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+    const trimmed = s.trim();
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 };
 
-// --- INÍCIO DA CORREÇÃO ---
-// 1. Definir as opções de sort e tipoPessoa permitidas (baseado no seu frontend)
+// 1) Opções permitidas
 const SORT_OPTIONS = [
     'relevancia',
     'preco_menor',
     'preco_maior',
     'avaliacao',
-    'recente'
+    'recente',
+    'distancia'
 ] as const;
 
 const TIPO_PESSOA_OPTIONS = ['PF', 'PJ'] as const;
-// --- FIM DA CORREÇÃO ---
 
-// Filtros para listagem de ofertas
+// 2) Filtros para listagem de ofertas
 export const ofertaFiltersSchema = z.object({
     query: z.object({
         categoria: z.string().min(1).max(50).optional(),
+        subcategoria: z.string().min(1).max(100).optional(),
         precoMin: z.coerce.number().min(0).optional(),
         precoMax: z.coerce.number().min(0).optional(),
         cidade: z.string().min(1).max(100).optional(),
-        estado: z.string().min(2).max(2).optional(),
+        estado: z.string().min(2).max(2).transform((v) => (typeof v === 'string' ? v.toUpperCase() : v)).optional(),
         busca: z.string().min(1).max(200).optional(),
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(50).default(10),
-
-        // --- INÍCIO DA CORREÇÃO ---
-        // 2. Adicionar os campos que faltavam para que o validador não os remova:
-
-        // z.enum() garante que só os valores da lista serão aceitos.
         sort: z.enum(SORT_OPTIONS).optional(),
-
         // z.coerce.boolean() converte a string "true" (da query param) para o boolean 'true'.
         comMidia: z.coerce.boolean().optional(),
-
         tipoPessoa: z.enum(TIPO_PESSOA_OPTIONS).optional(),
-        // --- FIM DA CORREÇÃO ---
+        // Coordenadas para ordenação por distância
+        lat: z.coerce.number().optional(),
+        lng: z.coerce.number().optional(),
+    }).superRefine((q, ctx) => {
+        // Validação: precoMin não pode ser maior que precoMax
+        if (typeof q.precoMin === 'number' && typeof q.precoMax === 'number' && q.precoMin > q.precoMax) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['precoMin'],
+                message: 'precoMin não pode ser maior que precoMax'
+            });
+        }
+        // Validação: para sort=distancia, lat e lng são obrigatórios
+        if (q.sort === 'distancia') {
+            if (typeof q.lat !== 'number' || typeof q.lng !== 'number') {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['lat'],
+                    message: 'lat e lng são obrigatórios quando sort=distancia'
+                });
+            }
+        }
     })
 });
 
@@ -72,11 +84,42 @@ const midiasSuperRefine = (data: unknown, ctx: z.RefinementCtx) => {
     }
 };
 
-// CATEGORIAS SEM ACENTO PARA VALIDAÇÃO NO BACKEND
+// CATEGORIAS COM ACENTO (alinhadas ao Schema/Mongo)
 const CATEGORIAS_VALIDAS = [
-    'Tecnologia', 'Saude', 'Educacao', 'Beleza', 'Limpeza', 'Consultoria', 'Construcao', 'Jardinagem', 'Transporte', 'Alimentacao', 'Eventos', 'Outros'
+    'Tecnologia', 'Saúde', 'Educação', 'Beleza', 'Limpeza', 'Consultoria', 'Construção', 'Jardinagem', 'Transporte', 'Alimentação', 'Eventos', 'Outros'
 ] as const;
 
+// Aceitar tanto nomes canônicos quanto slugs/variantes sem acento enviados pelo app
+const removeDiacritics = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const CATEGORIA_SLUG_TO_NAME: Record<string, typeof CATEGORIAS_VALIDAS[number]> = {
+    tecnologia: 'Tecnologia',
+    saude: 'Saúde',
+    educacao: 'Educação',
+    beleza: 'Beleza',
+    limpeza: 'Limpeza',
+    consultoria: 'Consultoria',
+    construcao: 'Construção',
+    jardinagem: 'Jardinagem',
+    transporte: 'Transporte',
+    alimentacao: 'Alimentação',
+    eventos: 'Eventos',
+    outros: 'Outros',
+};
+
+// Normaliza quaisquer entradas (slug, sem acento, maiúsculas/minúsculas) para o nome canônico
+const normalizeCategoria = (input: string | undefined) => {
+    if (!input) return input;
+    const trimmed = String(input).trim();
+    if (!trimmed) return trimmed;
+    const base = removeDiacritics(trimmed).toLowerCase();
+    // 1) Mapeamento direto via slug conhecido
+    if (CATEGORIA_SLUG_TO_NAME[base as keyof typeof CATEGORIA_SLUG_TO_NAME]) {
+        return CATEGORIA_SLUG_TO_NAME[base as keyof typeof CATEGORIA_SLUG_TO_NAME];
+    }
+    // 2) Tentar casar com alguma categoria válida ignorando acentos/case
+    const match = (CATEGORIAS_VALIDAS as readonly string[]).find((c) => removeDiacritics(c).toLowerCase() === base);
+    return (match as any) || trimmed;
+};
 
 // Create oferta
 const PRICE_UNITS = ['hora','diaria','mes','aula','pacote'] as const;
@@ -86,11 +129,11 @@ export const createOfertaSchema = z.object({
         descricao: z.string().min(10).max(1000),
         preco: z.number().nonnegative(),
         unidadePreco: z.enum(PRICE_UNITS),
-        // CORREÇÃO DEFINITIVA DE CATEGORIA: Normaliza, capitaliza e valida contra enum sem acento
+        // Aceita slug (ex.: "construcao") ou nome ("Construção"). Sempre persiste nome canônico.
         categoria: z.string()
-            .transform(s => s ? s.toLowerCase() : s)
-            .transform(capitalizeAndNormalize)
+            .transform((s) => normalizeCategoria(s))
             .pipe(z.enum(CATEGORIAS_VALIDAS)),
+        subcategoria: z.string().trim().max(100).optional(),
         imagens: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
         videos: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
         localizacao: localizacaoBase,
@@ -113,11 +156,11 @@ export const updateOfertaSchema = z.object({
         descricao: z.string().min(10).max(1000).optional(),
         preco: z.number().nonnegative().optional(),
         unidadePreco: z.enum(PRICE_UNITS).optional(),
-        // CORREÇÃO DEFINITIVA DE CATEGORIA: Normaliza, capitaliza e valida contra enum sem acento
+        // Aceita slug ou nome; normaliza para nome canônico
         categoria: z.string().optional()
-            .transform(s => s ? s.toLowerCase() : s)
-            .transform(capitalizeAndNormalize)
+            .transform((s) => normalizeCategoria(s))
             .pipe(z.enum(CATEGORIAS_VALIDAS)).optional(),
+        subcategoria: z.string().trim().max(100).optional(),
         imagens: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
         videos: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
         localizacao: localizacaoBase.optional(),

@@ -24,6 +24,11 @@ export interface IOfertaServico extends Document {
             latitude: number;
             longitude: number;
         };
+        // GeoJSON point para operações geoespaciais ($geoNear)
+        location?: {
+            type: 'Point';
+            coordinates: [number, number]; // [longitude, latitude]
+        };
     };
     status: 'ativo' | 'inativo' | 'pausado';
     visualizacoes: number;
@@ -170,6 +175,29 @@ const OfertaServicoSchema = new Schema<IOfertaServico>({
                 min: -180,
                 max: 180
             }
+        },
+        // Campo GeoJSON para suportar ordenação por distância via $geoNear
+        location: {
+            type: {
+                type: String,
+                enum: ['Point'],
+                // Não definir default aqui para evitar criar { type: 'Point' } sem coordinates
+                required: false
+            },
+            coordinates: {
+                type: [Number],
+                validate: {
+                    validator: function(val: number[]) {
+                        if (!Array.isArray(val) || val.length !== 2) return false;
+                        const [lng, lat] = val;
+                        return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+                    },
+                    message: 'Coordenadas inválidas. Use [lng, lat]'
+                },
+                // deixar opcional; será preenchido por middleware quando coordenadas existirem
+                required: false,
+                default: undefined
+            }
         }
     },
 
@@ -239,6 +267,8 @@ OfertaServicoSchema.index({ preco: 1 });
 OfertaServicoSchema.index({ createdAt: -1 });
 OfertaServicoSchema.index({ 'prestador._id': 1 });
 OfertaServicoSchema.index({ 'prestador.tipoPessoa': 1 });
+// Índice geoespacial para ordenação por distância
+OfertaServicoSchema.index({ 'localizacao.location': '2dsphere' });
 OfertaServicoSchema.index({
     titulo: 'text',
     descricao: 'text',
@@ -267,6 +297,61 @@ OfertaServicoSchema.pre('find', function() {
 
 OfertaServicoSchema.pre('findOne', function() {
     this.populate('prestador._id', 'nome avatar');
+});
+
+// Middleware para manter o campo GeoJSON em sincronia com as coordenadas escalares
+OfertaServicoSchema.pre('save', function(next) {
+    try {
+        const loc: any = (this as any).localizacao;
+        const lat = loc?.coordenadas?.latitude;
+        const lng = loc?.coordenadas?.longitude;
+        if (typeof lat === 'number' && typeof lng === 'number') {
+            (this as any).localizacao = {
+                ...(loc || {}),
+                location: { type: 'Point', coordinates: [lng, lat] }
+            };
+        } else if (loc && loc.location) {
+            // Remover location inconsistente (ex.: { type: 'Point' } sem coordinates)
+            const { location, ...rest } = loc;
+            (this as any).localizacao = { ...rest };
+        }
+        next();
+    } catch (e) {
+        next(e as any);
+    }
+});
+
+// Também ajustar em updates via findOneAndUpdate
+OfertaServicoSchema.pre('findOneAndUpdate', function(next) {
+    try {
+        const update: any = this.getUpdate() || {};
+        const loc = update['localizacao'] || update.$set?.['localizacao'];
+        const coords = loc?.coordenadas;
+        if (coords && typeof coords.latitude === 'number' && typeof coords.longitude === 'number') {
+            const newLoc = {
+                ...(loc || {}),
+                location: { type: 'Point', coordinates: [coords.longitude, coords.latitude] }
+            };
+            if (update.$set && update.$set['localizacao']) {
+                update.$set['localizacao'] = newLoc;
+            } else {
+                update['localizacao'] = newLoc;
+            }
+            this.setUpdate(update);
+        } else if (loc && loc.location && (!coords || typeof coords.latitude !== 'number' || typeof coords.longitude !== 'number')) {
+            // Se vier um location inválido sem coordenadas válidas, removê-lo para evitar erro de índice
+            const { location, ...rest } = loc;
+            if (update.$set && update.$set['localizacao']) {
+                update.$set['localizacao'] = rest;
+            } else {
+                update['localizacao'] = rest;
+            }
+            this.setUpdate(update);
+        }
+        next();
+    } catch (e) {
+        next(e as any);
+    }
 });
 
 export const OfertaServico = mongoose.model<IOfertaServico>('OfertaServico', OfertaServicoSchema);

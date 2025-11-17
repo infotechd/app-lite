@@ -4,7 +4,7 @@ import User from '../models/User';
 import { logger } from '../utils/logger';
 
 // --- INÍCIO DA CORREÇÃO 1 ---
-type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente';
+type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente' | 'distancia';
 
 export interface ListFilters {
     categoria?: string;
@@ -17,6 +17,8 @@ export interface ListFilters {
     busca?: string;
     sort?: SortOption; // Adicionado
     comMidia?: boolean; // Adicionado
+    lat?: number; // para ordenação por distância
+    lng?: number; // para ordenação por distância
     page?: number;
     limit?: number;
 }
@@ -43,6 +45,8 @@ export const ofertaService = {
             busca,
             sort = 'relevancia', // Adicionado
             comMidia, // Adicionado
+            lat,
+            lng,
             page = 1,
             limit = 10,
         } = filters;
@@ -58,13 +62,20 @@ export const ofertaService = {
         if (cidade) query['localizacao.cidade'] = cidade;
         if (estado) query['localizacao.estado'] = estado;
 
-        // Filtro comMidia (se comMidia=true, busca ofertas que tenham 'imagens' não nulas ou com arrays não vazios)
+        // Filtro comMidia: considerar imagens OU vídeos presentes
         if (comMidia === true) {
-            query.imagens = { $exists: true, $ne: [] };
+            const mediaOr = [
+                { imagens: { $exists: true, $ne: [] } },
+                { videos: { $exists: true, $ne: [] } },
+            ];
+            // Evitar conflito com possíveis $or de busca textual: encapsular em $and
+            query.$and = [...(query.$and || []), { $or: mediaOr }];
         }
 
-        if (busca && busca.trim().length > 0) {
-            const regex = new RegExp(busca.trim(), 'i');
+        // Para ordenações não baseadas em $text, mantemos um filtro regex simples.
+        const hasBusca = Boolean(busca && busca.trim().length > 0);
+        if (hasBusca && sort !== 'relevancia') {
+            const regex = new RegExp((busca || '').trim(), 'i');
             query.$or = [
                 { titulo: regex },
                 { descricao: regex },
@@ -74,15 +85,131 @@ export const ofertaService = {
 
         const skip = (page - 1) * limit;
 
-        // --- INÍCIO DA CORREÇÃO 3: Lógica de Ordenação ---
-        let sortOptions: any = {};
+        // Implementação completa de ordenações, incluindo 'distancia' e 'relevancia'
+        if (sort === 'distancia' && typeof lat === 'number' && typeof lng === 'number') {
+            // Construir match sem $text (pois $geoNear.query não suporta $text de forma consistente)
+            const matchWithoutText = { ...query };
+            // Se houver busca, aplicamos após $geoNear
+            const textMatch = hasBusca ? { $text: { $search: (busca || ''), $language: 'portuguese' } } : undefined;
 
+            const pipeline: any[] = [
+                {
+                    $geoNear: {
+                        near: { type: 'Point', coordinates: [lng, lat] },
+                        distanceField: 'distancia',
+                        spherical: true,
+                        query: matchWithoutText,
+                    }
+                }
+            ];
+
+            if (textMatch) {
+                pipeline.push({ $match: textMatch });
+            }
+
+            pipeline.push(
+                { $sort: { distancia: 1 } },
+                { $skip: skip },
+                { $limit: limit },
+            );
+
+            logger.info('ofertas.list.geoNear', { lat, lng, skip, limit });
+
+            const [ofertas, total] = await Promise.all([
+                OfertaServico.aggregate(pipeline),
+                OfertaServico.countDocuments({ ...(matchWithoutText as any), ...(textMatch || {}) }),
+            ]);
+
+            const totalPages = Math.ceil(total / limit);
+            logger.info('ofertas.list.result', { total, totalPages });
+            return { ofertas: ofertas as any, total, page, totalPages };
+        }
+
+        if (sort === 'relevancia') {
+            // Ranking composto: textScore (titulo>descricao>tags) + mídia + avaliação + recência
+            // Montar $match com/sem $text
+            const match: any = { ...query };
+            if (hasBusca) {
+                // Remover o $or regex possivelmente setado acima (não deve existir pois evitamos no sort !== relevancia)
+                delete match.$or;
+                match.$text = { $search: (busca || ''), $language: 'portuguese' };
+            }
+
+            const now = new Date();
+            const pipeline: any[] = [
+                { $match: match },
+                {
+                    $addFields: {
+                        text_score: hasBusca ? { $meta: 'textScore' } : 0,
+                        has_media: {
+                            $cond: [
+                                { $gt: [ { $size: { $ifNull: ['$imagens', []] } }, 0 ] },
+                                1,
+                                0
+                            ]
+                        },
+                        rating_boost: {
+                            $min: [
+                                { $max: [ { $ifNull: ['$prestador.avaliacao', 0] }, 0 ] },
+                                5
+                            ]
+                        },
+                        // recency: 0.5 / max(1, days_since_update)
+                        recency_boost: {
+                            $divide: [
+                                0.5,
+                                {
+                                    $max: [
+                                        1,
+                                        {
+                                            $divide: [
+                                                { $subtract: [ now, { $ifNull: ['$updatedAt', '$createdAt'] } ] },
+                                                1000 * 60 * 60 * 24
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    $addFields: {
+                        score: {
+                            $add: [
+                                '$text_score',
+                                { $multiply: ['$has_media', 0.2] },
+                                { $multiply: ['$rating_boost', 0.1] },
+                                '$recency_boost'
+                            ]
+                        }
+                    }
+                },
+                { $sort: { score: -1 } },
+                { $skip: skip },
+                { $limit: limit }
+            ];
+
+            logger.info('ofertas.list.relevancia', { hasBusca, skip, limit });
+
+            const [ofertas, total] = await Promise.all([
+                OfertaServico.aggregate(pipeline),
+                OfertaServico.countDocuments(match),
+            ]);
+
+            const totalPages = Math.ceil(total / limit);
+            logger.info('ofertas.list.result', { total, totalPages });
+            return { ofertas: ofertas as any, total, page, totalPages };
+        }
+
+        // Demais ordenações simples
+        let sortOptions: any = {};
         switch (sort) {
             case 'preco_menor':
-                sortOptions = { preco: 1 }; // 1 para ASC (Ascendente)
+                sortOptions = { preco: 1 };
                 break;
             case 'preco_maior':
-                sortOptions = { preco: -1 }; // -1 para DESC (Descendente)
+                sortOptions = { preco: -1 };
                 break;
             case 'avaliacao':
                 sortOptions = { 'prestador.avaliacao': -1 };
@@ -90,34 +217,23 @@ export const ofertaService = {
             case 'recente':
                 sortOptions = { createdAt: -1 };
                 break;
-            case 'relevancia':
             default:
-                // TODO: Implementar lógica de relevância
                 sortOptions = { createdAt: -1 };
-                if (sort === 'relevancia') {
-                    logger.warn(`Ordenação 'relevancia' solicitada, usando 'createdAt' como fallback.`);
-                }
         }
-        // --- FIM DA CORREÇÃO 3 ---
 
-        // --- INÍCIO DA CORREÇÃO 4: LOG CORRIGIDO ---
-        // Adicionamos 'sortOptions' ao log. Se você não vir 'sortOptions' nos seus logs, o backend está desatualizado.
-        logger.info('ofertas.list', { filters, page, limit, skip, sortOptions });
-        // --- FIM DA CORREÇÃO 4 ---
+        logger.info('ofertas.list.simple', { filters, page, limit, skip, sortOptions });
 
         const [ofertas, total] = await Promise.all([
             OfertaServico.find(query)
-                .sort(sortOptions) // Aplicada a ordenação dinâmica
+                .sort(sortOptions)
                 .skip(skip)
                 .limit(limit)
                 .lean(),
             OfertaServico.countDocuments(query),
         ]);
 
-        const totalPages = Math.max(1, Math.ceil(total / limit));
-
+        const totalPages = Math.ceil(total / limit);
         logger.info('ofertas.list.result', { total, totalPages });
-
         return { ofertas, total, page, totalPages };
     },
 
