@@ -4,10 +4,11 @@ import { Searchbar, Card, Text, FAB, Chip, Button, Portal, Menu, Snackbar } from
 import { OfertaServico, OfertaFilters, SortOption } from '@/types/oferta';
 import { ofertaService } from '@/services/ofertaService';
 // Telemetria e tracing
-import { captureException, addBreadcrumb, startSpan } from '@/utils/sentry';
+import { captureException, startSpan } from '@/utils/sentry';
+import { trackApplyFilters, trackCardClick, trackChangeSort } from '@/utils/analytics';
 // import AsyncStorage from '@react-native-async-storage/async-storage'; // não utilizado aqui
 import { useAuth } from '@/context/AuthContext';
-import { colors, spacing } from '@/styles/theme';
+import { colors, spacing, radius, elevation } from '@/styles/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -20,12 +21,22 @@ import { parseNumber, isValidUF, validatePriceRange } from '@/utils/filtersValid
 
 // Rótulos para opções de ordenação
 const SORT_LABELS: Record<SortOption, string> = {
-    relevancia: '🎯 Mais Relevante',
-    preco_menor: '💰 Menor Preço',
-    preco_maior: '💎 Maior Preço',
-    avaliacao: '⭐ Melhor Avaliação',
-    recente: '🆕 Mais Recente',
-    distancia: '📍 Mais Próximo',
+    relevancia: 'Mais Relevante',
+    preco_menor: 'Menor Preço',
+    preco_maior: 'Maior Preço',
+    avaliacao: 'Melhor Avaliação',
+    recente: 'Mais Recente',
+    distancia: 'Mais Próximo',
+};
+
+// Ícones do Material Design para cada opção de ordenação
+const SORT_ICONS: Record<SortOption, string> = {
+    relevancia: 'target',
+    preco_menor: 'sort-ascending',
+    preco_maior: 'sort-descending',
+    avaliacao: 'star',
+    recente: 'clock-outline',
+    distancia: 'map-marker-distance',
 };
 
 // Helpers de A11Y/i18n (PT-BR por enquanto)
@@ -292,8 +303,8 @@ const BuscarOfertasScreen: React.FC = () => {
             return;
         }
 
-        // Breadcrumb para diagnóstico das alterações de filtro
-        addBreadcrumb('Aplicar filtros em BuscarOfertas', {
+        // Analytics: console.log + breadcrumb
+        trackApplyFilters({
             categoria: draft.categoria,
             precoMin: min,
             precoMax: max,
@@ -301,7 +312,7 @@ const BuscarOfertasScreen: React.FC = () => {
             estado: ufRaw || undefined,
             comMidia: draft.comMidia,
             tipoPessoa: draft.tipoPessoa,
-        }, 'filtro', 'info');
+        });
         setSelectedCategory(draft.categoria);
         setPrecoMin(min);
         setPrecoMax(max);
@@ -350,11 +361,28 @@ const BuscarOfertasScreen: React.FC = () => {
         const preco = typeof item?.preco === 'number' ? item.preco : Number(item?.preco ?? 0);
         const prestadorNome = item?.prestador?.nome ?? 'Prestador';
         const avaliacaoNum = typeof item?.prestador?.avaliacao === 'number' ? item.prestador.avaliacao : Number(item?.prestador?.avaliacao ?? 0);
+        const avaliacoesCount = typeof (item as any)?.prestador?.avaliacoesCount === 'number'
+            ? (item as any).prestador.avaliacoesCount
+            : (typeof (item as any)?.prestador?.reviewsCount === 'number'
+                ? (item as any).prestador.reviewsCount
+                : (typeof (item as any)?.prestador?.qtdAvaliacoes === 'number'
+                    ? (item as any).prestador.qtdAvaliacoes
+                    : 0));
         const cidade = item?.localizacao?.cidade ?? 'Cidade';
         const estado = item?.localizacao?.estado ?? 'UF';
         const handlePress = useCallback(() => {
+            // Analytics de clique no card
+            try {
+                const ofertaId = (item as any)?._id ?? (item as any)?.id;
+                trackCardClick(ofertaId, {
+                    titulo: item?.titulo,
+                    preco: preco,
+                    categoria: item?.categoria,
+                    prestadorId: (item as any)?.prestador?.id,
+                });
+            } catch {}
             navigation.navigate('OfferDetail', { oferta: item });
-        }, [item]);
+        }, [item, preco]);
 
         // Distância formatada (quando disponível)
         const distanciaM = typeof item?.distancia === 'number' ? item.distancia : undefined;
@@ -390,29 +418,39 @@ const BuscarOfertasScreen: React.FC = () => {
                         </Text>
                     </View>
 
-                    <Text numberOfLines={3} style={styles.description}>
+                    {/* Chips: categoria e distância logo abaixo do título/preço */}
+                    <View style={styles.chipsRow}>
+                        {item.categoria ? (
+                            <Chip mode="outlined" style={styles.categoryChip}>
+                                {item.categoria}
+                            </Chip>
+                        ) : null}
+                        {distanciaStr ? (
+                            <Chip mode="outlined" style={styles.distanceChip} icon="map-marker-distance">
+                                {distanciaStr}
+                            </Chip>
+                        ) : null}
+                    </View>
+
+                    <Text numberOfLines={2} style={styles.description}>
                         {item.descricao}
                     </Text>
 
+                    {/* Rodapé em linha única: prestador • rating (com contagem) • localização */}
                     <View style={styles.cardFooter}>
-                        <View style={styles.providerInfo}>
-                            <Icon name="account" size={16} color={colors.textSecondary} />
-                            <Text style={styles.providerName}>{prestadorNome}</Text>
-                            <Icon name="star" size={16} color={colors.warning} />
-                            <Text style={styles.rating}>{avaliacaoNum.toFixed(1)}</Text>
-                        </View>
-
-                        <View style={styles.locationInfo}>
-                            <Icon name="map-marker" size={16} color={colors.textSecondary} />
-                            <Text style={styles.location}>
-                                {cidade}, {estado}{distanciaStr ? ` • ${distanciaStr}` : ''}
-                            </Text>
-                        </View>
+                        <Icon name="account" size={16} color={colors.textSecondary} />
+                        <Text style={styles.footerText}>{prestadorNome}</Text>
+                        <RNText style={styles.separator}> • </RNText>
+                        <Icon name="star" size={16} color={colors.warning} />
+                        <Text style={styles.footerText}>
+                            {avaliacaoNum.toFixed(1)}{avaliacoesCount > 0 ? ` (${avaliacoesCount})` : ''}
+                        </Text>
+                        <RNText style={styles.separator}> • </RNText>
+                        <Icon name="map-marker" size={16} color={colors.textSecondary} />
+                        <Text style={[styles.footerText, styles.location]}>
+                            {cidade}, {estado}
+                        </Text>
                     </View>
-
-                    <Chip mode="outlined" style={styles.categoryChip}>
-                        {item.categoria}
-                    </Chip>
                 </Card.Content>
             </Card>
         );
@@ -424,26 +462,55 @@ const BuscarOfertasScreen: React.FC = () => {
 
     const keyExtractor = useCallback((item: OfertaServico) => item._id, []);
 
-    const renderEmpty = () => (
-        <View style={styles.emptyContainer}>
-            <Icon name="store-search" size={64} color={colors.textSecondary} />
-            <Text style={styles.emptyText}>Não há ofertas para exibir no momento.</Text>
-            <Text style={styles.emptySubtext}>
-                Assim que novas ofertas forem cadastradas, elas aparecerão aqui. Você pode ajustar os filtros ou buscar por outros termos.
-            </Text>
-            {canCreateOffer && (
-                <Button
-                    mode="contained"
-                    icon="plus"
-                    onPress={onPressCriarOferta}
-                    style={styles.emptyCta}
-                    accessibilityLabel="Criar nova oferta"
-                >
-                    Criar Oferta
-                </Button>
-            )}
-        </View>
-    );
+    const renderEmpty = () => {
+        const priceApplied = typeof precoMin === 'number' || typeof precoMax === 'number';
+        const hasAppliedFilters = Boolean(
+            selectedCategory || cidade || estado || priceApplied || comMidia || tipoPessoa
+        );
+
+        if (hasAppliedFilters) {
+            return (
+                <View style={styles.emptyContainer}>
+                    <Icon name="filter-variant" size={64} color={colors.textSecondary} />
+                    <Text style={styles.emptyText}>Nenhum resultado com os filtros aplicados.</Text>
+                    <Text style={styles.emptySubtext}>
+                        Seus filtros podem estar muito restritivos. Tente ajustar alguns critérios ou limpe todos os filtros para ver mais ofertas.
+                    </Text>
+                    <Button
+                        mode="contained"
+                        icon="filter-remove"
+                        onPress={clearAllFilters}
+                        style={styles.emptyCta}
+                        accessibilityLabel="Limpar filtros"
+                        accessibilityHint="Remove todos os filtros aplicados e atualiza a lista de ofertas"
+                    >
+                        Limpar filtros
+                    </Button>
+                </View>
+            );
+        }
+
+        return (
+            <View style={styles.emptyContainer}>
+                <Icon name="store-search" size={64} color={colors.textSecondary} />
+                <Text style={styles.emptyText}>Não há ofertas para exibir no momento.</Text>
+                <Text style={styles.emptySubtext}>
+                    Assim que novas ofertas forem cadastradas, elas aparecerão aqui. Você pode ajustar os filtros ou buscar por outros termos.
+                </Text>
+                {canCreateOffer && (
+                    <Button
+                        mode="contained"
+                        icon="plus"
+                        onPress={onPressCriarOferta}
+                        style={styles.emptyCta}
+                        accessibilityLabel="Criar nova oferta"
+                    >
+                        Criar Oferta
+                    </Button>
+                )}
+            </View>
+        );
+    };
 
     // Placeholder de carregamento (skeleton) para cards
     const SkeletonCard = () => (
@@ -458,39 +525,52 @@ const BuscarOfertasScreen: React.FC = () => {
                     <View style={[styles.skel, { width: '50%', height: 14, marginBottom: spacing.xs }]} />
                     <View style={[styles.skel, { width: '40%', height: 14 }]} />
                 </View>
-                <View style={[styles.skel, { width: 96, height: 26, borderRadius: 16 }]} />
+                <View style={[styles.skel, { width: 96, height: 26, borderRadius: radius.xl }]} />
             </Card.Content>
         </Card>
     );
 
-    return (
-        <View
-            style={styles.container}
-            accessibilityElementsHidden={isFiltersVisible}
-            importantForAccessibility={isFiltersVisible ? 'no-hide-descendants' : 'auto'}
-        >
+    // Header que deve rolar junto com a lista (Searchbar + botões/ordenação)
+    const renderListHeader = useCallback(() => (
+        <View>
             <Searchbar
-                placeholder="Buscar serviços..."
+                placeholder="Buscar serviços (ex.: encanador, elétrica, pintura)"
                 onChangeText={setSearchQuery}
                 value={searchQuery}
                 style={styles.searchbar}
                 icon="magnify"
                 accessibilityLabel="Buscar serviços"
-                accessibilityHint="Digite um termo para filtrar ofertas"
+                accessibilityHint="Digite um termo para filtrar ofertas. Exemplos: encanador, elétrica, pintura."
             />
-
             <View style={styles.filtersHeader}>
                 <View style={styles.filtersRow}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Button
-                            mode="outlined"
-                            icon="filter-variant"
-                            onPress={openFilters}
-                            accessibilityLabel="Abrir filtros"
-                            accessibilityHint="Abre a modal com opções de filtro"
-                        >
-                            Filtros
-                        </Button>
+                        {(() => {
+                            const priceApplied = typeof precoMin === 'number' || typeof precoMax === 'number';
+                            const appliedFiltersCount =
+                                (selectedCategory ? 1 : 0) +
+                                (cidade ? 1 : 0) +
+                                (estado ? 1 : 0) +
+                                (priceApplied ? 1 : 0) +
+                                (comMidia ? 1 : 0) +
+                                (tipoPessoa ? 1 : 0);
+                            const hasAppliedFilters = appliedFiltersCount > 0;
+                            return (
+                                <Button
+                                    mode={hasAppliedFilters ? 'contained' : 'outlined'}
+                                    icon="filter-variant"
+                                    onPress={openFilters}
+                                    contentStyle={styles.touchTargetButton}
+                                    accessibilityLabel={hasAppliedFilters
+                                        ? `Abrir filtros, ${appliedFiltersCount} filtros aplicados`
+                                        : 'Abrir filtros'}
+                                    accessibilityHint="Abre a modal com opções de filtro"
+                                    accessibilityState={{ selected: hasAppliedFilters }}
+                                >
+                                    {hasAppliedFilters ? `Filtros (${appliedFiltersCount})` : 'Filtros'}
+                                </Button>
+                            );
+                        })()}
                         <Menu
                             visible={isSortMenuVisible}
                             onDismiss={() => setIsSortMenuVisible(false)}
@@ -500,6 +580,7 @@ const BuscarOfertasScreen: React.FC = () => {
                                     icon="sort"
                                     onPress={() => setIsSortMenuVisible(true)}
                                     style={{ marginLeft: spacing.xs }}
+                                    contentStyle={styles.touchTargetButton}
                                     accessibilityLabel={getSortButtonA11yLabel(sortBy)}
                                     accessibilityHint={getSortButtonA11yHint()}
                                 >
@@ -531,20 +612,22 @@ const BuscarOfertasScreen: React.FC = () => {
                                                 });
                                                 setUserLat(coords.latitude);
                                                 setUserLng(coords.longitude);
+                                                // Analytics de mudança de ordenação
+                                                trackChangeSort(sortBy, 'distancia', { lat: coords.latitude, lng: coords.longitude });
                                                 setSortBy('distancia');
-                                                addBreadcrumb('Alteração de ordenação', { sortBy: 'distancia', lat: coords.latitude, lng: coords.longitude }, 'ordenacao', 'info');
                                                 // Recarregar com as novas coordenadas
                                                 void loadOfertas(1, true);
                                             } catch (e: any) {
                                                 setError('Não foi possível obter sua localização. Verifique as permissões.');
                                             }
                                         } else {
+                                            // Analytics de mudança de ordenação
+                                            trackChangeSort(sortBy, selected);
                                             setSortBy(selected);
-                                            addBreadcrumb('Alteração de ordenação', { sortBy: selected }, 'ordenacao', 'info');
                                         }
                                     }}
                                     title={label}
-                                    leadingIcon={sortBy === (key as SortOption) ? 'check' : undefined}
+                                    leadingIcon={sortBy === (key as SortOption) ? 'check' : SORT_ICONS[key as SortOption]}
                                     accessibilityLabel={`${label}${sortBy === (key as SortOption) ? ', selecionado' : ''}`}
                                 />
                             ))}
@@ -558,86 +641,118 @@ const BuscarOfertasScreen: React.FC = () => {
                         {total} resultados
                     </RNText>
                 </View>
-                <View style={styles.appliedChipsContainer}>
-                    {selectedCategory ? (
-                        <Chip
-                            mode="outlined"
-                            onClose={() => clearFilter('categoria')}
-                            style={styles.appliedChip}
-                            {...getAppliedChipA11y(`Categoria: ${selectedCategory}`)}
-                        >
-                            Categoria: {selectedCategory}
-                        </Chip>
-                    ) : null}
-                    {cidade ? (
-                        <Chip
-                            mode="outlined"
-                            onClose={() => clearFilter('cidade')}
-                            style={styles.appliedChip}
-                            {...getAppliedChipA11y(`Cidade: ${cidade}`)}
-                        >
-                            {cidade}
-                        </Chip>
-                    ) : null}
-                    {estado ? (
-                        <Chip
-                            mode="outlined"
-                            onClose={() => clearFilter('estado')}
-                            style={styles.appliedChip}
-                            {...getAppliedChipA11y(`Estado: ${estado}`)}
-                        >
-                            {estado}
-                        </Chip>
-                    ) : null}
-                    {(typeof precoMin === 'number' || typeof precoMax === 'number') ? (
-                        <Chip
-                            mode="outlined"
-                            onClose={() => clearFilter('preco')}
-                            style={styles.appliedChip}
-                            {...getAppliedChipA11y(
-                                `Faixa de preço: ${typeof precoMin === 'number' ? precoMin : 0}${typeof precoMax === 'number' ? ` a ${precoMax}` : ' ou mais'}`
-                            )}
-                        >
-                            {`R$ ${typeof precoMin === 'number' ? precoMin : 0}${typeof precoMax === 'number' ? `–${precoMax}` : '+'}`}
-                        </Chip>
-                    ) : null}
-                    {comMidia ? (
-                        <Chip
-                            mode="outlined"
-                            icon="image"
-                            onClose={() => clearFilter('comMidia')}
-                            style={styles.appliedChip}
-                            {...getAppliedChipA11y('Com mídia')}
-                        >
-                            Com mídia
-                        </Chip>
-                    ) : null}
-                    {tipoPessoa ? (
-                        <Chip
-                            mode="outlined"
-                            onClose={() => clearFilter('tipoPessoa')}
-                            style={styles.appliedChip}
-                            {...getAppliedChipA11y(`Tipo de prestador: ${tipoPessoa}`)}
-                        >
-                            {tipoPessoa}
-                        </Chip>
-                    ) : null}
-                    {(selectedCategory || cidade || estado || typeof precoMin === 'number' || typeof precoMax === 'number' || comMidia || tipoPessoa) ? (
-                        <Chip
-                            mode="outlined"
-                            icon="close-circle"
-                            onPress={clearAllFilters}
-                            style={styles.appliedChip}
-                            accessibilityLabel="Limpar filtros"
-                            accessibilityHint="Remove todos os filtros aplicados"
-                            accessibilityRole="button"
-                        >
-                            Limpar
-                        </Chip>
-                    ) : null}
-                </View>
             </View>
+        </View>
+    ), [searchQuery, selectedCategory, cidade, estado, precoMin, precoMax, comMidia, tipoPessoa, isSortMenuVisible, sortBy, total]);
 
+    // Chips aplicados como cabeçalho fixo (sticky)
+    const renderAppliedChips = useCallback(() => (
+        <View style={styles.stickyChipsContainer}>
+            <View style={styles.appliedChipsContainer}>
+                {selectedCategory ? (
+                    <Chip
+                        mode="outlined"
+                        onPress={() => clearFilter('categoria')}
+                        onClose={() => clearFilter('categoria')}
+                        style={styles.appliedChip}
+                        {...getAppliedChipA11y(`Categoria: ${selectedCategory}`)}
+                    >
+                        Categoria: {selectedCategory}
+                    </Chip>
+                ) : null}
+                {cidade ? (
+                    <Chip
+                        mode="outlined"
+                        onPress={() => clearFilter('cidade')}
+                        onClose={() => clearFilter('cidade')}
+                        style={styles.appliedChip}
+                        {...getAppliedChipA11y(`Cidade: ${cidade}`)}
+                    >
+                        {cidade}
+                    </Chip>
+                ) : null}
+                {estado ? (
+                    <Chip
+                        mode="outlined"
+                        onPress={() => clearFilter('estado')}
+                        onClose={() => clearFilter('estado')}
+                        style={styles.appliedChip}
+                        {...getAppliedChipA11y(`Estado: ${estado}`)}
+                    >
+                        {estado}
+                    </Chip>
+                ) : null}
+                {(typeof precoMin === 'number' || typeof precoMax === 'number') ? (
+                    <Chip
+                        mode="outlined"
+                        onPress={() => clearFilter('preco')}
+                        onClose={() => clearFilter('preco')}
+                        style={styles.appliedChip}
+                        {...getAppliedChipA11y(
+                            `Faixa de preço: ${typeof precoMin === 'number' ? precoMin : 0}${typeof precoMax === 'number' ? ` a ${precoMax}` : ' ou mais'}`
+                        )}
+                    >
+                        {`R$ ${typeof precoMin === 'number' ? precoMin : 0}${typeof precoMax === 'number' ? `–${precoMax}` : '+'}`}
+                    </Chip>
+                ) : null}
+                {comMidia ? (
+                    <Chip
+                        mode="outlined"
+                        icon="image"
+                        onPress={() => clearFilter('comMidia')}
+                        onClose={() => clearFilter('comMidia')}
+                        style={styles.appliedChip}
+                        {...getAppliedChipA11y('Com mídia')}
+                    >
+                        Com mídia
+                    </Chip>
+                ) : null}
+                {tipoPessoa ? (
+                    <Chip
+                        mode="outlined"
+                        onPress={() => clearFilter('tipoPessoa')}
+                        onClose={() => clearFilter('tipoPessoa')}
+                        style={styles.appliedChip}
+                        {...getAppliedChipA11y(`Tipo de prestador: ${tipoPessoa}`)}
+                    >
+                        {tipoPessoa}
+                    </Chip>
+                ) : null}
+                {(selectedCategory || cidade || estado || typeof precoMin === 'number' || typeof precoMax === 'number' || comMidia || tipoPessoa) ? (
+                    <Chip
+                        mode="outlined"
+                        icon="close-circle"
+                        onPress={clearAllFilters}
+                        style={styles.appliedChip}
+                        accessibilityLabel="Limpar filtros"
+                        accessibilityHint="Remove todos os filtros aplicados"
+                        accessibilityRole="button"
+                    >
+                        Limpar
+                    </Chip>
+                ) : null}
+            </View>
+        </View>
+    ), [selectedCategory, cidade, estado, precoMin, precoMax, comMidia, tipoPessoa]);
+
+    const CHIPS_SENTINEL = '__chips__';
+    const hasAppliedFilters = React.useMemo(() => (
+        Boolean(
+            selectedCategory || cidade || estado ||
+            typeof precoMin === 'number' || typeof precoMax === 'number' ||
+            comMidia || tipoPessoa
+        )
+    ), [selectedCategory, cidade, estado, precoMin, precoMax, comMidia, tipoPessoa]);
+    const dataWithChips = React.useMemo(() => (
+        hasAppliedFilters ? [CHIPS_SENTINEL, ...ofertas] : ofertas
+    ), [hasAppliedFilters, ofertas]);
+
+    return (
+        <View
+            style={styles.container}
+            accessibilityElementsHidden={isFiltersVisible}
+            importantForAccessibility={isFiltersVisible ? 'no-hide-descendants' : 'auto'}
+        >
             <Portal>
                 <FiltersModal
                     visible={isFiltersVisible}
@@ -651,35 +766,53 @@ const BuscarOfertasScreen: React.FC = () => {
             </Portal>
 
             {((ofertas.length === 0) && (isRefreshing || (isLoading && page === 1))) ? (
-                <View style={styles.list}>
-                    {Array.from({ length: 6 }).map((_, i) => (
-                        <SkeletonCard key={`skel-${i}`} />
-                    ))}
+                <View>
+                    {renderListHeader()}
+                    {renderAppliedChips()}
+                    <View style={styles.list}>
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <SkeletonCard key={`skel-${i}`} />
+                        ))}
+                    </View>
                 </View>
             ) : (
                 <FlatList
                     testID="ofertas-list"
-                    data={ofertas}
-                    renderItem={renderOferta}
-                    keyExtractor={keyExtractor}
+                    data={dataWithChips as any}
+                    renderItem={({ item }: any) => {
+                        if (item === CHIPS_SENTINEL) {
+                            return renderAppliedChips();
+                        }
+                        return <OfferCard item={item as OfertaServico} />;
+                    }}
+                    keyExtractor={(item: any) => item === CHIPS_SENTINEL ? 'chips-header' : keyExtractor(item)}
                     refreshControl={
                         <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
                     }
                     onEndReached={handleLoadMore}
                     onEndReachedThreshold={0.4}
                     contentContainerStyle={styles.list}
+                    ListHeaderComponent={renderListHeader}
+                    stickyHeaderIndices={hasAppliedFilters ? [1] : []}
                     initialNumToRender={8}
                     maxToRenderPerBatch={8}
                     windowSize={5}
-                    removeClippedSubviews
-                    ListEmptyComponent={!isLoading ? renderEmpty : null}
-                    ListFooterComponent={isLoadingMore ? (
-                        <View>
-                            {Array.from({ length: 2 }).map((_, i) => (
-                                <SkeletonCard key={`skel-more-${i}`} />
-                            ))}
-                        </View>
-                    ) : null}
+                    // Observação: em Android, combinar stickyHeaderIndices com removeClippedSubviews
+                    // pode causar erros nativos como "addViewAt: failed to insert view ..." quando
+                    // a quantidade/ordem de itens muda dinamicamente (ex.: ao aplicar/remover chips
+                    // de filtros). Para evitar isso, desativamos o clipping.
+                    removeClippedSubviews={false}
+                    ListFooterComponent={
+                        (!isLoading && ofertas.length === 0)
+                            ? renderEmpty()
+                            : (isLoadingMore ? (
+                                <View>
+                                    {Array.from({ length: 2 }).map((_, i) => (
+                                        <SkeletonCard key={`skel-more-${i}`} />
+                                    ))}
+                                </View>
+                            ) : null)
+                    }
                 />
             )}
 
@@ -739,14 +872,25 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         paddingTop: spacing.xs,
     },
+    stickyChipsContainer: {
+        backgroundColor: colors.background,
+        paddingHorizontal: spacing.md,
+        paddingBottom: spacing.xs,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#E5E7EB',
+        // elevar levemente para sobrepor cartões ao fixar
+        zIndex: 1,
+    },
     appliedChip: {
         marginRight: spacing.xs,
         marginBottom: spacing.xs,
+        minHeight: 44,
+        paddingHorizontal: spacing.xs,
     },
     modalContainer: {
         backgroundColor: colors.background,
         margin: spacing.md,
-        borderRadius: 16,
+        borderRadius: radius.xl,
         padding: spacing.md,
         maxHeight: '80%'
     },
@@ -791,7 +935,7 @@ const styles = StyleSheet.create({
     },
     card: {
         marginBottom: spacing.md,
-        elevation: 2,
+        elevation: elevation.level1,
     },
     cardHeader: {
         flexDirection: 'row',
@@ -816,7 +960,21 @@ const styles = StyleSheet.create({
         color: colors.textSecondary,
     },
     cardFooter: {
-        marginBottom: spacing.sm,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'nowrap',
+        marginTop: spacing.xs,
+    },
+    footerText: {
+        marginLeft: spacing.xs,
+        color: colors.text,
+        fontSize: 12,
+        flexShrink: 1,
+    },
+    separator: {
+        color: colors.textSecondary,
+        marginHorizontal: spacing.xs,
+        fontSize: 12,
     },
     providerInfo: {
         flexDirection: 'row',
@@ -843,12 +1001,23 @@ const styles = StyleSheet.create({
     },
     categoryChip: {
         alignSelf: 'flex-start',
+        marginRight: spacing.xs,
+        minHeight: 44,
+    },
+    distanceChip: {
+        alignSelf: 'flex-start',
+        minHeight: 44,
+    },
+    chipsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: spacing.xs,
     },
     fab: {
         position: 'absolute',
         right: spacing.lg,
         bottom: spacing.lg,
-        elevation: 6,
+        elevation: elevation.level3,
     },
     emptyContainer: {
         flex: 1,
@@ -887,6 +1056,11 @@ const styles = StyleSheet.create({
     skel: {
         backgroundColor: '#E5E7EB',
         borderRadius: 6,
+    },
+    // Aumenta a área de toque dos botões pequenos (acessibilidade)
+    touchTargetButton: {
+        height: 44,
+        paddingHorizontal: spacing.sm,
     },
 });
 

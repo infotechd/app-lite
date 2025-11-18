@@ -1,6 +1,8 @@
-import { MD3LightTheme } from 'react-native-paper';
+import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
+import { Appearance } from 'react-native';
 
-export const theme = {
+// Tema claro (Paper)
+export const lightTheme = {
     ...MD3LightTheme,
     colors: {
         ...MD3LightTheme.colors,
@@ -14,18 +16,74 @@ export const theme = {
     },
 };
 
-export const colors = {
+// Tema escuro (Paper)
+export const darkTheme = {
+    ...MD3DarkTheme,
+    colors: {
+        ...MD3DarkTheme.colors,
+        primary: '#BB86FC', // variação para melhor contraste no escuro
+        secondary: '#03DAC6',
+        surface: '#121212',
+        background: '#0A0A0A',
+        error: '#CF6679',
+        onSurface: '#FFFFFF',
+        onBackground: '#FFFFFF',
+    },
+};
+
+// Alias de compatibilidade: mantém "theme" apontando para o tema claro por padrão
+export const theme = lightTheme;
+
+// Tokens de cor (dinâmicos conforme esquema do SO)
+type ColorTokens = {
+    primary: string;
+    secondary: string;
+    background: string;
+    surface: string;
+    text: string;
+    textSecondary: string;
+    border: string;
+    error: string;
+    success: string;
+    warning: string;
+};
+
+const lightTokens: ColorTokens = {
     primary: '#6200EE',
     secondary: '#03DAC6',
     background: '#F5F5F5',
     surface: '#FFFFFF',
     text: '#000000',
-    textSecondary: '#666666',
+    textSecondary: '#B0B0B0',
     border: '#E0E0E0',
     error: '#B00020',
     success: '#4CAF50',
     warning: '#FF9800',
 };
+
+const darkTokens: ColorTokens = {
+    primary: '#BB86FC',
+    secondary: '#03DAC6',
+    background: '#0A0A0A',
+    surface: '#121212',
+    text: '#FFFFFF',
+    textSecondary: '#A3A3A3',
+    border: '#2A2A2A',
+    error: '#CF6679',
+    success: '#4CAF50',
+    warning: '#FFB74D',
+};
+
+// Exporta um proxy que resolve as cores com base no esquema atual do SO.
+// Mantém API existente: colors.<token>
+export const colors: ColorTokens = new Proxy({} as ColorTokens, {
+    get(_target, prop: keyof ColorTokens) {
+        const scheme = Appearance.getColorScheme();
+        const source = scheme === 'dark' ? darkTokens : lightTokens;
+        // @ts-expect-error index
+        return source[prop];
+    },
+});
 
 export const spacing = {
     xs: 4,
@@ -34,6 +92,25 @@ export const spacing = {
     lg: 24,
     xl: 32,
     xxl: 48,
+};
+
+// Design tokens: radius
+export const radius = {
+    xs: 2,
+    sm: 4,
+    md: 8,
+    lg: 12,
+    xl: 16,
+    round: 50,
+};
+
+// Design tokens: elevation levels (Android). Para iOS, combine com sombras conforme necessário
+export const elevation = {
+    level0: 0,
+    level1: 2,
+    level2: 4,
+    level3: 6,
+    level4: 8,
 };
 
 export const typography = {

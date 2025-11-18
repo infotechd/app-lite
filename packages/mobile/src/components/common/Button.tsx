@@ -7,6 +7,7 @@ import {
     TouchableOpacityProps
 } from 'react-native';
 import { THEME_CONFIG } from '../../constants/config';
+import { radius } from '@/styles/theme';
 
 interface ButtonProps extends TouchableOpacityProps {
     title: string;
@@ -63,7 +64,7 @@ export default Button;
 
 const styles = StyleSheet.create({
     button: {
-        borderRadius: THEME_CONFIG.BORDER_RADIUS.MD,
+        borderRadius: radius.md,
         alignItems: 'center',
         justifyContent: 'center',
         flexDirection: 'row',
