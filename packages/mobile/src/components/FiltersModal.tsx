@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { ScrollView, View, AccessibilityInfo, findNodeHandle } from 'react-native';
 import { Modal, Text, Divider, Chip, TextInput, HelperText, Switch, SegmentedButtons, Button } from 'react-native-paper';
-import { colors, spacing } from '@/styles/theme';
+import { colors, spacing, radius } from '@/styles/theme';
 import { UF_LIST } from '@/constants/oferta';
 
 export type TipoPessoa = 'PF' | 'PJ' | 'todos';
@@ -42,7 +42,7 @@ const FiltersModal: React.FC<FiltersModalProps> = ({ visible, onDismiss, draft, 
     <Modal
       visible={visible}
       onDismiss={onDismiss}
-      contentContainerStyle={{ backgroundColor: colors.background, margin: spacing.md, borderRadius: 16, padding: spacing.md, maxHeight: '80%' }}
+      contentContainerStyle={{ backgroundColor: colors.background, margin: spacing.md, borderRadius: radius.xl, padding: spacing.md, maxHeight: '80%' }}
     >
       <ScrollView
         contentContainerStyle={{ paddingBottom: spacing.lg }}
