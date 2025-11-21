@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Alert, Text as RNText } from 'react-native';
-import { Searchbar, Card, Text, FAB, Chip, Button, Portal, Menu, Snackbar } from 'react-native-paper';
+import { View, FlatList, StyleSheet, RefreshControl, Alert, Text as RNText, Switch as RNSwitch } from 'react-native';
+import { Searchbar, Card, Text, FAB, Chip, Button, Portal, Menu, Snackbar, List, IconButton } from 'react-native-paper';
+// Removido o componente SuggestionsCard em favor de sugestões inline no header (Parte 6)
 import { OfertaServico, OfertaFilters, SortOption } from '@/types/oferta';
 import { ofertaService } from '@/services/ofertaService';
 // Telemetria e tracing
 import { captureException, startSpan } from '@/utils/sentry';
 import { trackApplyFilters, trackCardClick, trackChangeSort } from '@/utils/analytics';
-// import AsyncStorage from '@react-native-async-storage/async-storage'; // não utilizado aqui
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing, radius, elevation } from '@/styles/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -16,7 +17,7 @@ import { OfertasStackParamList } from '@/types';
 import { openAuthModal } from '@/navigation/RootNavigation';
 import { formatCurrencyBRL } from '@/utils/currency';
 import FiltersModal, { FiltersDraft } from '@/components/FiltersModal';
-import { CATEGORIES } from '@/constants/oferta';
+import { CATEGORIES_NAMES as CATEGORY_NAMES } from '@/constants/categories';
 import { parseNumber, isValidUF, validatePriceRange } from '@/utils/filtersValidation';
 
 // Rótulos para opções de ordenação
@@ -77,6 +78,11 @@ const BuscarOfertasScreen: React.FC = () => {
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Histórico de buscas recentes (estado de sugestões redundante removido)
+    // Modo de Busca Focado: controla estados visuais/UX enquanto o campo está focado
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
     // Additional filters (applied)
     const [precoMin, setPrecoMin] = useState<number | undefined>(undefined);
     const [precoMax, setPrecoMax] = useState<number | undefined>(undefined);
@@ -105,6 +111,18 @@ const BuscarOfertasScreen: React.FC = () => {
     });
 
     const { user, isAuthenticated, setPendingRedirect } = useAuth();
+    // Namespacing do storage por feature/usuário
+    const STORAGE_KEY = user?.id ? `ofertas:recentSearches:${(user as any).id}` : 'ofertas:recentSearches:anon';
+    const STORAGE_ENABLED_KEY = user?.id ? `ofertas:recentSearches:enabled:${(user as any).id}` : 'ofertas:recentSearches:enabled:anon';
+    // Normalizador para comparação case/acentos-insensível
+    const normalize = useCallback((s: string) => (
+        (s ?? '')
+            .normalize('NFD')
+            // remove diacríticos combinantes (compatível com motores que não suportam \p{Diacritic})
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim()
+    ), []);
     // Mostrar CTA de criar oferta para convidados; se autenticado, somente para provider
     const canCreateOffer = isAuthenticated ? user?.tipo === 'provider' : true;
     const navigation = useNavigation<NativeStackNavigationProp<OfertasStackParamList>>();
@@ -114,6 +132,81 @@ const BuscarOfertasScreen: React.FC = () => {
     // Cancelamento: manter referência do AbortController da última requisição
     const abortRef = useRef<AbortController | null>(null);
     // Ref para controlar inicialização de carregamento (já usado em hasInitialLoadedRef)
+    // Ref para submissão imediata: permite usar o termo atual sem esperar o debounce
+    const immediateQueryRef = useRef<string | null>(null);
+
+    // Preferência de privacidade para histórico
+    const [historyEnabled, setHistoryEnabled] = useState<boolean>(true);
+
+    const loadHistoryEnabled = useCallback(async () => {
+        try {
+            const stored = await AsyncStorage.getItem(STORAGE_ENABLED_KEY);
+            if (stored == null) {
+                setHistoryEnabled(true);
+                return;
+            }
+            setHistoryEnabled(stored === 'true');
+        } catch (e: any) {
+            captureException?.(e, { tags: { area: 'search-history', op: 'load-enabled' } });
+            setHistoryEnabled(true);
+        }
+    }, [STORAGE_ENABLED_KEY]);
+
+    const toggleHistoryEnabled = useCallback(async () => {
+        try {
+            const next = !historyEnabled;
+            setHistoryEnabled(next);
+            await AsyncStorage.setItem(STORAGE_ENABLED_KEY, String(next));
+            if (!next) {
+                // ao desativar, limpa os dados persistidos
+                setRecentSearches([]);
+                await AsyncStorage.removeItem(STORAGE_KEY);
+            }
+        } catch (e: any) {
+            captureException?.(e, { tags: { area: 'search-history', op: 'toggle-enabled' } });
+        }
+    }, [historyEnabled, STORAGE_ENABLED_KEY, STORAGE_KEY]);
+
+    // Carrega histórico de buscas recentes do AsyncStorage
+    const loadRecentSearches = useCallback(async () => {
+        try {
+            const stored = await AsyncStorage.getItem(STORAGE_KEY);
+            if (!stored) {
+                setRecentSearches([]);
+                return;
+            }
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.every(x => typeof x === 'string')) {
+                setRecentSearches(parsed);
+            } else {
+                // valor inválido/corrompido: limpa e segue em frente
+                await AsyncStorage.removeItem(STORAGE_KEY);
+                setRecentSearches([]);
+            }
+        } catch (error: any) {
+            captureException?.(error, { tags: { area: 'search-history', op: 'load' } });
+            setRecentSearches([]);
+        }
+    }, [STORAGE_KEY]);
+
+    // Salva o termo no histórico (máx 10, sem duplicatas, mais recente primeiro)
+    const saveSuccessfulSearch = useCallback(async (term: string) => {
+        const trimmed = (term || '').trim();
+        if (!historyEnabled) return; // preferência de privacidade
+        if (trimmed.length < 3) return; // Ignora termos muito curtos
+
+        try {
+            const stored = await AsyncStorage.getItem(STORAGE_KEY);
+            const parsed = stored ? JSON.parse(stored) : [];
+            const arr = Array.isArray(parsed) && parsed.every(x => typeof x === 'string') ? parsed as string[] : [];
+            const norm = normalize(trimmed);
+            const updated = [trimmed, ...arr.filter(s => normalize(s) !== norm)].slice(0, 10);
+            setRecentSearches(updated);
+            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        } catch (error: any) {
+            captureException?.(error, { tags: { area: 'search-history', op: 'save' } });
+        }
+    }, [STORAGE_KEY, normalize, historyEnabled]);
 
     const onPressCriarOferta = useCallback(() => {
         if (isAuthenticated) {
@@ -145,8 +238,12 @@ const BuscarOfertasScreen: React.FC = () => {
         const span = startSpan({ name: 'Buscar ofertas', op: 'http' });
         try {
             setError(null); // limpa erro antes de nova tentativa
+            // Limpa referência de busca imediata (não utilizamos mais esta via, optamos por sincronizar o debounce)
+            if (immediateQueryRef.current !== null) {
+                immediateQueryRef.current = null;
+            }
             const filters: OfertaFilters = {
-                busca: debouncedQuery || undefined,
+                busca: debouncedQuery.trim().length >= 2 ? debouncedQuery.trim() : undefined,
                 categoria: selectedCategory,
                 precoMin,
                 precoMax,
@@ -169,6 +266,7 @@ const BuscarOfertasScreen: React.FC = () => {
             const totalPages = typeof response?.totalPages === 'number' ? response.totalPages : 1;
             const totalCount = typeof response?.total === 'number' ? response.total : 0;
 
+            
             // Ignore stale responses
             if (requestId !== requestIdRef.current) {
                 return;
@@ -183,6 +281,12 @@ const BuscarOfertasScreen: React.FC = () => {
             setHasMore(pageNum < totalPages);
             setPage(pageNum);
             setTotal(totalCount);
+
+            // Parte 4: salvar busca bem-sucedida após atualizar estado (com termo normalizado)
+            const q = debouncedQuery.trim();
+            if (pageNum === 1 && totalCount > 0 && q.length >= 3) {
+                void saveSuccessfulSearch(q);
+            }
         } catch (error: any) {
             const isAbort = error?.name === 'CanceledError' || error?.name === 'AbortError' || error?.code === 'ERR_CANCELED';
             if (isAbort) {
@@ -225,15 +329,15 @@ const BuscarOfertasScreen: React.FC = () => {
             // Encerra o span de performance
             try { span.end(); } catch {}
         }
-    }, [debouncedQuery, selectedCategory, precoMin, precoMax, cidade, estado, sortBy, comMidia, tipoPessoa, userLat, userLng]);
+    }, [debouncedQuery, selectedCategory, precoMin, precoMax, cidade, estado, sortBy, comMidia, tipoPessoa, userLat, userLng, saveSuccessfulSearch]);
 
     const retry = useCallback(() => {
         void loadOfertas(1, true);
     }, [loadOfertas]);
 
-    // Debounce: update debouncedQuery 400ms after user stops typing
+    // Debounce: update debouncedQuery 300ms after user stops typing
     useEffect(() => {
-        const handler = setTimeout(() => setDebouncedQuery(searchQuery), 400);
+        const handler = setTimeout(() => setDebouncedQuery(searchQuery), 300);
         return () => clearTimeout(handler);
     }, [searchQuery]);
 
@@ -242,6 +346,12 @@ const BuscarOfertasScreen: React.FC = () => {
         if (!hasInitialLoadedRef.current) return;
         void loadOfertas(1, true);
     }, [loadOfertas]);
+
+    // Carregar histórico de buscas recentes e preferência no ciclo de vida e quando o usuário mudar
+    useEffect(() => {
+        void loadRecentSearches();
+        void loadHistoryEnabled();
+    }, [loadRecentSearches, loadHistoryEnabled]);
 
     // Initial load on mount (ensures first render fetches immediately)
     useEffect(() => {
@@ -319,7 +429,8 @@ const BuscarOfertasScreen: React.FC = () => {
         setCidade(draft.cidade.trim() || undefined);
         setEstado(ufRaw ? ufRaw : undefined);
         // novos filtros
-        setComMidia(draft.comMidia === true);
+        // draft.comMidia já é boolean; evitar comparação redundante com true
+        setComMidia(draft.comMidia);
         setTipoPessoa(draft.tipoPessoa === 'todos' ? undefined : draft.tipoPessoa);
         setIsFiltersVisible(false);
         // Carregamento será disparado pelo useEffect que depende de loadOfertas
@@ -514,136 +625,248 @@ const BuscarOfertasScreen: React.FC = () => {
 
     // Placeholder de carregamento (skeleton) para cards
     const SkeletonCard = () => (
-        <Card style={styles.card} accessible={false} importantForAccessibility="no-hide-descendants">
-            <Card.Content>
-                <View style={styles.cardHeader}>
-                    <View style={[styles.skel, { width: '60%', height: 20 }]} />
-                    <View style={[styles.skel, { width: 90, height: 20 }]} />
-                </View>
-                <View style={[styles.skel, { width: '100%', height: 48, marginBottom: spacing.sm }]} />
-                <View style={{ marginBottom: spacing.sm }}>
-                    <View style={[styles.skel, { width: '50%', height: 14, marginBottom: spacing.xs }]} />
-                    <View style={[styles.skel, { width: '40%', height: 14 }]} />
-                </View>
-                <View style={[styles.skel, { width: 96, height: 26, borderRadius: radius.xl }]} />
-            </Card.Content>
-        </Card>
+        <View style={styles.card} accessible={false} importantForAccessibility="no-hide-descendants">
+            <View style={styles.cardHeader}>
+                <View style={[styles.skel, { width: '60%', height: 20 }]} />
+                <View style={[styles.skel, { width: 90, height: 20 }]} />
+            </View>
+            <View style={[styles.skel, { width: '100%', height: 48, marginBottom: spacing.sm }]} />
+            <View style={{ marginBottom: spacing.sm }}>
+                <View style={[styles.skel, { width: '50%', height: 14, marginBottom: spacing.xs }]} />
+                <View style={[styles.skel, { width: '40%', height: 14 }]} />
+            </View>
+            <View style={[styles.skel, { width: 96, height: 26, borderRadius: radius.xl }]} />
+        </View>
     );
 
     // Header que deve rolar junto com a lista (Searchbar + botões/ordenação)
-    const renderListHeader = useCallback(() => (
-        <View>
-            <Searchbar
-                placeholder="Buscar serviços (ex.: encanador, elétrica, pintura)"
-                onChangeText={setSearchQuery}
-                value={searchQuery}
-                style={styles.searchbar}
-                icon="magnify"
-                accessibilityLabel="Buscar serviços"
-                accessibilityHint="Digite um termo para filtrar ofertas. Exemplos: encanador, elétrica, pintura."
-            />
-            <View style={styles.filtersHeader}>
-                <View style={styles.filtersRow}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        {(() => {
-                            const priceApplied = typeof precoMin === 'number' || typeof precoMax === 'number';
-                            const appliedFiltersCount =
-                                (selectedCategory ? 1 : 0) +
-                                (cidade ? 1 : 0) +
-                                (estado ? 1 : 0) +
-                                (priceApplied ? 1 : 0) +
-                                (comMidia ? 1 : 0) +
-                                (tipoPessoa ? 1 : 0);
-                            const hasAppliedFilters = appliedFiltersCount > 0;
-                            return (
-                                <Button
-                                    mode={hasAppliedFilters ? 'contained' : 'outlined'}
-                                    icon="filter-variant"
-                                    onPress={openFilters}
-                                    contentStyle={styles.touchTargetButton}
-                                    accessibilityLabel={hasAppliedFilters
-                                        ? `Abrir filtros, ${appliedFiltersCount} filtros aplicados`
-                                        : 'Abrir filtros'}
-                                    accessibilityHint="Abre a modal com opções de filtro"
-                                    accessibilityState={{ selected: hasAppliedFilters }}
-                                >
-                                    {hasAppliedFilters ? `Filtros (${appliedFiltersCount})` : 'Filtros'}
-                                </Button>
-                            );
-                        })()}
-                        <Menu
-                            visible={isSortMenuVisible}
-                            onDismiss={() => setIsSortMenuVisible(false)}
-                            anchor={
-                                <Button
-                                    mode="outlined"
-                                    icon="sort"
-                                    onPress={() => setIsSortMenuVisible(true)}
-                                    style={{ marginLeft: spacing.xs }}
-                                    contentStyle={styles.touchTargetButton}
-                                    accessibilityLabel={getSortButtonA11yLabel(sortBy)}
-                                    accessibilityHint={getSortButtonA11yHint()}
-                                >
-                                    {SORT_LABELS[sortBy]}
-                                </Button>
-                            }
-                        >
-                            {Object.entries(SORT_LABELS).map(([key, label]) => (
-                                <Menu.Item
-                                    key={key}
-                                    onPress={async () => {
-                                        const selected = key as SortOption;
-                                        setIsSortMenuVisible(false);
-                                        if (selected === 'distancia') {
-                                            // Tentar obter localização do usuário
-                                            try {
-                                                const coords = await new Promise<GeolocationCoordinates>((resolve, reject) => {
-                                                    const navAny: any = navigator as any;
-                                                    const geo = navAny?.geolocation;
-                                                    if (!geo || !geo.getCurrentPosition) {
-                                                        reject(new Error('Permissão de localização não disponível neste dispositivo.'));
-                                                        return;
-                                                    }
-                                                    geo.getCurrentPosition(
-                                                        (pos: any) => resolve(pos.coords),
-                                                        (err: any) => reject(err),
-                                                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-                                                    );
-                                                });
-                                                setUserLat(coords.latitude);
-                                                setUserLng(coords.longitude);
-                                                // Analytics de mudança de ordenação
-                                                trackChangeSort(sortBy, 'distancia', { lat: coords.latitude, lng: coords.longitude });
-                                                setSortBy('distancia');
-                                                // Recarregar com as novas coordenadas
-                                                void loadOfertas(1, true);
-                                            } catch (e: any) {
-                                                setError('Não foi possível obter sua localização. Verifique as permissões.');
-                                            }
-                                        } else {
-                                            // Analytics de mudança de ordenação
-                                            trackChangeSort(sortBy, selected);
-                                            setSortBy(selected);
-                                        }
-                                    }}
-                                    title={label}
-                                    leadingIcon={sortBy === (key as SortOption) ? 'check' : SORT_ICONS[key as SortOption]}
-                                    accessibilityLabel={`${label}${sortBy === (key as SortOption) ? ', selecionado' : ''}`}
+    // Manipuladores do histórico (remover/limpar/selecionar)
+    const handleRemoveSearch = useCallback(async (term: string) => {
+        try {
+            const stored = await AsyncStorage.getItem(STORAGE_KEY);
+            const parsed = stored ? JSON.parse(stored) : [];
+            const arr = Array.isArray(parsed) && parsed.every(x => typeof x === 'string') ? parsed as string[] : [];
+            const norm = normalize(term);
+            const updated = arr.filter(s => normalize(s) !== norm);
+            setRecentSearches(updated);
+            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        } catch (error: any) {
+            captureException?.(error, { tags: { area: 'search-history', op: 'remove' } });
+        }
+    }, [STORAGE_KEY, normalize]);
+
+    const handleClearSearches = useCallback(async () => {
+        try {
+            setRecentSearches([]);
+            await AsyncStorage.removeItem(STORAGE_KEY);
+        } catch (error: any) {
+            captureException?.(error, { tags: { area: 'search-history', op: 'clear' } });
+        }
+    }, [STORAGE_KEY]);
+
+    const handleSelectSuggestion = useCallback((term: string) => {
+        setSearchQuery(term);
+        setDebouncedQuery(term); // sincroniza para busca imediata
+        setIsSearchFocused(false); // Sai do modo focado
+        void loadOfertas(1, true);
+    }, [loadOfertas]);
+
+    const renderListHeader = useCallback(() => {
+        return (
+            <View>
+                <Searchbar
+                    placeholder="Buscar serviços (ex.: encanador, elétrica, pintura)"
+                    onChangeText={setSearchQuery}
+                    value={searchQuery}
+                    style={styles.searchbar}
+                    testID="search-input"
+                    icon="magnify"
+                    loading={isLoading || isRefreshing}
+                    clearIcon="close"
+                    onClearIconPress={() => setSearchQuery("")}
+                    onFocus={() => { setIsSearchFocused(true); }}
+                    onBlur={() => {
+                        // pequeno atraso para permitir o toque em itens recentes
+                        setTimeout(() => setIsSearchFocused(false), 150);
+                    }}
+                    returnKeyType="search"
+                    blurOnSubmit
+                    onSubmitEditing={() => {
+                        // Sincroniza o debounce e busca imediatamente
+                        setDebouncedQuery(searchQuery);
+                        loadOfertas(1, true);
+                    }}
+                    accessibilityLabel="Buscar serviços"
+                    accessibilityHint="Digite um termo para buscar e pressione 'buscar' no teclado para resultados imediatos"
+                />
+
+                {isSearchFocused && (
+                    <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold' }}>Buscas Recentes</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                {recentSearches.length > 0 && historyEnabled && (
+                                    <Button mode="text" onPress={handleClearSearches} compact accessibilityLabel="Limpar histórico de buscas">
+                                        Limpar
+                                    </Button>
+                                )}
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={{ marginRight: spacing.xs }}>Histórico</Text>
+                                    <RNSwitch
+                                        value={historyEnabled}
+                                        onValueChange={toggleHistoryEnabled}
+                                        accessibilityLabel={historyEnabled ? 'Desativar histórico de buscas' : 'Ativar histórico de buscas'}
+                                    />
+                                </View>
+                            </View>
+                        </View>
+                        {recentSearches.length > 0 ? (
+                            historyEnabled ? recentSearches.slice(0, 5).map((term) => (
+                                <List.Item
+                                    key={term}
+                                    title={term}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Buscar novamente por: ${term}`}
+                                    onPress={() => handleSelectSuggestion(term)}
+                                    left={(props) => <List.Icon {...props} icon="history" />}
+                                    right={(props) => (
+                                        <IconButton
+                                            {...props}
+                                            icon="close"
+                                            accessibilityLabel={`Remover termo ${term} do histórico`}
+                                            onPress={() => handleRemoveSearch(term)}
+                                        />
+                                    )}
                                 />
-                            ))}
-                        </Menu>
+                            )) : (
+                                <List.Item title="Histórico desativado" disabled />
+                            )
+                        ) : (
+                            <List.Item title="Nenhuma busca recente" disabled />
+                        )}
                     </View>
-                    <RNText
-                        style={styles.resultCount}
-                        accessibilityLiveRegion="polite"
-                        accessibilityLabel={`${total} resultados`}
-                    >
-                        {total} resultados
-                    </RNText>
-                </View>
+                )}
+
+                {!isSearchFocused && (
+                    <View style={styles.filtersHeader}>
+                        <View style={styles.filtersRow}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                {(() => {
+                                    const priceApplied = typeof precoMin === 'number' || typeof precoMax === 'number';
+                                    const appliedFiltersCount =
+                                        (selectedCategory ? 1 : 0) +
+                                        (cidade ? 1 : 0) +
+                                        (estado ? 1 : 0) +
+                                        (priceApplied ? 1 : 0) +
+                                        (comMidia ? 1 : 0) +
+                                        (tipoPessoa ? 1 : 0);
+                                    const hasAppliedFilters = appliedFiltersCount > 0;
+                                    return (
+                                        <Button
+                                            mode={hasAppliedFilters ? 'contained' : 'outlined'}
+                                            icon="filter-variant"
+                                            onPress={openFilters}
+                                            contentStyle={styles.touchTargetButton}
+                                            accessibilityLabel={hasAppliedFilters
+                                                ? `Abrir filtros, ${appliedFiltersCount} filtros aplicados`
+                                                : 'Abrir filtros'}
+                                            accessibilityHint="Abre a modal com opções de filtro"
+                                            accessibilityState={{ selected: hasAppliedFilters }}
+                                        >
+                                            {hasAppliedFilters ? `Filtros (${appliedFiltersCount})` : 'Filtros'}
+                                        </Button>
+                                    );
+                                })()}
+                                <Menu
+                                    visible={isSortMenuVisible}
+                                    onDismiss={() => setIsSortMenuVisible(false)}
+                                    anchor={
+                                        <Button
+                                            mode="outlined"
+                                            icon="sort"
+                                            onPress={() => setIsSortMenuVisible(true)}
+                                            style={{ marginLeft: spacing.xs }}
+                                            contentStyle={styles.touchTargetButton}
+                                            accessibilityLabel={getSortButtonA11yLabel(sortBy)}
+                                            accessibilityHint={getSortButtonA11yHint()}
+                                        >
+                                            {SORT_LABELS[sortBy]}
+                                        </Button>
+                                    }
+                                >
+                                    {Object.entries(SORT_LABELS).map(([key, label]) => (
+                                        <Menu.Item
+                                            key={key}
+                                            onPress={async () => {
+                                                const selected = key as SortOption;
+                                                setIsSortMenuVisible(false);
+                                                if (selected === 'distancia') {
+                                                    try {
+                                                        const coords = await new Promise<GeolocationCoordinates>((resolve, reject) => {
+                                                            const navAny: any = navigator as any;
+                                                            const geo = navAny?.geolocation;
+                                                            if (!geo || !geo.getCurrentPosition) {
+                                                                reject(new Error('Permissão de localização não disponível neste dispositivo.'));
+                                                                return;
+                                                            }
+                                                            geo.getCurrentPosition(
+                                                                (pos: any) => resolve(pos.coords),
+                                                                (err: any) => reject(err),
+                                                                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                                                            );
+                                                        });
+                                                        setUserLat(coords.latitude);
+                                                        setUserLng(coords.longitude);
+                                                        trackChangeSort(sortBy, 'distancia', { lat: coords.latitude, lng: coords.longitude });
+                                                        setSortBy('distancia');
+                                                        void loadOfertas(1, true);
+                                                    } catch (e: any) {
+                                                        setError('Não foi possível obter sua localização. Verifique as permissões.');
+                                                    }
+                                                } else {
+                                                    trackChangeSort(sortBy, selected);
+                                                    setSortBy(selected);
+                                                }
+                                            }}
+                                            title={label}
+                                            leadingIcon={sortBy === (key as SortOption) ? 'check' : SORT_ICONS[key as SortOption]}
+                                            accessibilityLabel={`${label}${sortBy === (key as SortOption) ? ', selecionado' : ''}`}
+                                        />
+                                    ))}
+                                </Menu>
+                            </View>
+                            <RNText
+                                style={styles.resultCount}
+                                accessibilityLiveRegion="polite"
+                                accessibilityLabel={`${total} resultados`}
+                            >
+                                {total} resultados
+                            </RNText>
+                        </View>
+                    </View>
+                )}
             </View>
-        </View>
-    ), [searchQuery, selectedCategory, cidade, estado, precoMin, precoMax, comMidia, tipoPessoa, isSortMenuVisible, sortBy, total]);
+        );
+    }, [
+        searchQuery,
+        isLoading,
+        recentSearches,
+        handleSelectSuggestion,
+        handleRemoveSearch,
+        handleClearSearches,
+        selectedCategory,
+        cidade,
+        estado,
+        precoMin,
+        precoMax,
+        comMidia,
+        tipoPessoa,
+        isSortMenuVisible,
+        sortBy,
+        total,
+        isSearchFocused,
+        isRefreshing,
+    ]);
 
     // Chips aplicados como cabeçalho fixo (sticky)
     const renderAppliedChips = useCallback(() => (
@@ -747,6 +970,9 @@ const BuscarOfertasScreen: React.FC = () => {
         hasAppliedFilters ? [CHIPS_SENTINEL, ...ofertas] : ofertas
     ), [hasAppliedFilters, ofertas]);
 
+    // Flag estável para controlar placeholders sem trocar a árvore da UI
+    const isInitialOrRefreshing = isRefreshing || (isLoading && page === 1);
+
     return (
         <View
             style={styles.container}
@@ -761,60 +987,64 @@ const BuscarOfertasScreen: React.FC = () => {
                     onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
                     onClear={clearAllFilters}
                     onApply={applyFilters}
-                    categories={[...CATEGORIES]}
-                />
+                categories={[...CATEGORY_NAMES]}
+            />
             </Portal>
 
-            {((ofertas.length === 0) && (isRefreshing || (isLoading && page === 1))) ? (
-                <View>
-                    {renderListHeader()}
-                    {renderAppliedChips()}
-                    <View style={styles.list}>
-                        {Array.from({ length: 6 }).map((_, i) => (
-                            <SkeletonCard key={`skel-${i}`} />
-                        ))}
-                    </View>
-                </View>
-            ) : (
-                <FlatList
-                    testID="ofertas-list"
-                    data={dataWithChips as any}
-                    renderItem={({ item }: any) => {
-                        if (item === CHIPS_SENTINEL) {
-                            return renderAppliedChips();
-                        }
-                        return <OfferCard item={item as OfertaServico} />;
-                    }}
-                    keyExtractor={(item: any) => item === CHIPS_SENTINEL ? 'chips-header' : keyExtractor(item)}
-                    refreshControl={
-                        <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+            <FlatList
+                testID="ofertas-list"
+                keyboardShouldPersistTaps="always"
+                keyboardDismissMode="none"
+                data={dataWithChips as any}
+                renderItem={({ item }: any) => {
+                    if (item === CHIPS_SENTINEL) {
+                        return renderAppliedChips();
                     }
-                    onEndReached={handleLoadMore}
-                    onEndReachedThreshold={0.4}
-                    contentContainerStyle={styles.list}
-                    ListHeaderComponent={renderListHeader}
-                    stickyHeaderIndices={hasAppliedFilters ? [1] : []}
-                    initialNumToRender={8}
-                    maxToRenderPerBatch={8}
-                    windowSize={5}
-                    // Observação: em Android, combinar stickyHeaderIndices com removeClippedSubviews
-                    // pode causar erros nativos como "addViewAt: failed to insert view ..." quando
-                    // a quantidade/ordem de itens muda dinamicamente (ex.: ao aplicar/remover chips
-                    // de filtros). Para evitar isso, desativamos o clipping.
-                    removeClippedSubviews={false}
-                    ListFooterComponent={
-                        (!isLoading && ofertas.length === 0)
-                            ? renderEmpty()
-                            : (isLoadingMore ? (
-                                <View>
-                                    {Array.from({ length: 2 }).map((_, i) => (
-                                        <SkeletonCard key={`skel-more-${i}`} />
-                                    ))}
-                                </View>
-                            ) : null)
-                    }
-                />
-            )}
+                    return <OfferCard item={item as OfertaServico} />;
+                }}
+                keyExtractor={(item: any) => item === CHIPS_SENTINEL ? 'chips-header' : keyExtractor(item)}
+                refreshControl={
+                    <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+                }
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.4}
+                contentContainerStyle={styles.list}
+                ListHeaderComponent={renderListHeader}
+                stickyHeaderIndices={isSearchFocused ? [] : (hasAppliedFilters ? [1] : [])}
+                initialNumToRender={8}
+                maxToRenderPerBatch={8}
+                windowSize={5}
+                // Observação: em Android, combinar stickyHeaderIndices com removeClippedSubviews
+                // pode causar erros nativos como "addViewAt: failed to insert view ..." quando
+                // a quantidade/ordem de itens muda dinamicamente (ex.: ao aplicar/remover chips
+                // de filtros). Para evitar isso, desativamos o clipping.
+                removeClippedSubviews={false}
+                ListFooterComponent={
+                    isSearchFocused
+                        ? null
+                        : (
+                            isLoadingMore
+                                ? (
+                                    <View>
+                                        {Array.from({ length: 2 }).map((_, i) => (
+                                            <SkeletonCard key={`skel-more-${i}`} />
+                                        ))}
+                                    </View>
+                                )
+                                : (
+                                    isInitialOrRefreshing
+                                        ? (
+                                            <View>
+                                                {Array.from({ length: 6 }).map((_, i) => (
+                                                    <SkeletonCard key={`skel-${i}`} />
+                                                ))}
+                                            </View>
+                                        )
+                                        : (ofertas.length === 0 ? renderEmpty() : null)
+                                )
+                        )
+                }
+            />
 
             <Snackbar
                 visible={!!error}
@@ -851,6 +1081,10 @@ const styles = StyleSheet.create({
     },
     searchbar: {
         margin: spacing.md,
+        marginBottom: spacing.sm,
+    },
+    suggestionsCard: {
+        marginHorizontal: spacing.md,
         marginBottom: spacing.sm,
     },
     filtersHeader: {
