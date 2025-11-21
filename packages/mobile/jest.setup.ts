@@ -53,3 +53,17 @@ if (typeof console.debug === 'function') console.debug = noop as any;
 if (typeof (globalThis as any).fetch === 'undefined' || (globalThis as any).__FORCE_TEST_FETCH__) {
     ;(globalThis as any).fetch = jest.fn(async () => ({ ok: false })) as any;
 }
+
+// React Native test environment polyfills
+try {
+    const RN = require('react-native');
+    // Some environments may miss StyleSheet.flatten; provide a noop fallback
+    if (typeof RN.StyleSheet.flatten !== 'function') {
+        RN.StyleSheet.flatten = (s: any) => s;
+    }
+} catch {}
+
+// requestAnimationFrame polyfill for components or libraries relying on it
+if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
+    ;(globalThis as any).requestAnimationFrame = (cb: any) => setTimeout(cb, 0);
+}

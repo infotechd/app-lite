@@ -5,7 +5,7 @@ import { Appearance } from 'react-native';
 export const lightTheme = {
     ...MD3LightTheme,
     colors: {
-        ...MD3LightTheme.colors,
+        ...(MD3LightTheme as any)?.colors ?? {},
         primary: '#6200EE',
         secondary: '#03DAC6',
         surface: '#FFFFFF',
@@ -20,7 +20,7 @@ export const lightTheme = {
 export const darkTheme = {
     ...MD3DarkTheme,
     colors: {
-        ...MD3DarkTheme.colors,
+        ...(MD3DarkTheme as any)?.colors ?? {},
         primary: '#BB86FC', // variação para melhor contraste no escuro
         secondary: '#03DAC6',
         surface: '#121212',
@@ -78,10 +78,11 @@ const darkTokens: ColorTokens = {
 // Mantém API existente: colors.<token>
 export const colors: ColorTokens = new Proxy({} as ColorTokens, {
     get(_target, prop: keyof ColorTokens) {
-        const scheme = Appearance.getColorScheme();
+        // Garantir compatibilidade em ambiente de teste (Jest/Node)
+        const scheme = (Appearance as any)?.getColorScheme?.() ?? 'light';
         const source = scheme === 'dark' ? darkTokens : lightTokens;
-        // @ts-expect-error index
-        return source[prop];
+
+        return (source as any)[prop];
     },
 });
 
