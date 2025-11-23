@@ -1,32 +1,29 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text, Button, Avatar, Divider } from 'react-native-paper';
+import { StyleSheet, ScrollView } from 'react-native';
+import { Divider } from 'react-native-paper';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing } from '@/styles/theme';
-import { getUserTipoLabel } from '@/utils/labels';
+import ProfileHeader from '@/components/profile/ProfileHeader';
+import ProfileTabs from './ProfileTabs';
+import { TrustFooter } from '@/components/profile/TrustFooter';
 
 const ProfileHome: React.FC = () => {
-    const { user, logout, isAuthenticated } = useAuth();
+    const { user } = useAuth();
 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Avatar.Text label={(user?.nome?.[0] ?? 'U').toUpperCase()} size={64} />
-                <View style={{ marginLeft: spacing.md }}>
-                    <Text variant="titleLarge">{user?.nome ?? 'Usuário'}</Text>
-                    <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>{user?.email ?? ''}</Text>
-                    <Text variant="bodySmall" style={{ color: colors.textSecondary }}>Tipo: {getUserTipoLabel(user?.tipo)}</Text>
-                </View>
-            </View>
+        <ScrollView style={styles.container}>
+            <ProfileHeader user={user} />
 
             <Divider style={{ marginVertical: spacing.lg }} />
 
-            {isAuthenticated && (
-                <Button mode="contained" onPress={logout}>
-                    Sair
-                </Button>
-            )}
-        </View>
+            {/* Nova Seção de Confiança */}
+            <TrustFooter user={user} />
+
+            <Divider style={{ marginVertical: spacing.lg }} />
+
+            {/* Conteúdo em abas */}
+            <ProfileTabs />
+        </ScrollView>
     );
 };
 
@@ -36,10 +33,7 @@ const styles = StyleSheet.create({
         padding: spacing.md,
         backgroundColor: colors.background,
     },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
+    
 });
 
 export default ProfileHome;
