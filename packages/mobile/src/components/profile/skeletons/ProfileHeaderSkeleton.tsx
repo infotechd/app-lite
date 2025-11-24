@@ -15,10 +15,30 @@ const ProfileHeaderSkeleton: React.FC<Props> = ({ testID }) => {
       <View testID={testID} style={styles.container}>
         {/* Avatar + selo simulado */}
         <View style={styles.avatarContainer}>
-          <SkeletonBox width={avatarSize} height={avatarSize} radius={avatarSize / 2} />
+          {/* Avatar com fundo diferenciado para simular Avatar.Text real */}
+          <View
+            testID="profile-header-skeleton-avatar-wrapper"
+            style={{
+              width: avatarSize,
+              height: avatarSize,
+              borderRadius: avatarSize / 2,
+              backgroundColor: colors.textSecondary,
+              justifyContent: 'center',
+              alignItems: 'center',
+              overflow: 'hidden',
+            }}
+          >
+            <SkeletonBox width={avatarSize} height={avatarSize} radius={avatarSize / 2} />
+          </View>
           {/* Badge circular */}
           <View style={styles.verifiedBadge}>
-            <SkeletonBox width={20} height={20} radius={radius.round} />
+            <SkeletonBox
+              testID="profile-header-skeleton-badge"
+              width={20}
+              height={20}
+              radius={radius.round}
+              style={{ backgroundColor: colors.primary }}
+            />
           </View>
         </View>
 
@@ -42,7 +62,13 @@ const ProfileHeaderSkeleton: React.FC<Props> = ({ testID }) => {
 
         {/* Ações: botão Editar + botão mais */}
         <View style={styles.actionsContainer}>
-          <SkeletonBox width={160} height={40} radius={radius.round} />
+          <SkeletonBox
+            testID="profile-header-skeleton-primary-button"
+            width={160}
+            height={40}
+            radius={radius.round}
+            style={{ backgroundColor: colors.primary }}
+          />
           <View style={{ width: spacing.sm }} />
           <SkeletonBox width={40} height={40} radius={20} />
         </View>
