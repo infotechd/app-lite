@@ -1,5 +1,5 @@
 import React from 'react';
-import { useWindowDimensions, View, Text } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 import { TabView, TabBar } from 'react-native-tab-view';
 import { useAuth } from '@/context/AuthContext';
 import { colors } from '@/styles/theme';
@@ -12,7 +12,11 @@ import AchievementsTab from './tabs/AchievementsTab';
 
 type Route = { key: string; title: string };
 
-const ProfileTabs: React.FC = () => {
+interface Props {
+  isLoading?: boolean;
+}
+
+const ProfileTabs: React.FC<Props> = ({ isLoading }) => {
   const layout = useWindowDimensions();
   const { user } = useAuth();
   const hasReviews = ((user as any)?.avaliacao !== undefined)
@@ -31,7 +35,7 @@ const ProfileTabs: React.FC = () => {
   const renderScene = ({ route }: { route: Route }) => {
     switch (route.key) {
       case 'activity':
-        return <ActivityTab />;
+        return <ActivityTab isLoading={isLoading} />;
       case 'about':
         return <AboutTab />;
       case 'reviews':
