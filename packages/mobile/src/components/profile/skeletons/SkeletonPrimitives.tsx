@@ -1,12 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, View, StyleProp, ViewStyle } from 'react-native';
+import { Animated, View, StyleProp, ViewStyle, useColorScheme } from 'react-native';
 import { colors, radius as tokensRadius } from '@/styles/theme';
+
+// Função pura exportada para facilitar testes unitários
+export const getShimmerColor = (scheme: 'light' | 'dark' | null | undefined) =>
+  scheme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.5)';
 
 type SkeletonBoxProps = {
   width?: number | `${number}%`;
   height?: number;
   radius?: number;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
 };
 
 /**
@@ -14,10 +19,14 @@ type SkeletonBoxProps = {
  * - Shimmer horizontal suave (sem dependências externas).
  * - Base usa colors.border; uma "faixa" translúcida cruza para simular brilho.
  */
-export const SkeletonBox: React.FC<SkeletonBoxProps> = ({ width = '100%', height = 12, radius = tokensRadius.md, style }) => {
+export const SkeletonBox: React.FC<SkeletonBoxProps> = ({ width = '100%', height = 12, radius = tokensRadius.md, style, testID }) => {
   const shimmer = useRef(new Animated.Value(0)).current;
   const [containerW, setContainerW] = useState(0);
+  const colorScheme = useColorScheme() ?? 'light';
   const overlayWidth = Math.min(120, typeof width === 'number' ? Math.max(40, width * 0.3) : 120);
+
+  // Cor dinâmica do brilho (shimmer) de acordo com o tema do SO
+  const shimmerColor = getShimmerColor(colorScheme);
 
   useEffect(() => {
     const anim = Animated.loop(
@@ -38,6 +47,7 @@ export const SkeletonBox: React.FC<SkeletonBoxProps> = ({ width = '100%', height
 
   return (
     <View
+      testID={testID}
       accessibilityRole="progressbar"
       accessibilityState={{ busy: true }}
       onLayout={(e) => setContainerW(e.nativeEvent.layout.width)}
@@ -61,8 +71,9 @@ export const SkeletonBox: React.FC<SkeletonBoxProps> = ({ width = '100%', height
           bottom: 0,
           width: overlayWidth,
           transform: [{ translateX }],
-          backgroundColor: 'rgba(255,255,255,0.18)',
+          backgroundColor: shimmerColor,
         }}
+        testID="skeleton-shimmer"
       />
     </View>
   );
