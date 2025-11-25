@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, ListRenderItemInfo } from 'react-native';
 import { spacing } from '@/styles/theme';
 import EmptyState from '@/components/common/EmptyState';
@@ -8,6 +8,7 @@ import ReviewCard from '@/components/reviews/ReviewCard';
 import { REVIEWS_MOCK } from '@/mocks/reviewsMock';
 import { computeSummary, filterReviews, sortReviews } from '@/utils/reviews';
 import type { Review, ReviewFilter, ReviewSort } from '@/types/reviews';
+import ReviewsTabSkeleton from '@/components/profile/skeletons/ReviewsTabSkeleton';
 
 const PAGE_SIZE = 10;
 
@@ -16,12 +17,46 @@ const ReviewsTab: React.FC = () => {
   const [sort, setSort] = useState<ReviewSort>('recent');
   const [page, setPage] = useState(1);
 
-  const summary = useMemo(() => computeSummary(REVIEWS_MOCK), []);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setIsError(false);
+    setAttempt((a) => a + 1);
+    try {
+      const isTest = (globalThis as any)?.__TEST__ === true;
+      if (!isTest) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      // Força erro na primeira tentativa, simulando instabilidade de rede
+      if (attempt === 0) {
+        throw new Error('Simulated error');
+      }
+
+      setReviews(REVIEWS_MOCK);
+    } catch (e) {
+      setIsError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [attempt]);
+
+  useEffect(() => {
+    // carrega ao montar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    load();
+  }, []);
+
+  const summary = useMemo(() => computeSummary(reviews), [reviews]);
 
   const filteredSorted = useMemo(() => {
-    const filtered = filterReviews(REVIEWS_MOCK, filter);
+    const filtered = filterReviews(reviews, filter);
     return sortReviews(filtered, sort);
-  }, [filter, sort]);
+  }, [reviews, filter, sort]);
 
   const data = useMemo(() => filteredSorted.slice(0, page * PAGE_SIZE), [filteredSorted, page]);
 
@@ -43,6 +78,21 @@ const ReviewsTab: React.FC = () => {
     setPage(1);
     setSort(s);
   }, []);
+
+  if (loading) {
+    return <ReviewsTabSkeleton />;
+  }
+
+  if (isError) {
+    return (
+      <EmptyState
+        testID="reviews-error"
+        title="Oops, algo deu errado"
+        description="Não foi possível carregar as avaliações. Verifique sua conexão e tente novamente."
+        action={{ label: 'Tentar novamente', onPress: load }}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
