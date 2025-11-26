@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, ScrollView } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Divider } from 'react-native-paper';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing } from '@/styles/theme';
@@ -27,7 +27,7 @@ const ProfileHome: React.FC = () => {
   }, []);
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
       {isLoading && showSkeleton ? (
         <ProfileHeaderSkeleton />
       ) : (
@@ -42,8 +42,10 @@ const ProfileHome: React.FC = () => {
       <Divider style={{ marginVertical: spacing.lg }} />
 
       {/* Conteúdo em abas */}
-      <ProfileTabs isLoading={isLoading && showSkeleton} />
-    </ScrollView>
+      <View style={styles.tabsContainer}>
+        <ProfileTabs isLoading={isLoading && showSkeleton} />
+      </View>
+    </View>
   );
 };
 
@@ -52,6 +54,9 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: spacing.md,
         backgroundColor: colors.background,
+    },
+    tabsContainer: {
+        flex: 1,
     },
     
 });
