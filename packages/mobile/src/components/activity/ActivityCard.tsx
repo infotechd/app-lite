@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Card, Text, Avatar } from 'react-native-paper';
-import { colors, radius, spacing } from '@/styles/theme';
+import { View, StyleSheet, Text, Image } from 'react-native';
+import { colors, radius, spacing, typography } from '@/styles/theme';
 import type { Activity } from '@/hooks/useUserActivity';
 
 type Props = {
@@ -18,74 +17,45 @@ function formatDate(dateISO: string) {
   }
 }
 
-const LeftIcon = (type: Activity['type']) => (props: any) => {
-  switch (type) {
-    case 'new_post':
-      return <Avatar.Icon {...props} icon="image" />;
-    case 'sale_completed':
-      return <Avatar.Icon {...props} icon="cart" />;
-    case 'rating_received':
-      return <Avatar.Icon {...props} icon="star" />;
-    default:
-      return <Avatar.Icon {...props} icon="bell" />;
-  }
+const EmojiIcon = ({ type }: { type: Activity['type'] }) => {
+  const iconMap: Record<Activity['type'], string> = {
+    new_post: '🖼️',
+    sale_completed: '🛒',
+    rating_received: '⭐',
+  } as const;
+  return <Text style={styles.icon}>{iconMap[type] || '🔔'}</Text>;
 };
 
 const ActivityCardComponent: React.FC<Props> = ({ activity }) => {
-  if (activity.type === 'new_post') {
-    return (
-      <Card style={styles.card} accessible accessibilityRole="summary">
-        <Card.Title
-          title={activity.title}
-          subtitle={formatDate(activity.date)}
-          left={LeftIcon(activity.type)}
-        />
-        <Card.Cover source={{ uri: activity.thumbnailUrl }} style={styles.cover} />
-      </Card>
-    );
-  }
-
-  if (activity.type === 'sale_completed') {
-    return (
-      <Card style={styles.card} accessible accessibilityRole="summary">
-        <Card.Title
-          title={`Venda: ${activity.productName}`}
-          subtitle={formatDate(activity.date)}
-          left={LeftIcon(activity.type)}
-        />
-        <Card.Content>
-          <Text variant="bodyMedium" style={styles.detailText}>
-            Valor: {currencyBRL.format(activity.amount)}
-          </Text>
-        </Card.Content>
-      </Card>
-    );
-  }
-
-  if (activity.type === 'rating_received') {
-    return (
-      <Card style={styles.card} accessible accessibilityRole="summary">
-        <Card.Title
-          title={`Avaliação recebida`}
-          subtitle={formatDate(activity.date)}
-          left={LeftIcon(activity.type)}
-        />
-        <Card.Content>
-          <View style={styles.row}>
-            <Text variant="titleMedium" style={styles.rating}>{'★'.repeat(activity.rating)}</Text>
-            <Text variant="bodyMedium" style={styles.detailText}>
-              {activity.rating} de 5
-            </Text>
-          </View>
-        </Card.Content>
-      </Card>
-    );
-  }
-
   return (
-    <Card style={styles.card}>
-      <Card.Title title={activity.title} subtitle={formatDate(activity.date)} left={LeftIcon(activity.type)} />
-    </Card>
+    <View style={styles.card} accessible accessibilityRole="summary">
+      <View style={styles.header}>
+        <EmojiIcon type={activity.type} />
+        <View style={styles.headerText}>
+          <Text style={styles.title} numberOfLines={1}>
+            {activity.type === 'sale_completed' ? `Venda: ${activity.productName}` : activity.title}
+          </Text>
+          <Text style={styles.subtitle}>{formatDate(activity.date)}</Text>
+        </View>
+      </View>
+
+      {activity.type === 'new_post' && !!activity.thumbnailUrl && (
+        <Image source={{ uri: activity.thumbnailUrl }} style={styles.cover} resizeMode="cover" />
+      )}
+
+      {activity.type === 'sale_completed' && (
+        <View style={styles.content}>
+          <Text style={styles.detailText}>Valor: {currencyBRL.format(activity.amount)}</Text>
+        </View>
+      )}
+
+      {activity.type === 'rating_received' && (
+        <View style={[styles.content, styles.row]}>
+          <Text style={styles.rating}>{'★'.repeat(activity.rating)}</Text>
+          <Text style={styles.detailText}>{activity.rating} de 5</Text>
+        </View>
+      )}
+    </View>
   );
 };
 
@@ -115,18 +85,47 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: 'hidden',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  icon: {
+    fontSize: 24,
+    marginRight: spacing.sm,
+  },
+  headerText: {
+    flex: 1,
+  },
+  title: {
+    ...typography.h3,
+    color: colors.text,
+  },
+  subtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   cover: {
+    width: '100%',
     height: 180,
+    backgroundColor: colors.border,
+  },
+  content: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   rating: {
-    color: '#F5A623',
+    color: colors.warning,
     marginRight: spacing.xs,
+    fontSize: 18,
   },
   detailText: {
+    ...typography.body,
     color: colors.textSecondary,
   },
 });
