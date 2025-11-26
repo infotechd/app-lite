@@ -58,6 +58,7 @@ const ProfileTabs: React.FC<Props> = ({ isLoading }) => {
 
   return (
     <TabView
+      style={{ flex: 1 }}
       navigationState={{ index, routes }}
       renderScene={renderScene}
       renderTabBar={renderTabBar}
