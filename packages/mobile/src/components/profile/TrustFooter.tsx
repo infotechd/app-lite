@@ -5,6 +5,7 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors, spacing, typography } from '@/styles/theme';
 import { User } from '@/types';
 import { formatJoinDate } from '@/utils/formatters';
+import AnalyticsService from '@/services/AnalyticsService';
 
 type TrustItemProps = {
   icon: string;
@@ -74,13 +75,20 @@ export const TrustFooter: React.FC<TrustFooterProps> = ({ user }) => {
         icon="email-outline"
         text="E-mail verificado"
         verified={!!user.email}
+        action
+        onPress={() => {
+          AnalyticsService.track('profile_trust_item_click', { item_name: 'email_verification' });
+        }}
       />
 
       <TrustItem
         icon="phone-outline"
         text="Telefone verificado"
         verified={!!user.telefone}
-        action={!user.telefone}
+        action
+        onPress={() => {
+          AnalyticsService.track('profile_trust_item_click', { item_name: 'phone_verification' });
+        }}
       />
 
       <TrustItem
@@ -88,12 +96,19 @@ export const TrustFooter: React.FC<TrustFooterProps> = ({ user }) => {
         text="Documento verificado"
         verified={false}
         futureFeature
+        action
+        onPress={() => {
+          AnalyticsService.track('profile_trust_item_click', { item_name: 'document_verification' });
+        }}
       />
 
       <TrustItem
         icon="shield-lock-outline"
         text="Políticas de Privacidade"
         action
+        onPress={() => {
+          AnalyticsService.track('profile_trust_item_click', { item_name: 'privacy_policy' });
+        }}
       />
     </View>
   );

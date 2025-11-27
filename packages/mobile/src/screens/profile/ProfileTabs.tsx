@@ -3,6 +3,7 @@ import { useWindowDimensions, View } from 'react-native';
 import { TabView, TabBar } from 'react-native-tab-view';
 import { useAuth } from '@/context/AuthContext';
 import { colors } from '@/styles/theme';
+import AnalyticsService from '@/services/AnalyticsService';
 
 // Abas
 import ActivityTab from './tabs/ActivityTab';
@@ -56,13 +57,22 @@ const ProfileTabs: React.FC<Props> = ({ isLoading }) => {
     />
   );
 
+  const handleIndexChange = (newIndex: number) => {
+    setIndex(newIndex);
+    const currentRoute = routes[newIndex];
+    const tab_name = currentRoute?.key?.toString().replace(/\s+/g, '_').toLowerCase();
+    if (tab_name) {
+      AnalyticsService.track('profile_tab_change', { tab_name });
+    }
+  };
+
   return (
     <TabView
       style={{ flex: 1 }}
       navigationState={{ index, routes }}
       renderScene={renderScene}
       renderTabBar={renderTabBar}
-      onIndexChange={setIndex}
+      onIndexChange={handleIndexChange}
       initialLayout={{ width: layout.width }}
     />
   );

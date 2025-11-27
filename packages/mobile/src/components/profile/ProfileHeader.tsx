@@ -5,6 +5,7 @@ import { colors, spacing, radius } from '@/styles/theme';
 import { THEME_CONFIG } from '@/constants/config';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Kpi from './Kpi';
+import AnalyticsService from '@/services/AnalyticsService';
 
 interface ProfileHeaderProps {
   user: any | null;
@@ -38,12 +39,19 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user }) => {
         <Kpi label="Pedidos" value="320" />
       </View>
       <View style={styles.actionsContainer}>
-        <Button mode="contained" onPress={() => console.log('Editar Perfil')}>
+        <Button
+          mode="contained"
+          onPress={() => {
+            AnalyticsService.track('profile_edit_click');
+          }}
+        >
           Editar Perfil
         </Button>
         <IconButton
           icon="dots-horizontal"
-          onPress={() => console.log('Mais Opções')}
+          onPress={() => {
+            AnalyticsService.track('profile_more_options_click');
+          }}
           style={{ marginLeft: spacing.sm }}
         />
       </View>

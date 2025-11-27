@@ -7,6 +7,7 @@ import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileHeaderSkeleton from '@/components/profile/skeletons/ProfileHeaderSkeleton';
 import ProfileTabs from './ProfileTabs';
 import { TrustFooter } from '@/components/profile/TrustFooter';
+import AnalyticsService from '@/services/AnalyticsService';
 
 const ProfileHome: React.FC = () => {
   const { user } = useAuth();
@@ -14,6 +15,11 @@ const ProfileHome: React.FC = () => {
   const [showSkeleton, setShowSkeleton] = useState(false); // evita flicker
 
   useEffect(() => {
+    // Dispara evento de visualização do perfil na montagem
+    const profile_id = (user as any)?.id ?? 'unknown';
+    const source = 'unknown';
+    AnalyticsService.track('profile_view', { profile_id, source });
+
     // Delay para evitar piscada em carregamentos muito rápidos
     const delay = setTimeout(() => setShowSkeleton(true), 200);
     const timer = setTimeout(() => {
