@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Divider } from 'react-native-paper';
 import { useAuth } from '@/context/AuthContext';
@@ -8,11 +8,17 @@ import ProfileHeaderSkeleton from '@/components/profile/skeletons/ProfileHeaderS
 import ProfileTabs from './ProfileTabs';
 import { TrustFooter } from '@/components/profile/TrustFooter';
 import AnalyticsService from '@/services/AnalyticsService';
+import { ProfileCompletionChecklist } from '@/components/profile/ProfileCompletionChecklist';
+import { calculateProfileCompletion } from '@/utils/profile/calculateProfileCompletion';
+import { getProfileChecklistItems } from '@/utils/profile/getProfileChecklistItems';
+import sessionStore from '@/state/session/sessionStore';
 
 const ProfileHome: React.FC = () => {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false); // evita flicker
+  const [checklistDismissed, setChecklistDismissed] = useState(sessionStore.profileChecklistDismissed); // sessão atual
+  const [checklistImpressionSent, setChecklistImpressionSent] = useState(false);
 
   useEffect(() => {
     // Dispara evento de visualização do perfil na montagem
@@ -32,6 +38,18 @@ const ProfileHome: React.FC = () => {
     };
   }, []);
 
+  const completion = useMemo(() => (user ? calculateProfileCompletion(user as any) : 100), [user]);
+  const shouldShowChecklist = !checklistDismissed && completion < 100 && !isLoading;
+
+  useEffect(() => {
+    if (shouldShowChecklist && !checklistImpressionSent && user) {
+      const items = getProfileChecklistItems(user as any);
+      const missing = items.filter((i) => !i.isComplete).length;
+      AnalyticsService.track('profile_checklist_impression', { completion, missing_count: missing });
+      setChecklistImpressionSent(true);
+    }
+  }, [shouldShowChecklist, checklistImpressionSent, user, completion]);
+
   return (
     <View style={styles.container}>
       {isLoading && showSkeleton ? (
@@ -39,6 +57,18 @@ const ProfileHome: React.FC = () => {
       ) : (
         <ProfileHeader user={user} />
       )}
+
+      {shouldShowChecklist ? (
+        <View style={{ marginTop: spacing.md }}>
+          <ProfileCompletionChecklist
+            user={user as any}
+            onDismiss={() => {
+              sessionStore.dismissProfileChecklist();
+              setChecklistDismissed(true);
+            }}
+          />
+        </View>
+      ) : null}
 
       <Divider style={{ marginVertical: spacing.lg }} />
 
