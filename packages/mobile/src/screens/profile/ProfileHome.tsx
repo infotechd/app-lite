@@ -12,6 +12,8 @@ import { ProfileCompletionChecklist } from '@/components/profile/ProfileCompleti
 import { calculateProfileCompletion } from '@/utils/profile/calculateProfileCompletion';
 import { getProfileChecklistItems } from '@/utils/profile/getProfileChecklistItems';
 import sessionStore from '@/state/session/sessionStore';
+import ProfileHighlights from '@/components/profile/highlights/ProfileHighlights';
+import type { Badge, Interest } from '@/components/profile/highlights/types';
 
 const ProfileHome: React.FC = () => {
   const { user } = useAuth();
@@ -69,6 +71,27 @@ const ProfileHome: React.FC = () => {
           />
         </View>
       ) : null}
+
+      {/* Highlights (Conquistas + Interesses) */}
+      {(() => {
+        // Exibe dados mockados apenas em desenvolvimento.
+        // Integração com dados reais pode mapear user.badges e user.interests aqui.
+        if (__DEV__) {
+          const MOCK_BADGES: Badge[] = [
+            { id: '1', title: 'Pioneiro', description: 'Primeira oferta publicada', iconUrl: 'https://placekitten.com/200/200', earnedAt: '2025-07-25T10:00:00Z' },
+            { id: '2', title: 'Top Avaliado', description: 'Média acima de 4.8', iconUrl: 'https://placekitten.com/201/201', earnedAt: '2025-08-02T10:00:00Z' },
+            { id: '3', title: 'Explorador', description: 'Visitou 50 perfis', iconUrl: 'https://placekitten.com/202/202', earnedAt: '2025-08-13T10:00:00Z' },
+          ];
+          const MOCK_INTERESTS: Interest[] = [
+            { id: 'a', name: 'Tecnologia' },
+            { id: 'b', name: 'Esportes' },
+            { id: 'c', name: 'Música' },
+            { id: 'd', name: 'Viagens' },
+          ];
+          return <ProfileHighlights badges={MOCK_BADGES} interests={MOCK_INTERESTS} />;
+        }
+        return null;
+      })()}
 
       <Divider style={{ marginVertical: spacing.lg }} />
 
