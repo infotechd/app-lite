@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -21,11 +25,21 @@
     "rootDir": "./",
     "baseUrl": ".",
     "paths": {
-      "@common/*": ["packages/common/src/*"],
-      "@backend/*": ["packages/backend/src/*"],
-      "@mobile/*": ["packages/mobile/src/*"],
-      "@web/*": ["packages/web/src/*"],
-      "@worker/*": ["packages/worker/src/*"]
+      "@common/*": [
+        "packages/common/src/*"
+      ],
+      "@backend/*": [
+        "packages/backend/src/*"
+      ],
+      "@mobile/*": [
+        "packages/mobile/src/*"
+      ],
+      "@web/*": [
+        "packages/web/src/*"
+      ],
+      "@worker/*": [
+        "packages/worker/src/*"
+      ]
     }
   },
   "include": [
@@ -42,10 +56,20 @@
     "**/*.spec.tsx"
   ],
   "references": [
-    { "path": "./packages/common" },
-    { "path": "./packages/backend" },
-    { "path": "./packages/mobile" },
-    { "path": "./packages/web" },
-    { "path": "./packages/worker" }
+    {
+      "path": "./packages/common"
+    },
+    {
+      "path": "./packages/backend"
+    },
+    {
+      "path": "./packages/mobile"
+    },
+    {
+      "path": "./packages/web"
+    },
+    {
+      "path": "./packages/worker"
+    }
   ]
 }

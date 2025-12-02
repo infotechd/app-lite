@@ -21,12 +21,15 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingHorizontal: spacing.sm,
+    paddingVertical: 4, // evita corte do label em densidades maiores
   },
   value: {
     // Destaque para o valor
   },
   label: {
     color: colors.textSecondary,
+    marginTop: 2,
+    lineHeight: 14, // ajuda a não truncar em bodySmall
   },
 });
 
