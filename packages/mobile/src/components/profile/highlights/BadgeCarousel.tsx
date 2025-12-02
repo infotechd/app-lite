@@ -60,7 +60,7 @@ const BadgeCarousel: React.FC<BadgeCarouselProps> = ({ badges }) => {
         renderItem={renderItem}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: spacing.md }}
+        contentContainerStyle={{ paddingLeft: spacing.md, paddingRight: spacing.lg }}
         onScroll={onScroll}
         scrollEventThrottle={16}
         decelerationRate="fast"

@@ -101,6 +101,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-around',
+    paddingBottom: 2, // pequeno respiro para evitar corte do label dos KPIs
   },
   actionsContainer: {
     marginTop: spacing.md,
