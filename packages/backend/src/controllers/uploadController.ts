@@ -5,6 +5,15 @@ import { logger } from '../utils/logger';
 import { z } from 'zod';
 import type { AuthRequest } from '../middleware/auth';
 
+// Middleware para adicionar headers de cache
+export const setCacheHeaders: RequestHandler = (req, res, next) => {
+    // Cache de 7 dias para os arquivos
+    const sevenDays = 7 * 24 * 60 * 60;
+    res.setHeader('Cache-Control', `public, max-age=${sevenDays}, immutable`);
+    next();
+};
+
+
 /**
  * Controller responsável por lidar com uploads de arquivos (imagens e vídeos) para o provedor (Cloudinary),
  * assim como listar, obter informações e deletar arquivos do usuário autenticado.

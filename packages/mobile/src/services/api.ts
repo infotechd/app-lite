@@ -34,6 +34,7 @@ const baseCandidates: string[] = [
     env?.apiUrl || '',
     'http://192.168.1.54:4000/api', // Casa — IP da sua casa
     'http://192.168.1.12:4000/api',  // Trabalho — IP do seu trabalho
+    'http://192.168.1.3:4000/api',   // IP adicional solicitado
     'http://192.168.15.12:4000/api', // Casa — faixa alternativa 192.168.15.x
     'http://192.168.15.1:4000/api',  // Casa — gateway/roteador comum
     'http://10.0.2.2:4000/api',      // Emulador Android (host do PC)

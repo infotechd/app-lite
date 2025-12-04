@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, Text, Image } from 'react-native';
+import OptimizedImage from '@/components/common/OptimizedImage';
+import { View, StyleSheet, Text } from 'react-native';
 import { colors, radius, spacing, typography } from '@/styles/theme';
 import type { Activity } from '@/hooks/useUserActivity';
 
@@ -40,7 +41,11 @@ const ActivityCardComponent: React.FC<Props> = ({ activity }) => {
       </View>
 
       {activity.type === 'new_post' && !!activity.thumbnailUrl && (
-        <Image source={{ uri: activity.thumbnailUrl }} style={styles.cover} resizeMode="cover" />
+        <OptimizedImage
+          source={{ uri: activity.thumbnailUrl }}
+          blurhash={activity.thumbnailBlurhash}
+          style={styles.cover}
+        />
       )}
 
       {activity.type === 'sale_completed' && (

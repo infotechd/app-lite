@@ -14,7 +14,8 @@ export interface IOfertaServico extends Document {
         avaliacao: number;
         tipoPessoa: 'PF' | 'PJ';
     };
-    imagens: string[]; // ⚠️ IMPORTANTE: Array de URLs das imagens no GridFS
+    // Suporta dados legados que podem estar como string[] no banco em versões antigas
+    imagens: Array<string | { url: string; blurhash?: string }>;
     videos?: string[]; // Array de URLs dos vídeos no GridFS
     localizacao: {
         cidade: string;
@@ -128,12 +129,19 @@ const OfertaServicoSchema = new Schema<IOfertaServico>({
 
     // ⚠️ IMPORTANTE: Array de URLs das imagens armazenadas no GridFS
     imagens: [{
-        type: String, // URL: /api/upload/file/{fileId}
-        validate: {
-            validator: function(url: string) {
-                return url.startsWith('/api/upload/file/') || url.startsWith('http');
-            },
-            message: 'URL de imagem inválida'
+        url: {
+            type: String, // URL: /api/upload/file/{fileId}
+            required: true,
+            validate: {
+                validator: function(url: string) {
+                    return url.startsWith('/api/upload/file/') || url.startsWith('http');
+                },
+                message: 'URL de imagem inválida'
+            }
+        },
+        blurhash: {
+            type: String,
+            trim: true
         }
     }],
 
@@ -282,11 +290,15 @@ OfertaServicoSchema.index({
 });
 
 // Virtual para URL completa das imagens
-OfertaServicoSchema.virtual('imagensCompletas').get(function() {
+// Suporta itens como objetos { url, blurhash } e também strings legadas
+OfertaServicoSchema.virtual('imagensCompletas').get(function(this: any) {
     const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
-    return this.imagens.map((img: string) => {
-        if (img.startsWith('http')) return img;
-        return `${baseUrl}${img}`;
+    const imagens = (this?.imagens || []) as Array<string | { url: string; blurhash?: string }>;
+
+    return imagens.map((img) => {
+        const url = typeof img === 'string' ? img : img?.url;
+        if (!url) return url as any;
+        return url.startsWith('http') ? url : `${baseUrl}${url}`;
     });
 });
 

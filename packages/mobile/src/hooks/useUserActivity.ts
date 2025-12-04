@@ -13,6 +13,7 @@ export interface ActivityBase {
 export interface NewPostActivity extends ActivityBase {
   type: 'new_post';
   thumbnailUrl: string;
+  thumbnailBlurhash?: string;
 }
 
 export interface SaleCompletedActivity extends ActivityBase {
@@ -45,6 +46,7 @@ function createMockActivities(userId: string, total: number): Activity[] {
         title: `Novo post #${i + 1}`,
         date,
         thumbnailUrl: `https://picsum.photos/seed/${encodeURIComponent(id)}/400/240`,
+        thumbnailBlurhash: 'L6PZfSi_.AyE_3t7t7R**j_3mWj?', // Mock blurhash
       });
     } else if (kind === 1) {
       const amount = parseFloat((((i + 1) * 7.95) % 999).toFixed(2));
