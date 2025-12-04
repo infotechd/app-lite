@@ -7,6 +7,7 @@ export interface IUser extends Document {
     senha: string;
     telefone?: string;
     avatar?: string;
+    avatarBlurhash?: string;
     tipo: 'comprador' | 'prestador' | 'anunciante';
 
     // Novos campos PF/PJ
@@ -58,6 +59,11 @@ const UserSchema = new Schema<IUser>({
     },
 
     avatar: {
+        type: String,
+        trim: true
+    },
+
+    avatarBlurhash: {
         type: String,
         trim: true
     },
@@ -165,7 +171,7 @@ UserSchema.index({ cpf: 1 }, { unique: true, sparse: true });
 UserSchema.index({ cnpj: 1 }, { unique: true, sparse: true });
 
 // Hash da senha antes de salvar
-UserSchema.pre('save', async function(next) {
+UserSchema.pre('save', async function(this: any, next) {
     if (!this.isModified('senha')) return next();
 
     try {
@@ -178,7 +184,7 @@ UserSchema.pre('save', async function(next) {
 });
 
 // Método para comparar senhas
-UserSchema.methods.comparePassword = async function(password: string): Promise<boolean> {
+UserSchema.methods.comparePassword = async function(this: any, password: string): Promise<boolean> {
     return bcrypt.compare(password, this.senha);
 };
 

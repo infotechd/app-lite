@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
-import { uploadController } from '../controllers/uploadController';
+import { uploadController, setCacheHeaders } from '../controllers/uploadController';
 import { authMiddleware } from '../middleware/auth';
 import rateLimit from 'express-rate-limit';
 
@@ -48,7 +48,7 @@ router.get('/files', authMiddleware, uploadController.getUserFiles);
  * @access  Private
  * @params  publicId: string (URL encoded)
  */
-router.get('/file/:publicId', authMiddleware, uploadController.getFileInfo);
+router.get('/file/:publicId', authMiddleware, setCacheHeaders, uploadController.getFileInfo);
 
 /**
  * @route   DELETE /api/upload/file/:publicId

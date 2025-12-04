@@ -7,6 +7,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Kpi from './Kpi';
 import AnalyticsService from '@/services/AnalyticsService';
 
+import OptimizedImage from '@/components/common/OptimizedImage';
+
 interface ProfileHeaderProps {
   user: any | null;
 }
@@ -15,11 +17,22 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user }) => {
   const initial = (user?.nome?.[0] ?? 'U').toUpperCase();
   const displayName = user?.nome ?? 'Usuário';
   const handle = `@${user?.nome ? user.nome.toLowerCase().replace(/\s/g, '') : 'usuario'}`;
+  const avatarUrl = user?.avatar;
+  // Mock blurhash - idealmente viria do backend
+  const avatarBlurhash = user?.avatarBlurhash ?? 'L6PZfSi_.AyE_3t7t7R**j_3mWj?';
 
   return (
     <View style={styles.container}>
       <View style={styles.avatarContainer}>
-        <Avatar.Text label={initial} size={80} style={styles.avatar} />
+        {avatarUrl ? (
+          <OptimizedImage
+            source={{ uri: avatarUrl }}
+            blurhash={avatarBlurhash}
+            style={styles.avatar}
+          />
+        ) : (
+          <Avatar.Text label={initial} size={80} style={styles.avatar} />
+        )}
         {user?.verified ? (
           <VerifiedBadge />
         ) : null}
@@ -75,6 +88,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     borderWidth: 2,
     borderColor: colors.surface,
     ...THEME_CONFIG.shadows.md,
