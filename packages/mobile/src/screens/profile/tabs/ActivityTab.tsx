@@ -1,15 +1,19 @@
-import React, { useMemo } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { FlatList, StyleSheet, View, ListRenderItem } from 'react-native';
 import { ActivityIndicator } from 'react-native-paper';
 import { spacing } from '@/styles/theme';
 import ActivityTabSkeleton from '@/components/profile/skeletons/ActivityTabSkeleton';
 import EmptyState from '@/components/common/EmptyState';
 import ActivityCard from '@/components/activity/ActivityCard';
-import useUserActivity from '@/hooks/useUserActivity';
+import useUserActivity, { Activity } from '@/hooks/useUserActivity';
 
 interface Props {
   isLoading?: boolean;
 }
+
+// Se os itens da lista vierem a ter uma altura fixa, ajuste esta constante
+// e descomente a implementação de `getItemLayout` para otimizar a rolagem.
+// const ITEM_HEIGHT = 0;
 
 const ActivityTab: React.FC<Props> = ({ isLoading }) => {
   const userId = 'current-user';
@@ -25,6 +29,33 @@ const ActivityTab: React.FC<Props> = ({ isLoading }) => {
   } = useUserActivity(userId);
 
   const isLoadingEffective = useMemo(() => Boolean(isLoading) || loading, [isLoading, loading]);
+
+  const keyExtractor = useCallback((item: Activity) => item.id, []);
+
+  const renderItem = useCallback<ListRenderItem<Activity>>(({ item }) => {
+    return <ActivityCard activity={item} />;
+  }, []);
+
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  const ListFooter = useCallback(() => (
+    <View style={styles.footer}>
+      {isFetchingNextPage ? <ActivityIndicator animating size="small" /> : null}
+    </View>
+  ), [isFetchingNextPage]);
+
+  // A otimização `getItemLayout` só é segura se TODOS os itens tiverem a mesma altura fixa.
+  // Como os cards de atividade têm alturas variáveis (ex: posts com imagem vs. sem imagem),
+  // esta propriedade não deve ser usada até que o design garanta uma altura uniforme.
+  // const getItemLayout = useCallback((_: any, index: number) => ({
+  //   length: ITEM_HEIGHT,
+  //   offset: ITEM_HEIGHT * index,
+  //   index,
+  // }), []);
 
   if (isLoadingEffective && activities.length === 0) {
     return <ActivityTabSkeleton />;
@@ -56,24 +87,19 @@ const ActivityTab: React.FC<Props> = ({ isLoading }) => {
       style={{ flex: 1 }}
       contentContainerStyle={styles.container}
       data={activities}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <ActivityCard activity={item} />}
-      onEndReached={() => {
-        if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-      }}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      onEndReached={handleEndReached}
       onEndReachedThreshold={0.5}
       refreshing={isRefreshing}
       onRefresh={refresh}
       initialNumToRender={10}
-      maxToRenderPerBatch={10}
+      maxToRenderPerBatch={5}
       updateCellsBatchingPeriod={50}
       windowSize={5}
       removeClippedSubviews
-      ListFooterComponent={() => (
-        <View style={styles.footer}>
-          {isFetchingNextPage ? <ActivityIndicator animating size="small" /> : null}
-        </View>
-      )}
+      ListFooterComponent={ListFooter}
+      // getItemLayout={getItemLayout} // Ative somente se a altura dos itens for fixa
     />
   );
 };
