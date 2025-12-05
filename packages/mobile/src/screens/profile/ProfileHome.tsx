@@ -57,7 +57,7 @@ const ProfileHome: React.FC = () => {
       {isLoading && showSkeleton ? (
         <ProfileHeaderSkeleton />
       ) : (
-        <ProfileHeader user={user} />
+        <ProfileHeader user={user} profileId={(user as any)?.id ?? 'unknown'} />
       )}
 
       <ScrollView

@@ -91,9 +91,20 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user, profileId }) => {
 };
 
 const VerifiedBadge: React.FC = () => (
-  <View style={styles.verifiedBadge}>
-    <MaterialCommunityIcons name="check-decagram" size={16} color={colors.surface} />
-  </View>
+    <View
+        style={styles.verifiedBadge}
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel="Perfil verificado"
+    >
+        <MaterialCommunityIcons
+            name="check-decagram"
+            size={16}
+            color={colors.surface}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+        />
+    </View>
 );
 
 const styles = StyleSheet.create({
