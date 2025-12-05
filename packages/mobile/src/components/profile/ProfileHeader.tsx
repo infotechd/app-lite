@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Avatar, Button, IconButton } from 'react-native-paper';
 import { colors, spacing, radius } from '@/styles/theme';
@@ -6,14 +6,18 @@ import { THEME_CONFIG } from '@/constants/config';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Kpi from './Kpi';
 import AnalyticsService from '@/services/AnalyticsService';
+import ProfileMoreMenu from './ProfileMoreMenu';
 
 import OptimizedImage from '@/components/common/OptimizedImage';
 
 interface ProfileHeaderProps {
   user: any | null;
+  profileId: string;
 }
 
-const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user }) => {
+const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user, profileId }) => {
+  const [menuVisible, setMenuVisible] = useState(false);
+  const profileUrl = useMemo(() => `https://seuapp.com/profile/${profileId}`, [profileId]);
   const initial = (user?.nome?.[0] ?? 'U').toUpperCase();
   const displayName = user?.nome ?? 'Usuário';
   const handle = `@${user?.nome ? user.nome.toLowerCase().replace(/\s/g, '') : 'usuario'}`;
@@ -60,12 +64,26 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user }) => {
         >
           Editar Perfil
         </Button>
-        <IconButton
-          icon="dots-horizontal"
-          onPress={() => {
-            AnalyticsService.track('profile_more_options_click');
+        <ProfileMoreMenu
+          visible={menuVisible}
+          onDismiss={() => setMenuVisible(false)}
+          profileId={profileId}
+          profileUrl={profileUrl}
+          anchor={
+            <IconButton
+              icon="dots-horizontal"
+              onPress={() => {
+                setMenuVisible(true);
+                AnalyticsService.track('profile_more_options_click');
+              }}
+              style={{ marginLeft: spacing.sm }}
+            />
+          }
+          onNavigatePrivacySettings={() => {
+            // Navegação opcional
+            // navigation.navigate('PrivacySettings', { profileId });
+            console.log('Ir para tela de Configurações de Privacidade');
           }}
-          style={{ marginLeft: spacing.sm }}
         />
       </View>
     </View>
