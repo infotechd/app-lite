@@ -149,26 +149,24 @@ export async function pickMedia(
         // 4.3) Restringir duração do vídeo a 15 segundos
         // OBSERVAÇÃO: Expo documenta duração em segundos, mas já houve relatos de plataformas retornando em ms.
         // Sugestão futura: normalizar/validar com margem ou checar valores atípicos (ex.: duration > 1000 = ms).
-        if ((asset as any).type === 'video' && typeof duration === 'number' && duration > 15) {
+        if ((asset as any).type === 'video' && typeof duration === 'number' && duration > 15000) {
             warnings.push(`${nameGuess}: vídeo excede 15 segundos`);
             continue;
         }
 
-        // 4.4) Restringir tamanho máximo por arquivo (ex.: 10MB), vindo de cfg.MAX_SIZE
+        // 4.4) Restringir tamanho máximo por arquivo
         if (typeof size === 'number' && size > cfg.MAX_SIZE) {
-            // Sugestão futura: oferecer compressão/redimensionamento automático quando exceder o limite.
-            warnings.push(`${nameGuess}: excede 10MB`);
+            warnings.push(`${nameGuess}: excede o tamanho máximo de ${cfg.MAX_SIZE / 1024 / 1024}MB`);
             continue;
         }
 
-        // 4.5) Montar objeto no formato esperado pela API de upload/consumo interno
-        const file: MediaFile = {
+        // 4.5) Adicionar à lista de resultados
+        accepted.push({
             uri: asset.uri,
             name: nameGuess,
             type: mime,
             size,
-        };
-        accepted.push(file);
+        });
     }
 
     // 5) Mesclar com os arquivos já existentes, evitando duplicidades pela URI
