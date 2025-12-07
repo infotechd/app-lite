@@ -50,7 +50,7 @@ export type MediaConfig = {
 
 export const OFERTA_MEDIA_CONFIG: MediaConfig = {
     MAX_FILES: 5,
-    MAX_SIZE: 10 * 1024 * 1024, // 10MB por arquivo
+    MAX_SIZE: 50 * 1024 * 1024, // 50MB
     ALLOWED_TYPES: ['image/jpeg', 'image/png', 'video/mp4'] as const,
 };
 

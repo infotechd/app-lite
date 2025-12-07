@@ -33,6 +33,11 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
     const primeiraImagem = toAbsoluteMediaUrl(primeiraImagemRaw);
     const videoUrls = Array.isArray((oferta as any).videos) ? toAbsoluteMediaUrls((oferta as any).videos) : [];
 
+    const allMedia = [
+      ...(oferta.imagens || []).map(url => ({ type: 'image', url: toAbsoluteMediaUrl(url) })),
+      ...(oferta.videos || []).map(url => ({ type: 'video', url: toAbsoluteMediaUrl(url) }))
+    ];
+
     const handleEdit = () => {
         navigation.navigate('EditOferta', { oferta });
     };
@@ -60,12 +65,25 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
     return (
         <ScrollView contentContainerStyle={styles.container}>
             <Card style={styles.card}>
-                {primeiraImagem ? (
-                    <Image source={{ uri: primeiraImagem }} style={styles.image} resizeMode="cover" />
-                ) : (
-                    <View style={[styles.image, styles.imagePlaceholder]}>
-                        <Icon name="image-off" size={48} color={colors.textSecondary} />
-                    </View>
+                {allMedia.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaCarousel}>
+                    {allMedia.map((media, index) => (
+                      <View key={`media-${index}`} style={styles.mediaContainer}>
+                        {media.type === 'image' ? (
+                          <Image source={{ uri: media.url }} style={styles.mediaContent} resizeMode="cover" />
+                        ) : (
+                          <Video
+                            source={{ uri: media.url }}
+                            useNativeControls
+                            resizeMode={ResizeMode.COVER} // Use COVER para preencher o espaço
+                            style={styles.mediaContent}
+                            shouldPlay={false}
+                            isLooping={false}
+                          />
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
                 )}
                 <Card.Content>
                     <View style={styles.headerRow}>
@@ -89,22 +107,6 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
 
                     <Text style={styles.description}>{oferta.descricao}</Text>
 
-                    {videoUrls.length > 0 && (
-                        <View style={{ marginTop: spacing.md }} accessibilityLabel="Vídeos da oferta">
-                            {videoUrls.map((v, i) => (
-                                <View key={`vid-${i}`} style={{ marginBottom: spacing.sm }}>
-                                    <Video
-                                        source={{ uri: v }}
-                                        useNativeControls
-                                        resizeMode={ResizeMode.CONTAIN}
-                                        style={styles.video}
-                                        shouldPlay={false}
-                                        isLooping={false}
-                                    />
-                                </View>
-                            ))}
-                        </View>
-                    )}
 
                     {isOwner && (
                         <View style={styles.ownerActions} accessibilityLabel="Ações do proprietário">

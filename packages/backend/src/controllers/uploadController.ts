@@ -93,8 +93,8 @@ const storage = multer.memoryStorage();
 const upload = multer({
     storage,
     limits: {
-        // Tamanho máximo por arquivo, podendo ser configurado via env (padrão 10MB)
-        fileSize: parseInt(process.env.MAX_FILE_SIZE || '10485760'), // 10MB
+        // Tamanho máximo por arquivo, podendo ser configurado via env (padrão 50MB)
+        fileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800'), // 50MB
         // Quantidade máxima de arquivos por requisição
         files: parseInt(process.env.MAX_FILES_PER_UPLOAD || '5'),
     },
@@ -178,29 +178,11 @@ export const uploadController: UploadController = {
             // Validar dados adicionais via zod; dispara se inválido
             const validatedData = uploadSchema.parse(req.body);
 
-            // Regras de negócio: rejeitar vídeos com duração superior a 15s
-            const invalidVideos: { name: string; reason: string }[] = [];
-            const validFiles = files.filter((file) => {
-                if (file.mimetype === 'video/mp4' || file.mimetype === 'video/quicktime') {
-                    const dur = getMp4DurationSeconds(file.buffer);
-                    if (typeof dur === 'number' && dur > 15) {
-                        invalidVideos.push({
-                            name: file.originalname,
-                            reason: `duração ${dur.toFixed(1)}s > 15s`
-                        });
-                        return false; // exclui da lista a ser enviada
-                    }
-                }
-                return true;
-            });
-
             // Se após os filtros não sobrou nada, retorna 400 informando o motivo
-            if (validFiles.length === 0) {
+            if (files.length === 0) {
                 res.status(400).json({
                     success: false,
-                    message: invalidVideos.length
-                        ? `Nenhum arquivo válido. Vídeos inválidos: ${invalidVideos.map(v => v.name).join(', ')}`
-                        : 'Nenhum arquivo válido',
+                    message: 'Nenhum arquivo válido',
                 });
                 return;
             }
@@ -217,7 +199,7 @@ export const uploadController: UploadController = {
 
             // Dispara upload para o provedor via service. validatedData pode levar metadados
             const uploadedFiles = await uploadService.uploadMultipleFiles(
-                validFiles,
+                files,
                 userId,
                 validatedData
             );
@@ -226,7 +208,6 @@ export const uploadController: UploadController = {
             logger.info('upload.success', {
                 userId,
                 count: uploadedFiles.length,
-                invalidCount: invalidVideos.length
             });
 
             // Resposta padronizada com os campos essenciais de cada arquivo
@@ -242,8 +223,6 @@ export const uploadController: UploadController = {
                         publicId: f.publicId,
                         resourceType: f.resourceType
                     })),
-                    // Retornamos a lista de vídeos inválidos (se houver) para feedback no cliente
-                    invalidVideos: invalidVideos.length > 0 ? invalidVideos : undefined
                 }
             });
         } catch (error: any) {
