@@ -27,6 +27,11 @@ type Props = NativeStackScreenProps<OfertasStackParamList, 'EditOferta'>;
 // Estrutura do formulário de edição
 // OBS: Mantém separação entre mídias existentes (URLs já hospedadas) e novas (arquivos locais)
 // para controlar uploads e remoções corretamente.
+/**
+ * Estrutura do estado do formulário de edição de oferta.
+ * Mantém separadas as mídias já hospedadas (kept*) das novas selecionadas (newMediaFiles)
+ * para controlar corretamente uploads, remoções e o limite total permitido.
+ */
 type EditForm = {
     titulo: string; // Título da oferta
     descricao: string; // Descrição da oferta
@@ -40,6 +45,17 @@ type EditForm = {
     newMediaFiles: MediaFile[]; // Arquivos locais de mídias recém-selecionadas para upload
 };
 
+/**
+ * Tela de edição de oferta.
+ *
+ * Permite atualizar título, descrição, preço (com máscara BRL), unidade do preço,
+ * categoria, UF/cidade (cidade preenchida automaticamente) e mídias (imagens/vídeos).
+ * Concilia mídias já hospedadas com novas mídias selecionadas antes de enviar à API.
+ *
+ * @param route - Propriedade de navegação contendo os parâmetros, incluindo a oferta original (route.params.oferta).
+ * @param navigation - Objeto de navegação para transitar entre telas.
+ * @returns JSX.Element com a UI da tela de edição.
+ */
 const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
     // Oferta original recebida pela navegação
     const oferta = route.params.oferta;
@@ -86,13 +102,29 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
         );
     }, [form, submitting]);
 
-    // Helper genérico para atualizar um campo do formulário de forma imutável
-    // Ponto de melhoria: usar useCallback para evitar recriação em cada render se for repassado a muitos filhos.
+    /**
+     * Atualiza um campo do formulário de forma imutável.
+     * Útil para repassar a inputs e componentes filhos como callback de mudança.
+     *
+     * Ponto de melhoria: envolver com useCallback se for passado para muitos filhos
+     * para evitar recriações desnecessárias a cada render.
+     *
+     * @typeParam K - Chave do campo do formulário dentro de EditForm.
+     * @param key - Nome da propriedade a ser atualizada.
+     * @param value - Novo valor do campo correspondente.
+     * @returns void
+     */
     const setField = <K extends keyof EditForm>(key: K, value: EditForm[K]) => {
         setForm((prev) => ({ ...prev, [key]: value }));
     };
 
-    // Handler para abrir o seletor de mídias, limitando conforme espaço restante
+    /**
+     * Abre o seletor de mídias (galeria/câmera) respeitando o limite máximo permitido.
+     * Calcula o espaço restante com base nas mídias já mantidas e impede seleção quando o limite foi atingido.
+     * Ao concluir, delega o processamento e validações adicionais para o utilitário handleMediaPickResult.
+     *
+     * @returns Promise<void>
+     */
     const onPickMedia = async () => {
         try {
             const spaceLeft = OFERTA_MEDIA_CONFIG.MAX_FILES - (form.keptImages.length + form.keptVideos.length);
@@ -117,22 +149,54 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
         }
     };
 
-    // Remove uma imagem remanescente (já hospedada) da lista de mantidas
+    /**
+     * Remove uma imagem existente (já hospedada) da lista de mídias mantidas.
+     * Não remove do servidor imediatamente; apenas exclui da lista local para que a atualização
+     * posterior envie o novo conjunto sem essa URL.
+     *
+     * @param index - Posição da imagem na lista de keptImages a ser removida.
+     * @returns void
+     */
     const onRemoveKeptImage = (index: number) => {
         setForm((prev) => ({ ...prev, keptImages: prev.keptImages.filter((_, i) => i !== index) }));
     };
 
-    // Remove um vídeo remanescente (já hospedado) da lista de mantidos
+    /**
+     * Remove um vídeo existente (já hospedado) da lista de mídias mantidas.
+     * Assim como imagens, a remoção efetiva frente ao backend ocorre ao enviar o novo payload.
+     *
+     * @param index - Posição do vídeo na lista de keptVideos a ser removido.
+     * @returns void
+     */
     const onRemoveKeptVideo = (index: number) => {
         setForm((prev) => ({ ...prev, keptVideos: prev.keptVideos.filter((_, i) => i !== index) }));
     };
 
-    // Remove uma mídia nova (ainda local) antes do upload
+    /**
+     * Remove uma nova mídia local antes do upload (útil para desfazer seleções).
+     * Não impacta mídias já hospedadas.
+     *
+     * @param index - Posição na lista de newMediaFiles a ser removida.
+     * @returns void
+     */
     const onRemoveNewMedia = (index: number) => {
         setForm((prev) => ({ ...prev, newMediaFiles: prev.newMediaFiles.filter((_, i) => i !== index) }));
     };
 
-    // Envio do formulário: valida, faz upload (se houver novas mídias), monta payload e chama a API de atualização
+    /**
+     * Submete o formulário de edição de oferta.
+     * Fluxo:
+     * 1) Limpa erros e ativa estado de envio.
+     * 2) Valida campos com o schema existente (regras de criação reaproveitadas).
+     * 3) Faz upload de novas mídias (se houver) e coleta URLs resultantes.
+     * 4) Converte preço mascarado (BRL) para número.
+     * 5) Consolida todas as mídias (mantidas + novas) e revalida o limite final.
+     * 6) Monta payload e chama a API de atualização.
+     * 7) Em caso de sucesso, informa o usuário e navega para o detalhe da oferta.
+     * 8) Em caso de erro, exibe mensagem apropriada e registra no console.
+     *
+     * @returns Promise<void>
+     */
     const onSubmit = async () => {
         setSubmitting(true);
         setErrors({});

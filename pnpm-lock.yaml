@@ -250,9 +250,6 @@ importers:
       expo-asset:
         specifier: ~12.0.9
         version: 12.0.9(expo@54.0.20)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
-      expo-av:
-        specifier: ~16.0.7
-        version: 16.0.7(expo@54.0.20)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       expo-clipboard:
         specifier: ~8.0.8
         version: 8.0.8(expo@54.0.20)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -269,8 +266,8 @@ importers:
         specifier: ^3.0.10
         version: 3.0.10(expo@54.0.20)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       expo-image-picker:
-        specifier: ~17.0.8
-        version: 17.0.8(expo@54.0.20)
+        specifier: ~17.0.9
+        version: 17.0.9(expo@54.0.20)
       expo-secure-store:
         specifier: ~15.0.7
         version: 15.0.7(expo@54.0.20)
@@ -286,6 +283,9 @@ importers:
       expo-updates:
         specifier: ~29.0.12
         version: 29.0.12(expo@54.0.20)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+      expo-video:
+        specifier: ~2.1.2
+        version: 2.1.9(expo@54.0.20)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       hoist-non-react-statics:
         specifier: ^3.3.2
         version: 3.3.2
@@ -3524,17 +3524,6 @@ packages:
       react: '*'
       react-native: '*'
 
-  expo-av@16.0.7:
-    resolution: {integrity: sha512-QReef6/RYuZ4GekTcZZw5zY26pcPOmHqK6LMgFlPhnsT0ga97HJrgMc63pvIiojDP+q4oIv24g+QPD8ljZu4XQ==}
-    peerDependencies:
-      expo: '*'
-      react: '*'
-      react-native: '*'
-      react-native-web: '*'
-    peerDependenciesMeta:
-      react-native-web:
-        optional: true
-
   expo-clipboard@8.0.8:
     resolution: {integrity: sha512-VKoBkHIpZZDJTB0jRO4/PZskHdMNOEz3P/41tmM6fDuODMpqhvyWK053X0ebspkxiawJX9lX33JXHBCvVsTTOA==}
     peerDependencies:
@@ -3589,8 +3578,8 @@ packages:
     peerDependencies:
       expo: '*'
 
-  expo-image-picker@17.0.8:
-    resolution: {integrity: sha512-489ByhVs2XPoAu9zodivAKLv7hG4S/FOe8hO/C2U6jVxmRjpAKakKNjMml0IwWjf1+c/RYBqm1XxKaZ+vq/fDQ==}
+  expo-image-picker@17.0.9:
+    resolution: {integrity: sha512-v40HcX1fXDlNdc5y88ygvGyZU/QrcybBajYgVVLaWrXXGBqqC8Yu8jOHR99BtIdljiQ6JfYfxbeDp1woiyUrTA==}
     peerDependencies:
       expo: '*'
 
@@ -3670,6 +3659,13 @@ packages:
   expo-updates@29.0.12:
     resolution: {integrity: sha512-gE3bU6qi5g8Y1TtBzoeHac3utR0i1Wj1ufThh+zpDyFjFbegFm+gwvNLVCBagZUClYKk/4CKxh5ytnwZmPzH+g==}
     hasBin: true
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: '*'
+
+  expo-video@2.1.9:
+    resolution: {integrity: sha512-BEainlMBgAI6ww4D2fkG25WwTm+Is8suJp8SCU5Pyxs2TzrTH9q/E4bWcl8ausHGrANspLHvHY7cYlC9pgAGFw==}
     peerDependencies:
       expo: '*'
       react: '*'
@@ -11367,14 +11363,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  expo-av@16.0.7(expo@54.0.20)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
-    dependencies:
-      expo: 54.0.20(@babel/core@7.28.4)(@expo/metro-runtime@6.1.2)(graphql@16.8.1)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
-      react: 19.1.0
-      react-native: 0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0)
-    optionalDependencies:
-      react-native-web: 0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-
   expo-clipboard@8.0.8(expo@54.0.20)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:
       expo: 54.0.20(@babel/core@7.28.4)(@expo/metro-runtime@6.1.2)(graphql@16.8.1)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -11436,7 +11424,7 @@ snapshots:
     dependencies:
       expo: 54.0.20(@babel/core@7.28.4)(@expo/metro-runtime@6.1.2)(graphql@16.8.1)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
 
-  expo-image-picker@17.0.8(expo@54.0.20):
+  expo-image-picker@17.0.9(expo@54.0.20):
     dependencies:
       expo: 54.0.20(@babel/core@7.28.4)(@expo/metro-runtime@6.1.2)(graphql@16.8.1)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       expo-image-loader: 6.0.0(expo@54.0.20)
@@ -11536,6 +11524,12 @@ snapshots:
       resolve-from: 5.0.0
     transitivePeerDependencies:
       - supports-color
+
+  expo-video@2.1.9(expo@54.0.20)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
+    dependencies:
+      expo: 54.0.20(@babel/core@7.28.4)(@expo/metro-runtime@6.1.2)(graphql@16.8.1)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+      react: 19.1.0
+      react-native: 0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0)
 
   expo@54.0.20(@babel/core@7.28.4)(@expo/metro-runtime@6.1.2)(graphql@16.8.1)(react-native@0.81.5(@babel/core@7.28.4)(@react-native-community/cli@14.1.0(typescript@5.9.3))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:

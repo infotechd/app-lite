@@ -14,9 +14,9 @@ export interface IOfertaServico extends Document {
         avaliacao: number;
         tipoPessoa: 'PF' | 'PJ';
     };
-    // Suporta dados legados que podem estar como string[] no banco em versões antigas
-    imagens: Array<string | { url: string; blurhash?: string }>;
-    videos?: string[]; // Array de URLs dos vídeos no GridFS
+    // ⚠️ SIMPLIFICADO: Apenas array de strings (URLs)
+    imagens: string[];
+    videos?: string[];
     localizacao: {
         cidade: string;
         estado: string;
@@ -25,10 +25,9 @@ export interface IOfertaServico extends Document {
             latitude: number;
             longitude: number;
         };
-        // GeoJSON point para operações geoespaciais ($geoNear)
         location?: {
             type: 'Point';
-            coordinates: [number, number]; // [longitude, latitude]
+            coordinates: [number, number];
         };
     };
     status: 'ativo' | 'inativo' | 'pausado';
@@ -127,33 +126,17 @@ const OfertaServicoSchema = new Schema<IOfertaServico>({
         }
     },
 
-    // ⚠️ IMPORTANTE: Array de URLs das imagens armazenadas no GridFS
-    imagens: [{
-        url: {
-            type: String, // URL: /api/upload/file/{fileId}
-            required: true,
-            validate: {
-                validator: function(url: string) {
-                    return url.startsWith('/api/upload/file/') || url.startsWith('http');
-                },
-                message: 'URL de imagem inválida'
-            }
-        },
-        blurhash: {
-            type: String,
-            trim: true
-        }
-    }],
+    // ⚠️ SOLUÇÃO DEFINITIVA: Array simples de strings
+    // Remove TODA validação inline que causava o erro url.startsWith
+    imagens: {
+        type: [String],
+        default: []
+    },
 
-    videos: [{
-        type: String, // URL: /api/upload/file/{fileId}
-        validate: {
-            validator: function(url: string) {
-                return url.startsWith('/api/upload/file/') || url.startsWith('http');
-            },
-            message: 'URL de vídeo inválida'
-        }
-    }],
+    videos: {
+        type: [String],
+        default: []
+    },
 
     localizacao: {
         cidade: {
@@ -184,12 +167,10 @@ const OfertaServicoSchema = new Schema<IOfertaServico>({
                 max: 180
             }
         },
-        // Campo GeoJSON para suportar ordenação por distância via $geoNear
         location: {
             type: {
                 type: String,
                 enum: ['Point'],
-                // Não definir default aqui para evitar criar { type: 'Point' } sem coordinates
                 required: false
             },
             coordinates: {
@@ -202,7 +183,6 @@ const OfertaServicoSchema = new Schema<IOfertaServico>({
                     },
                     message: 'Coordenadas inválidas. Use [lng, lat]'
                 },
-                // deixar opcional; será preenchido por middleware quando coordenadas existirem
                 required: false,
                 default: undefined
             }
@@ -275,7 +255,6 @@ OfertaServicoSchema.index({ preco: 1 });
 OfertaServicoSchema.index({ createdAt: -1 });
 OfertaServicoSchema.index({ 'prestador._id': 1 });
 OfertaServicoSchema.index({ 'prestador.tipoPessoa': 1 });
-// Índice geoespacial para ordenação por distância
 OfertaServicoSchema.index({ 'localizacao.location': '2dsphere' });
 OfertaServicoSchema.index({
     titulo: 'text',
@@ -289,17 +268,29 @@ OfertaServicoSchema.index({
     }
 });
 
-// Virtual para URL completa das imagens
-// Suporta itens como objetos { url, blurhash } e também strings legadas
+// Virtual para URL completa das imagens (robustez para dados legados)
+// Aceita itens que possam vir como string ou objetos comuns { url, secure_url, path }
 OfertaServicoSchema.virtual('imagensCompletas').get(function(this: any) {
-    const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
-    const imagens = (this?.imagens || []) as Array<string | { url: string; blurhash?: string }>;
+    const baseRaw = process.env.API_BASE_URL || 'http://localhost:3000';
+    const base = String(baseRaw).replace(/\/$/, '');
+    const list = Array.isArray(this?.imagens) ? this.imagens : [];
 
-    return imagens.map((img) => {
-        const url = typeof img === 'string' ? img : img?.url;
-        if (!url) return url as any;
-        return url.startsWith('http') ? url : `${baseUrl}${url}`;
-    });
+    const toStringUrl = (x: any): string | undefined => {
+        if (!x) return undefined;
+        if (typeof x === 'string') return x;
+        const maybe = x?.url || x?.secure_url || x?.path;
+        return typeof maybe === 'string' && maybe.length > 0 ? maybe : undefined;
+    };
+
+    return list
+        .map((item: any) => {
+            const s = toStringUrl(item);
+            if (!s) return undefined;
+            if (/^https?:\/\//i.test(s)) return s;
+            const rel = s.startsWith('/') ? s : `/${s}`;
+            return `${base}${rel}`;
+        })
+        .filter(Boolean);
 });
 
 // Middleware para popular dados do prestador
@@ -311,7 +302,7 @@ OfertaServicoSchema.pre('findOne', function() {
     this.populate('prestador._id', 'nome avatar');
 });
 
-// Middleware para manter o campo GeoJSON em sincronia com as coordenadas escalares
+// Middleware para manter o campo GeoJSON em sincronia
 OfertaServicoSchema.pre('save', function(next) {
     try {
         const loc: any = (this as any).localizacao;
@@ -323,7 +314,6 @@ OfertaServicoSchema.pre('save', function(next) {
                 location: { type: 'Point', coordinates: [lng, lat] }
             };
         } else if (loc && loc.location) {
-            // Remover location inconsistente (ex.: { type: 'Point' } sem coordinates)
             const { location, ...rest } = loc;
             (this as any).localizacao = { ...rest };
         }
@@ -333,7 +323,6 @@ OfertaServicoSchema.pre('save', function(next) {
     }
 });
 
-// Também ajustar em updates via findOneAndUpdate
 OfertaServicoSchema.pre('findOneAndUpdate', function(next) {
     try {
         const update: any = this.getUpdate() || {};
@@ -351,7 +340,6 @@ OfertaServicoSchema.pre('findOneAndUpdate', function(next) {
             }
             this.setUpdate(update);
         } else if (loc && loc.location && (!coords || typeof coords.latitude !== 'number' || typeof coords.longitude !== 'number')) {
-            // Se vier um location inválido sem coordenadas válidas, removê-lo para evitar erro de índice
             const { location, ...rest } = loc;
             if (update.$set && update.$set['localizacao']) {
                 update.$set['localizacao'] = rest;

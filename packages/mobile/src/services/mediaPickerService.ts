@@ -1,185 +1,411 @@
 /**
- * Serviço utilitário para seleção de mídia (imagens e vídeos) usando expo-image-picker.
+ * Serviço utilitário completo para seleção e captura de mídia.
  *
- * Objetivo:
- * - Solicitar permissão de acesso à galeria do dispositivo.
- * - Abrir o seletor de mídia permitindo múltipla seleção (quando suportado) de imagens e vídeos.
- * - Validar arquivos selecionados contra regras de negócios (tipos permitidos, tamanho e duração).
- * - Mesclar com a lista atual, removendo duplicidades e respeitando o limite máximo permitido.
- * - Retornar avisos (warnings) para qualquer item não aceito e sinalizadores úteis (permissão negada, truncamento).
+ * VERSÃO FINAL CORRIGIDA - Compatível com expo-image-picker 17.0.9
+ * SEM AVISOS DE DEPRECIAÇÃO
  *
- * Observações:
- * - Este arquivo adiciona apenas comentários e sugestões de melhoria (PT-BR) sem alterar a lógica existente.
- * - Em ambientes com diferentes versões do expo-image-picker, alguns enums/nome de opções mudam; há um fallback tratado abaixo.
+ * FUNCIONALIDADES:
+ * 1. Tirar foto com câmera
+ * 2. Gravar vídeo com câmera (até 20 segundos)
+ * 3. Escolher foto da galeria
+ * 4. Escolher vídeo da galeria
+ *
+ * Suporte completo para Android e iOS
  */
 
 import * as ImagePicker from 'expo-image-picker';
 import { MediaFile, OFERTA_MEDIA_CONFIG, MediaConfig } from '@/utils/validation';
+import { Alert } from 'react-native';
 
 /**
- * Resultado padronizado da seleção de mídia.
+ * Resultado padronizado das operações de seleção/captura de mídia.
  *
- * files: lista final de arquivos aceitos (após validações e deduplicação).
- * warnings: mensagens para o usuário indicando por que itens foram rejeitados.
- * permissionDenied: true quando o usuário nega a permissão de acesso à galeria.
- * truncated: true quando houve corte por atingir o limite máximo permitido.
+ * Fornece a lista final de arquivos válidos, eventuais avisos de validação
+ * (tipos não suportados, tamanho excedido, duração de vídeo, etc.) e flags de
+ * contexto como negação de permissão ou truncamento por limite máximo.
  */
 export interface PickMediaResult {
+    /** Lista de mídias válidas após processamento e mescla com o estado atual. */
     files: MediaFile[];
+    /** Mensagens de aviso geradas durante a validação de cada asset selecionado. */
     warnings: string[];
+    /** True se a permissão requerida (câmera/galeria) foi negada pelo usuário/SO. */
     permissionDenied?: boolean;
+    /** True se o total de itens precisou ser limitado por `cfg.MAX_FILES`. */
     truncated?: boolean;
 }
 
-// Inferência simples de MIME com base na extensão e/ou no tipo do asset fornecido pelo picker
-// Obs.: isso é um heuristic (melhor tentativa). Em alguns dispositivos a extensão pode não refletir o MIME real.
-// Sugestão futura: usar libs que leem cabeçalho (magic numbers) para inferir o tipo real, quando possível.
+// Inferência de MIME type
+/**
+ * Obtém a extensão do arquivo a partir do nome.
+ *
+ * @param name Nome do arquivo (pode ser undefined)
+ * @returns Extensão em minúsculas, ou string vazia quando não encontrada
+ */
 const getExt = (name?: string) => (name?.split('.').pop() || '').toLowerCase();
+/**
+ * Infere o MIME type de uma mídia a partir do nome do arquivo e/ou um tipo
+ * base fornecido pelo picker.
+ *
+ * Regras aplicadas:
+ * - Se `fallbackType` indica vídeo, assume `video/mp4`.
+ * - Para imagens, reconhece `png`, `jpg`, `jpeg`.
+ * - Para vídeos, reconhece `mp4`.
+ *
+ * @param name Nome do arquivo usado para deduzir a extensão
+ * @param fallbackType Tipo base informado pelo provider (ex.: 'image' | 'video')
+ * @returns MIME type inferido ou `undefined` se não for possível determinar
+ */
 const inferMime = (name?: string, fallbackType?: string): MediaFile['type'] | undefined => {
     const ext = getExt(name);
 
-    // Se o picker diz que é vídeo/imagem, tentamos retornar um MIME plausível.
-    // ATENÇÃO: assumir "video/mp4" para qualquer vídeo é uma simplificação para a regra de negócio atual
-    // (apenas MP4 é aceito). Outros formatos de vídeo não serão aceitos adiante.
     if (fallbackType === 'video') return 'video/mp4';
     if (fallbackType === 'image') {
         if (ext === 'png') return 'image/png';
         if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
     }
 
-    // Caso não haja fallback type, tentamos pela extensão.
     if (ext === 'png') return 'image/png';
     if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
     if (ext === 'mp4') return 'video/mp4';
 
-    // TODO: considerar suporte a HEIC/HEIF (muito comum em iOS). Poderíamos converter para JPEG no upload.
     return undefined;
 };
 
 /**
- * Abre o seletor de mídia do sistema e retorna os arquivos aceitos conforme as regras de cfg.
+ * Processa os assets retornados pelo `expo-image-picker`, aplicando as regras
+ * de validação e negócio definidas na `cfg` e no `mediaType` solicitado.
  *
- * Parâmetros:
- * - current: lista de mídias já selecionadas/atribuídas.
- * - cfg: regras de validação (número máximo, tipos e tamanho máximo). Padrão: OFERTA_MEDIA_CONFIG.
+ * Fluxo de validação por asset:
+ * - Checa tipo/MIME permitido (incluindo restrição a MP4 quando vídeo);
+ * - Checa coerência com o filtro solicitado (somente imagem, somente vídeo);
+ * - Valida duração máxima de vídeo (em segundos);
+ * - Valida tamanho máximo do arquivo (bytes);
+ * - Cria `MediaFile` e mescla com a lista atual, evitando duplicidade por `uri`.
  *
- * Regras implementadas:
- * - Tipos permitidos: definidos em cfg.ALLOWED_TYPES (ex.: image/jpeg, image/png, video/mp4).
- * - Vídeos somente em MP4 e com duração máxima de 15s.
- * - Tamanho máximo (bytes) definido em cfg.MAX_SIZE.
- * - Máximo de arquivos total definido em cfg.MAX_FILES (incluindo os já existentes em current).
+ * Ao final, respeita o limite `cfg.MAX_FILES`, sinalizando `truncated` se
+ * houver excesso.
  *
- * Observações de plataforma:
- * - allowsMultipleSelection e selectionLimit podem variar por plataforma/versão do SO.
- * - duration é geralmente em segundos segundo docs do Expo, mas já houve variações; ver comentário no check.
- *
- * Retorno: PickMediaResult com arquivos aceitos, avisos e flags.
+ * @param assets Lista de itens brutos retornados pelo picker (imagens/vídeos)
+ * @param current Lista atual de mídias já selecionadas
+ * @param cfg Configuração de validação de mídia (tipos, tamanhos, limites)
+ * @param mediaType Filtro de mídia aplicado nesta operação: 'image' | 'video' | 'all'
+ * @returns Objeto `PickMediaResult` com a lista final e avisos de validação
  */
-export async function pickMedia(
+function processAssets(
+    assets: any[],
     current: MediaFile[],
-    cfg: MediaConfig = OFERTA_MEDIA_CONFIG
-): Promise<PickMediaResult> {
-    // 1) Solicitar permissão para acessar a galeria (obrigatório no iOS; no Android depende da versão)
-    // Dica: é possível diferenciar "negada temporariamente" de "negada permanentemente" e guiar o usuário às configurações.
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (perm.status !== 'granted') {
-        // Sem permissão: não altera a lista atual, sinaliza permissionDenied para a UI lidar.
-        return { files: current, warnings: [], permissionDenied: true };
-    }
-
-    // 2) Calcular quantos itens ainda podem ser adicionados para respeitar o limite máximo.
-    const remaining = cfg.MAX_FILES - current.length;
-    if (remaining <= 0) {
-        // Nada a selecionar: já atingiu o limite; sinaliza truncado para a UI avisar, se desejar.
-        return { files: current, warnings: [], truncated: true };
-    }
-
-    // 3) Abrir seletor de mídia (imagens e vídeos) com compatibilidade entre versões do expo-image-picker
-    // Em versões mais novas, existe ImagePicker.MediaType; em outras, MediaTypeOptions.
-    const mediaTypesOpt = (ImagePicker as any).MediaType
-        ? [(ImagePicker as any).MediaType.Images, (ImagePicker as any).MediaType.Videos]
-        : (ImagePicker as any).MediaTypeOptions.All;
-
-    // Configuração do seletor:
-    // - allowsMultipleSelection: tenta permitir múltipla seleção quando suportado.
-    // - selectionLimit: limita quantos itens o usuário pode escolher nesta sessão (respeita o remaining).
-    // - quality: 1 (máxima) — afeta principalmente JPEG gerado. PNG ignora quality; vídeos ignoram aqui.
-    // Sugestão futura: permitir reduzir quality/redimensionar imagens para otimizar upload e uso de dados.
-    const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: mediaTypesOpt,
-        allowsMultipleSelection: true,
-        selectionLimit: remaining,
-        quality: 1,
-    } as any);
-
-    // Usuário cancelou o seletor: não altera nada.
-    if (result.canceled) return { files: current, warnings: [] };
-
-    // Listas acumuladoras: aceitos e avisos de rejeições.
+    cfg: MediaConfig,
+    mediaType: 'image' | 'video' | 'all'
+): PickMediaResult {
     const accepted: MediaFile[] = [];
     const warnings: string[] = [];
 
-    // 4) Processar cada asset retornado pelo seletor
-    for (const [idx, asset] of result.assets.entries()) {
-        // Tentar determinar um nome amigável para o arquivo
-        // - fileName nem sempre vem preenchido (especialmente em Android). Fallback: último segmento da URI.
-        // - Se nada funcionar, gerar um nome único baseado no timestamp e índice.
-        const nameGuess = (asset as any).fileName || asset.uri.split('/').pop() || `media-${Date.now()}-${idx}`;
-
-        // Detectar MIME: usar o mimeType retornado, senão tentar inferir por nome e tipo do asset.
+    // Percorre cada asset bruto para validar e normalizar em `MediaFile`
+    for (const [idx, asset] of assets.entries()) {
+        const nameGuess = (asset as any).fileName
+            || asset.uri.split('/').pop()
+            || `media-${Date.now()}-${idx}`;
         const mime = (asset as any).mimeType || inferMime(nameGuess, (asset as any).type);
+        const size = (asset as any).fileSize as number | undefined;
+        const rawDuration = (asset as any).duration as number | undefined;
+        // Normaliza duração para segundos: alguns providers (Android) retornam em ms
+        const durationSec = typeof rawDuration === 'number'
+            ? (rawDuration > 1000 ? rawDuration / 1000 : rawDuration)
+            : undefined;
 
-        // Metadados auxiliares (podem não existir em todas as plataformas)
-        const size = (asset as any).fileSize as number | undefined; // bytes
-        const duration = (asset as any).duration as number | undefined; // segundos (em geral)
-
-        // 4.1) Validar tipo/MIME contra a configuração
+        // Validar tipo/MIME suportado
         if (!mime || !cfg.ALLOWED_TYPES.includes(mime)) {
-            // TODO: internacionalizar (i18n) estas mensagens para suportar múltiplos idiomas.
-            warnings.push(`${nameGuess}: tipo não suportado. Use imagens JPG/PNG ou vídeo MP4`);
+            warnings.push(`${nameGuess}: tipo não suportado`);
             continue;
         }
 
-        // 4.2) Reforçar que somente MP4 é aceito para vídeos
-        if ((asset as any).type === 'video' && mime !== 'video/mp4') {
+        // Se estamos buscando apenas imagens, rejeitar vídeos
+        if (mediaType === 'image' && mime.startsWith('video/')) {
+            warnings.push(`${nameGuess}: apenas imagens são permitidas nesta seleção`);
+            continue;
+        }
+
+        // Se estamos buscando apenas vídeos, rejeitar imagens
+        if (mediaType === 'video' && mime.startsWith('image/')) {
+            warnings.push(`${nameGuess}: apenas vídeos são permitidos nesta seleção`);
+            continue;
+        }
+
+        // Vídeos devem ser exclusivamente MP4
+        if (mime.startsWith('video/') && mime !== 'video/mp4') {
             warnings.push(`${nameGuess}: apenas vídeos MP4 são permitidos`);
             continue;
         }
 
-        // 4.3) Restringir duração do vídeo a 15 segundos
-        // OBSERVAÇÃO: Expo documenta duração em segundos, mas já houve relatos de plataformas retornando em ms.
-        // Sugestão futura: normalizar/validar com margem ou checar valores atípicos (ex.: duration > 1000 = ms).
-        if ((asset as any).type === 'video' && typeof duration === 'number' && duration > 15000) {
-            warnings.push(`${nameGuess}: vídeo excede 15 segundos`);
-            continue;
+        // Validar duração de vídeo (em segundos) com pequena tolerância para metadados
+        if (mime.startsWith('video/') && typeof durationSec === 'number') {
+            const allowed = cfg.MAX_VIDEO_DURATION + 0.5; // tolerância de 0.5s
+            if (durationSec > allowed) {
+                warnings.push(`${nameGuess}: vídeo excede ${cfg.MAX_VIDEO_DURATION} segundos`);
+                continue;
+            }
         }
 
-        // 4.4) Restringir tamanho máximo por arquivo
+        // Validar tamanho do arquivo (bytes)
         if (typeof size === 'number' && size > cfg.MAX_SIZE) {
-            warnings.push(`${nameGuess}: excede o tamanho máximo de ${cfg.MAX_SIZE / 1024 / 1024}MB`);
+            warnings.push(`${nameGuess}: excede ${cfg.MAX_SIZE / 1024 / 1024}MB`);
             continue;
         }
 
-        // 4.5) Adicionar à lista de resultados
-        accepted.push({
+        // Normaliza asset em `MediaFile` compatível com upload
+        const file: MediaFile = {
             uri: asset.uri,
             name: nameGuess,
             type: mime,
             size,
-        });
+        };
+        accepted.push(file);
     }
 
-    // 5) Mesclar com os arquivos já existentes, evitando duplicidades pela URI
-    // Nota: duas URIs diferentes podem apontar para o mesmo conteúdo. Futuro: deduplicar por hash do conteúdo.
+    // Mescla com arquivos existentes, mantendo ordem e removendo duplicidade por URI
     const merged = [...current];
     for (const f of accepted) {
         if (!merged.some((m) => m.uri === f.uri)) merged.push(f);
     }
 
-    // 6) Respeitar o limite máximo de arquivos e sinalizar se houve truncamento
+    // Aplica o limite máximo de arquivos permitido
     const truncated = merged.length > cfg.MAX_FILES;
     const files = merged.slice(0, cfg.MAX_FILES);
 
-    // 7) Retornar resultado consolidado para a UI consumir
     return { files, warnings, truncated };
+}
+
+/**
+ * 1. TIRAR FOTO COM CÂMERA
+ *
+ * Solicita permissão de câmera, abre o fluxo de captura de foto e processa o
+ * resultado. Respeita o limite de quantidade, valida tipos e tamanhos conforme
+ * `cfg` e retorna avisos quando aplicável.
+ *
+ * @param current Lista atual de mídias já selecionadas
+ * @param cfg Configuração de validação e limites de mídia
+ * @returns `PickMediaResult` com a lista final, avisos e flags de contexto
+ */
+export async function takePhoto(
+    current: MediaFile[],
+    cfg: MediaConfig = OFERTA_MEDIA_CONFIG
+): Promise<PickMediaResult> {
+    const remaining = cfg.MAX_FILES - current.length;
+    if (remaining <= 0) {
+        return { files: current, warnings: [], truncated: true };
+    }
+
+    const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+    if (cameraPermission.status !== 'granted') {
+        Alert.alert(
+            'Permissão Negada',
+            'É necessário permitir o acesso à câmera para tirar fotos.'
+        );
+        return { files: current, warnings: [], permissionDenied: true };
+    }
+
+    try {
+        const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            quality: 1,
+        });
+
+        if (result.canceled) {
+            return { files: current, warnings: [] };
+        }
+
+        return processAssets(result.assets, current, cfg, 'image');
+    } catch (error) {
+        console.error('Erro ao tirar foto:', error);
+        Alert.alert('Erro', 'Não foi possível tirar a foto.');
+        return { files: current, warnings: [] };
+    }
+}
+
+/**
+ * 2. GRAVAR VÍDEO COM CÂMERA
+ *
+ * Solicita permissão de câmera, inicia a captura de vídeo respeitando a
+ * duração máxima definida em `cfg.MAX_VIDEO_DURATION` e processa o resultado.
+ * Aceita apenas vídeos MP4.
+ *
+ * @param current Lista atual de mídias já selecionadas
+ * @param cfg Configuração de validação e limites de mídia
+ * @returns `PickMediaResult` com a lista final, avisos e flags de contexto
+ */
+export async function recordVideo(
+    current: MediaFile[],
+    cfg: MediaConfig = OFERTA_MEDIA_CONFIG
+): Promise<PickMediaResult> {
+    const remaining = cfg.MAX_FILES - current.length;
+    if (remaining <= 0) {
+        return { files: current, warnings: [], truncated: true };
+    }
+
+    const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+    if (cameraPermission.status !== 'granted') {
+        Alert.alert(
+            'Permissão Negada',
+            'É necessário permitir o acesso à câmera para gravar vídeos.'
+        );
+        return { files: current, warnings: [], permissionDenied: true };
+    }
+
+    try {
+        const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['videos'],
+            allowsEditing: true,
+            quality: 1,
+            videoMaxDuration: cfg.MAX_VIDEO_DURATION,
+        });
+
+        if (result.canceled) {
+            return { files: current, warnings: [] };
+        }
+
+        return processAssets(result.assets, current, cfg, 'video');
+    } catch (error) {
+        console.error('Erro ao gravar vídeo:', error);
+        Alert.alert('Erro', 'Não foi possível gravar o vídeo.');
+        return { files: current, warnings: [] };
+    }
+}
+
+/**
+ * 3. ESCOLHER FOTO DA GALERIA
+ *
+ * Solicita permissão de acesso à biblioteca de mídia e abre o seletor para
+ * imagens, permitindo múltipla seleção até o limite restante. Aplica validações
+ * de tipo e tamanho e retorna avisos, quando houver.
+ *
+ * @param current Lista atual de mídias já selecionadas
+ * @param cfg Configuração de validação e limites de mídia
+ * @returns `PickMediaResult` com a lista final, avisos e flags de contexto
+ */
+export async function pickPhoto(
+    current: MediaFile[],
+    cfg: MediaConfig = OFERTA_MEDIA_CONFIG
+): Promise<PickMediaResult> {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== 'granted') {
+        Alert.alert(
+            'Permissão Negada',
+            'É necessário permitir o acesso à galeria para escolher fotos.'
+        );
+        return { files: current, warnings: [], permissionDenied: true };
+    }
+
+    const remaining = cfg.MAX_FILES - current.length;
+    if (remaining <= 0) {
+        return { files: current, warnings: [], truncated: true };
+    }
+
+    try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsMultipleSelection: true,
+            selectionLimit: remaining,
+            quality: 1,
+        });
+
+        if (result.canceled) {
+            return { files: current, warnings: [] };
+        }
+
+        return processAssets(result.assets, current, cfg, 'image');
+    } catch (error) {
+        console.error('Erro ao escolher foto:', error);
+        Alert.alert('Erro', 'Não foi possível escolher a foto.');
+        return { files: current, warnings: [] };
+    }
+}
+
+/**
+ * 4. ESCOLHER VÍDEO DA GALERIA
+ *
+ * Solicita permissão de acesso à biblioteca de mídia e abre o seletor para
+ * vídeos, permitindo múltipla seleção até o limite restante. Apenas vídeos
+ * MP4 são aceitos. Aplica validações de duração e tamanho.
+ *
+ * @param current Lista atual de mídias já selecionadas
+ * @param cfg Configuração de validação e limites de mídia
+ * @returns `PickMediaResult` com a lista final, avisos e flags de contexto
+ */
+export async function pickVideo(
+    current: MediaFile[],
+    cfg: MediaConfig = OFERTA_MEDIA_CONFIG
+): Promise<PickMediaResult> {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== 'granted') {
+        Alert.alert(
+            'Permissão Negada',
+            'É necessário permitir o acesso à galeria para escolher vídeos.'
+        );
+        return { files: current, warnings: [], permissionDenied: true };
+    }
+
+    const remaining = cfg.MAX_FILES - current.length;
+    if (remaining <= 0) {
+        return { files: current, warnings: [], truncated: true };
+    }
+
+    try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['videos'],
+            allowsMultipleSelection: true,
+            selectionLimit: remaining,
+            quality: 1,
+        });
+
+        if (result.canceled) {
+            return { files: current, warnings: [] };
+        }
+
+        return processAssets(result.assets, current, cfg, 'video');
+    } catch (error) {
+        console.error('Erro ao escolher vídeo:', error);
+        Alert.alert('Erro', 'Não foi possível escolher o vídeo.');
+        return { files: current, warnings: [] };
+    }
+}
+
+/**
+ * FUNÇÃO LEGADA: Escolher qualquer mídia (mantida para compatibilidade)
+ *
+ * Seleciona imagens e/ou vídeos da galeria respeitando o limite restante.
+ * Útil para fluxos antigos que não distinguem entre foto e vídeo.
+ *
+ * Observação: regras de validação de tipo, tamanho e duração continuam
+ * aplicadas dentro de `processAssets`.
+ *
+ * @param current Lista atual de mídias já selecionadas
+ * @param cfg Configuração de validação e limites de mídia
+ * @returns `PickMediaResult` com a lista final, avisos e flags de contexto
+ */
+export async function pickMedia(
+    current: MediaFile[],
+    cfg: MediaConfig = OFERTA_MEDIA_CONFIG
+): Promise<PickMediaResult> {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== 'granted') {
+        return { files: current, warnings: [], permissionDenied: true };
+    }
+
+    const remaining = cfg.MAX_FILES - current.length;
+    if (remaining <= 0) {
+        return { files: current, warnings: [], truncated: true };
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'],
+        allowsMultipleSelection: true,
+        selectionLimit: remaining,
+        quality: 1,
+    });
+
+    if (result.canceled) return { files: current, warnings: [] };
+
+    return processAssets(result.assets, current, cfg, 'all');
 }
