@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Alert, Platform, Share } from 'react-native';
 import { Divider, List, Menu, Snackbar } from 'react-native-paper';
 import * as Clipboard from 'expo-clipboard';
+import { useAuth } from '@/context/AuthContext';
 
 export interface ProfileMoreMenuProps {
   visible: boolean;
@@ -22,6 +23,7 @@ const ProfileMoreMenu: React.FC<ProfileMoreMenuProps> = ({
   onNavigatePrivacySettings,
 }) => {
   const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
+  const { isAuthenticated, logout } = useAuth();
 
   const showToast = useCallback((message: string) => {
     setSnackbar({ visible: true, message });
@@ -43,10 +45,16 @@ const ProfileMoreMenu: React.FC<ProfileMoreMenuProps> = ({
     }
   }, [onDismiss, profileUrl]);
 
-  const onCopyLink = useCallback(() => {
-    Clipboard.setString(profileUrl);
-    showToast('Link do perfil copiado');
-    onDismiss();
+  const onCopyLink = useCallback(async () => {
+    try {
+      await Clipboard.setStringAsync(profileUrl);
+      showToast('Link do perfil copiado');
+    } catch (e) {
+      console.log('Falha ao copiar para a área de transferência:', e);
+      showToast('Não foi possível copiar o link');
+    } finally {
+      onDismiss();
+    }
   }, [onDismiss, profileUrl, showToast]);
 
   const onReport = useCallback(() => {
@@ -128,6 +136,24 @@ const ProfileMoreMenu: React.FC<ProfileMoreMenuProps> = ({
           left={(props) => <List.Icon {...props} icon="shield-lock-outline" />}
           onPress={onPrivacySettings}
         />
+
+        {isAuthenticated && (
+          <>
+            <Divider />
+            <List.Item
+              title="Sair"
+              left={(props) => <List.Icon {...props} icon="logout-variant" />}
+              onPress={async () => {
+                onDismiss();
+                try {
+                  await logout();
+                } catch (e) {
+                  // noop
+                }
+              }}
+            />
+          </>
+        )}
       </Menu>
 
       <Snackbar

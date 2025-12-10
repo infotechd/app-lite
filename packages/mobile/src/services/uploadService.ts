@@ -48,18 +48,25 @@ export interface UploadFilesResponse {
 }
 
 /**
- * Realiza upload dos arquivos selecionados para o backend (Cloudinary via API).
+ * Realiza o upload de um ou mais arquivos para o backend, que por sua vez envia para o Cloudinary.
  *
- * Parâmetros:
- * - mediaFiles: lista de arquivos selecionados pelo usuário, seguindo o tipo MediaFile
+ * O método cuida de detalhes de plataforma (como normalização de URIs no Android),
+ * prepara um FormData com os arquivos e devolve uma resposta normalizada
+ * contendo URLs úteis para exibição na UI e metadados completos de cada item.
  *
- * Retorno:
- * - UploadFilesResponse contendo URLs separadas por tipo e a lista completa de metadados
- *
- * Observações:
- * - Realiza normalização de URIs no Android para evitar erros do FormData
- * - Define nomes default para arquivos quando necessário
- * - Normaliza a resposta do backend para um formato consistente
+ * @param mediaFiles Lista de arquivos selecionados pelo usuário (MediaFile[]). Cada item deve conter:
+ * - uri: string (obrigatório). Pode ser content://, file:// ou caminho absoluto; em Android será normalizado.
+ * - type: string (recomendado). MIME type, ex.: image/jpeg, video/mp4.
+ * - name?: string (opcional). Caso ausente, um nome padrão é inferido pelo tipo (image.jpg ou video.mp4).
+ * @returns Promise com objeto contendo:
+ * - images: string[] com URLs de imagens
+ * - videos: string[] com URLs de vídeos
+ * - raw: UploadedFileInfo[] com metadados completos normalizados
+ * @throws Error Quando a requisição falha (timeout, rede ou erro retornado pelo backend). A mensagem
+ *         tenta preservar a mensagem amigável vinda da API quando disponível.
+ * @remarks
+ * - Timeout padrão de 60s (pode ser ajustado futuramente).
+ * - O backend pode responder em formatos distintos (data.data.files ou data.files); ambos são aceitos.
  */
 export async function uploadFiles(mediaFiles: MediaFile[]): Promise<UploadFilesResponse> {
     // Curto-circuito: sem arquivos, retorna estruturas vazias
@@ -153,17 +160,13 @@ export async function uploadFiles(mediaFiles: MediaFile[]): Promise<UploadFilesR
 }
 
 /**
- * Deleta um arquivo do Cloudinary.
+ * Deleta um arquivo previamente enviado ao Cloudinary via backend.
  *
- * Parâmetros:
- * - publicId: identificador público do recurso no Cloudinary
- * - resourceType: tipo do recurso (image, video ou raw); default 'image'
- *
- * Retorno:
- * - boolean indicando sucesso da operação
- *
- * Observações:
- * - O publicId é codificado na URL para evitar problemas com caracteres especiais
+ * @param publicId Identificador público do recurso no Cloudinary (ex.: "folder/nome_arquivo").
+ * @param resourceType Tipo do recurso a ser deletado: 'image', 'video' ou 'raw'. Padrão: 'image'.
+ * @returns Promise que resolve para true quando o backend confirma a exclusão, ou false caso contrário.
+ * @throws Error Quando a operação falha; a mensagem tenta preservar informações amigáveis vindas da API.
+ * @remarks O publicId é codificado na URL para evitar problemas com caracteres especiais.
  */
 export async function deleteFile(publicId: string, resourceType: 'image' | 'video' | 'raw' = 'image'): Promise<boolean> {
     try {
@@ -183,13 +186,12 @@ export async function deleteFile(publicId: string, resourceType: 'image' | 'vide
 }
 
 /**
- * Lista arquivos do usuário autenticado.
+ * Lista os arquivos do usuário autenticado a partir do backend.
  *
- * Retorno:
- * - Lista normalizada de UploadedFileInfo
- *
- * Observações:
- * - Normaliza a resposta, aceitando tanto data.data.files quanto data.files
+ * @returns Promise com uma lista normalizada (UploadedFileInfo[]) contendo metadados essenciais
+ *          como fileId, filename, url, mimetype e size.
+ * @throws Error Quando a listagem falha; a mensagem tenta preservar informações amigáveis da API.
+ * @remarks A função aceita diferentes formatos de resposta do backend (data.data.files ou data.files).
  */
 export async function getUserFiles(): Promise<UploadedFileInfo[]> {
     try {

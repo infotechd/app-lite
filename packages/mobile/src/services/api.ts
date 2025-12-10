@@ -11,7 +11,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import envConfig from '@/constants/config';
 
-// Garante que a baseURL do Axios sempre termine com '/'
+/**
+ * Garante que a URL termine com a barra final '/'.
+ *
+ * @param u URL base que pode ou não conter a barra final
+ * @returns A mesma URL com a barra final garantida
+ */
 function ensureTrailingSlash(u: string): string {
     return u.endsWith('/') ? u : `${u}/`;
 }
@@ -34,6 +39,7 @@ const baseCandidates: string[] = [
     env?.apiUrl || '',
     'http://192.168.1.54:4000/api', // Casa — IP da sua casa
     'http://192.168.1.12:4000/api',  // Trabalho — IP do seu trabalho
+    'http://192.168.1.8:4000/api',   // Ip do Trabalho
     'http://192.168.1.3:4000/api',   // IP adicional solicitado
     'http://192.168.15.12:4000/api', // Casa — faixa alternativa 192.168.15.x
     'http://192.168.15.1:4000/api',  // Casa — gateway/roteador comum
@@ -59,7 +65,10 @@ const CACHE_KEY = 'api_base_url_selected';
 /**
  * Faz um "ping" HTTP ao endpoint de saúde para verificar se a URL responde.
  * Retorna true se a resposta for ok (status 2xx), false caso contrário.
- * Usa AbortController para limitar o tempo de espera (timeout).
+ * Usa timeout do Axios para limitar o tempo de espera.
+ *
+ * @param url URL absoluta do endpoint de saúde (ex.: http://host:4000/api/health)
+ * @returns Promise que resolve para `true` quando responde 2xx, `false` caso contrário
  */
 async function ping(url: string): Promise<boolean> {
     try {
@@ -83,6 +92,8 @@ async function ping(url: string): Promise<boolean> {
  * Ao encontrar uma URL válida, salva no AsyncStorage para acelerar próximos inícios.
  *
  * MELHORIA: Testar as URLs em paralelo (Promise.any) para acelerar a detecção.
+ *
+ * @returns Promise com a baseURL escolhida (string absoluta terminando em "/api")
  */
 async function pickReachableBaseURL(): Promise<string> {
     // 1) Tenta cache e limpa se estiver inválido
@@ -141,6 +152,9 @@ let currentToken: string | null = null;
  * Define (ou remove) o token de autenticação no cliente Axios e no cache em memória.
  * - Atualiza Authorization em api.defaults.headers para requests subsequentes.
  * - Suporta tanto AxiosHeaders (com .set/.delete) quanto objeto simples.
+ *
+ * @param token Token JWT (string) ou null para remover
+ * @returns void
  */
 export function setAuthToken(token: string | null): void {
     currentToken = token ?? null;
@@ -164,6 +178,8 @@ export function setAuthToken(token: string | null): void {
 
 /**
  * Remove o token atual tanto do cache em memória quanto do header default do Axios.
+ *
+ * @returns void
  */
 export function clearAuthToken(): void {
     setAuthToken(null);
@@ -261,6 +277,15 @@ if (__DEV__ && !IS_TEST) {
 
 // Helper opcional para mudar manualmente a base (ex.: tela de debug)
 // Também persiste a escolha no AsyncStorage para reutilização futura.
+/**
+ * Sobrescreve manualmente a baseURL usada pelo Axios e persiste a escolha.
+ * Útil para telas de debug ou cenários de troca dinâmica de ambiente.
+ *
+ * Observação: a URL deve incluir o caminho "/api" no final (ex.: http://host:4000/api).
+ *
+ * @param url Nova baseURL absoluta a ser utilizada
+ * @returns Promise resolvida após persistência em AsyncStorage
+ */
 export async function overrideBaseURL(url: string) {
     api.defaults.baseURL = url;
     await AsyncStorage.setItem(CACHE_KEY, url);

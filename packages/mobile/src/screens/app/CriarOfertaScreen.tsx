@@ -1,38 +1,50 @@
-// Tela de criação de oferta: responsável por coletar dados do usuário, validar,
-// enviar mídias (imagens/vídeos) e criar a oferta no backend. Comentários em pt-BR
-// explicam cada parte e trazem observações de melhorias potenciais.
+/**
+ * Tela de criação de oferta com menu completo de opções de mídia
+ *
+ * FUNCIONALIDADES IMPLEMENTADAS:
+ * 1. Tirar foto com câmera
+ * 2. Gravar vídeo com câmera
+ * 3. Escolher foto da galeria
+ * 4. Escolher vídeo da galeria
+ *
+ * Interface elegante com menu de opções
+ */
 
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Alert, View } from 'react-native';
 import { Button, Text, TextInput, HelperText, Chip } from 'react-native-paper';
-// Tema (cores e espaçamentos) centralizados do app
 import { colors, spacing } from '@/styles/theme';
-// Esquema de validação Zod, tipo do formulário e config de mídias
 import { criarOfertaSchema, CriarOfertaForm, OFERTA_MEDIA_CONFIG } from '@/utils/validation';
-// Serviço responsável por criar ofertas no backend
 import { ofertaService } from '@/services/ofertaService';
-// Serviço de upload de arquivos (imagens/vídeos)
 import { uploadFiles } from '@/services/uploadService';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';
-// Componentes visuais reutilizáveis
 import CategorySubcategoryPicker from '@/components/CategorySubcategoryPicker';
 import EstadoSelect from '@/components/EstadoSelect';
 import MediaChips from '@/components/MediaChips';
-// Serviço para abrir galeria/câmera e selecionar mídias
-import { pickMedia } from '@/services/mediaPickerService';
-// Funções utilitárias para máscara e parse de moeda (R$)
+import MediaOptionsMenu from '@/components/MediaOptionsMenu';
+import { takePhoto, recordVideo, pickPhoto, pickVideo } from '@/services/mediaPickerService';
 import { maskCurrencyInput, parseCurrencyBRLToNumber } from '@/utils/currency';
 
-// Handler que trata o resultado da seleção de mídias (cancelamentos, limites, etc.)
-import { handleMediaPickResult } from '@/utils/mediaPickHandlers';
-
-// Tipagem das props de navegação desta tela
 type Props = NativeStackScreenProps<OfertasStackParamList, 'CreateOferta'>;
 
-
+/**
+ * Componente de tela para criação de ofertas.
+ *
+ * Responsável por:
+ * - Gerenciar estado do formulário (campos, mídias e erros);
+ * - Validar dados com `criarOfertaSchema`;
+ * - Submeter a oferta ao backend, incluindo upload de mídias (imagens/vídeos);
+ * - Disponibilizar menu com opções de mídia (tirar/selecionar foto e gravar/selecionar vídeo).
+ *
+ * Observações de UX/Fluxo:
+ * - O botão de publicar é habilitado apenas quando há dados mínimos válidos (ver `canSubmit`).
+ * - Em caso de permissões negadas/limites de mídia/avisos, são exibidos `Alert`s de forma amigável.
+ *
+ * @param {{ navigation: Props['navigation'] }} param0 Objeto com `navigation` injetado pelo React Navigation.
+ * @returns JSX.Element da tela de criação de oferta.
+ */
 const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
-    // Estado do formulário com os campos necessários para criar uma oferta
     const [form, setForm] = useState<CriarOfertaForm>({
         titulo: '',
         descricao: '',
@@ -44,16 +56,10 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         mediaFiles: [],
     });
 
-    // Estado para mensagens de erro de validação campo a campo
     const [errors, setErrors] = useState<Record<string, string | undefined>>({});
-
-    // Flag para controlar loading no envio (evita múltiplos envios simultâneos)
     const [submitting, setSubmitting] = useState(false);
+    const [menuVisible, setMenuVisible] = useState(false);
 
-    // Computa se o botão "Publicar oferta" pode ser habilitado
-    // Baseado em validação simples (não substitui o Zod, mas ajuda UX)
-    // MELHORIA: para consistência, considerar usar o próprio schema (safeParse) aqui
-    // ou extrair uma função de validação compartilhada, evitando duplicidade de regras.
     const canSubmit = useMemo(() => {
         const price = parseCurrencyBRLToNumber(form.precoText);
         return (
@@ -68,33 +74,111 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         );
     }, [form, submitting]);
 
-    // Helper genérico para atualizar qualquer campo do formulário de forma imutável
-    // Mantém a tipagem do formulário (K é uma chave válida de CriarOfertaForm)
+    /**
+     * Atualiza um campo do formulário de maneira tipada.
+     *
+     * Usa chave genérica para preservar o tipo do valor do campo alterado.
+     *
+     * @typeParam K - Chave do tipo `CriarOfertaForm` a ser atualizada.
+     * @param {K} key Chave do campo do formulário.
+     * @param {CriarOfertaForm[K]} value Novo valor para o campo selecionado.
+     * @returns {void} Não retorna valor; apenas atualiza o estado local do formulário.
+     */
     const setField = <K extends keyof CriarOfertaForm>(key: K, value: CriarOfertaForm[K]) => {
         setForm((prev) => ({ ...prev, [key]: value }));
     };
 
-    // Handler para selecionar mídias (abre galeria/câmera via serviço)
-    // Usa handleMediaPickResult para centralizar regras de limite e cancelamento.
-    // MELHORIA: considerar exibir um feedback de progresso durante a seleção de mídia
-    // em dispositivos mais lentos, melhorando percepção de performance.
-    const onPickMedia = async () => {
+    /**
+     * Handler genérico para processar o resultado de uma ação de mídia (câmera/galeria).
+     *
+     * Centraliza o tratamento de:
+     * - Permissão negada (exibe alerta e interrompe);
+     * - Limite de arquivos atingido (exibe alerta e interrompe);
+     * - Avisos retornados (exibe alerta com mensagens);
+     * - Atualização da lista de arquivos válidos em `form.mediaFiles`.
+     *
+     * A função `action` deve executar a operação de mídia e retornar
+     * um objeto no formato esperado pelo `mediaPickerService` (com `files`, `warnings`, etc.).
+     *
+     * @param {string} actionName Nome amigável da ação (ex.: "tirar foto", "gravar vídeo").
+     * @param {() => Promise<any>} action Função assíncrona que realiza a operação de mídia.
+     * @returns {Promise<void>} Promessa concluída após processar o resultado e atualizar o estado.
+     */
+    const handleMediaResult = async (
+        actionName: string,
+        action: () => Promise<any>
+    ) => {
         try {
-            const res = await pickMedia(form.mediaFiles, OFERTA_MEDIA_CONFIG);
+            const res = await action();
 
-            handleMediaPickResult(
-                res,
-                (files) => setForm((prev) => ({ ...prev, mediaFiles: files })),
-                OFERTA_MEDIA_CONFIG.MAX_FILES
-            );
+            if (res.permissionDenied) {
+                Alert.alert(
+                    'Permissão Negada',
+                    'É necessário permitir o acesso para usar esta funcionalidade.'
+                );
+                return;
+            }
+
+            if (res.truncated) {
+                Alert.alert(
+                    'Limite Atingido',
+                    `Você já atingiu o limite de ${OFERTA_MEDIA_CONFIG.MAX_FILES} arquivos.`
+                );
+                return;
+            }
+
+            if (res.warnings.length > 0) {
+                Alert.alert('Avisos', res.warnings.join('\n'));
+            }
+
+            setForm((prev) => ({ ...prev, mediaFiles: res.files }));
         } catch (err) {
-            // Tratamento de erro caso a galeria não seja aberta ou ocorra alguma falha
-            console.error('Erro ao selecionar mídia:', err);
-            Alert.alert('Erro', 'Não foi possível abrir a galeria.');
+            console.error(`Erro ao ${actionName}:`, err);
+            Alert.alert('Erro', `Não foi possível ${actionName}.`);
         }
     };
 
-    // Remove um item de mídia do array pelo índice
+    /**
+     * Dispara a captura de foto pela câmera e aplica tratamentos padrão.
+     * @returns {Promise<void>} Promessa quando o processamento terminar.
+     */
+    const onTakePhoto = () => handleMediaResult(
+        'tirar foto',
+        () => takePhoto(form.mediaFiles, OFERTA_MEDIA_CONFIG)
+    );
+
+    /**
+     * Dispara a gravação de vídeo pela câmera e aplica tratamentos padrão.
+     * @returns {Promise<void>} Promessa quando o processamento terminar.
+     */
+    const onRecordVideo = () => handleMediaResult(
+        'gravar vídeo',
+        () => recordVideo(form.mediaFiles, OFERTA_MEDIA_CONFIG)
+    );
+
+    /**
+     * Abre a galeria para escolher foto e aplica tratamentos padrão.
+     * @returns {Promise<void>} Promessa quando o processamento terminar.
+     */
+    const onPickPhoto = () => handleMediaResult(
+        'escolher foto',
+        () => pickPhoto(form.mediaFiles, OFERTA_MEDIA_CONFIG)
+    );
+
+    /**
+     * Abre a galeria para escolher vídeo e aplica tratamentos padrão.
+     * @returns {Promise<void>} Promessa quando o processamento terminar.
+     */
+    const onPickVideo = () => handleMediaResult(
+        'escolher vídeo',
+        () => pickVideo(form.mediaFiles, OFERTA_MEDIA_CONFIG)
+    );
+
+    /**
+     * Remove um item de mídia do array do formulário pelo índice.
+     * @param {number} index Índice do item a ser removido em `form.mediaFiles`.
+     * @returns {void} Não retorna valor; atualiza o estado do formulário.
+     */
     const onRemoveMedia = (index: number) => {
         setForm((prev) => ({
             ...prev,
@@ -102,14 +186,28 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         }));
     };
 
-    // Envio do formulário: valida dados, faz upload das mídias e chama o serviço de criação
-    // MELHORIA: extrair o fluxo de envio (upload + create) para um hook/use-case
-    // reutilizável, facilitando testes e manutenção.
+    /**
+     * Valida os dados do formulário, realiza upload das mídias (se houver) e cria a oferta.
+     *
+     * Fluxo resumido:
+     * 1. Limpa erros e marca `submitting` como verdadeiro;
+     * 2. Valida com `criarOfertaSchema`; em caso de erro, popula `errors` e interrompe;
+     * 3. Se houver mídias, valida formato básico, realiza upload e separa URLs de imagens/vídeos;
+     * 4. Monta `payload` com campos normalizados e URLs de mídias;
+     * 5. Chama `ofertaService.createOferta` e navega para a tela de detalhes;
+     * 6. Garante `submitting` como falso no `finally`.
+     *
+     * Erros e Resiliência:
+     * - Upload: trata e exibe mensagens específicas retornadas pela API (quando disponíveis);
+     * - Criação de oferta: exibe mensagem amigável em caso de falha.
+     *
+     * @returns {Promise<void>} Promessa sem retorno, apenas com efeitos colaterais (estado/alerts/navegação).
+     */
     const onSubmit = async () => {
         setSubmitting(true);
         setErrors({});
 
-        // Validação com Zod (criarOfertaSchema). Caso inválido, espalha mensagens por campo.
+        // 1) Validação do formulário com Zod; em caso de falhas, exibimos erros por campo
         const result = criarOfertaSchema.safeParse(form);
         if (!result.success) {
             const fieldErrors: Record<string, string> = {};
@@ -123,25 +221,14 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         }
 
         try {
-            // 1) Upload de mídias (se houver). Backend espera /upload/files (GridFS)
             let imageUrls: string[] = [];
             let videoUrls: string[] = [];
+
+            // 2) Upload de mídias (se houver arquivos selecionados)
             if (form.mediaFiles.length > 0) {
                 try {
-                    // Log e validação básica dos arquivos antes do upload
-                    // MELHORIA: evitar logs em produção; usar if (__DEV__) ou logger com níveis.
-                    console.log('Qtd de mídias:', form.mediaFiles.length);
-                    form.mediaFiles.forEach((m, i) => {
-                        console.log('Media', i, {
-                            uri: (m as any)?.uri,
-                            name: (m as any)?.name,
-                            type: (m as any)?.type,
-                        });
-                    });
+                    console.log('Enviando mídias:', form.mediaFiles.length);
 
-                    // Verifica se cada mídia possui uri/name/type válidos
-                    // MELHORIA: tipar corretamente o item de mídia (evitar any) com um tipo MediaFile
-                    // compartilhado entre picker e upload.
                     const allValid = form.mediaFiles.every(
                         (m: any) =>
                             m &&
@@ -149,41 +236,36 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                             typeof m.name === 'string' && m.name.length > 0 &&
                             typeof m.type === 'string' && m.type.length > 0
                     );
+
+                    // Caso algum arquivo esteja inconsistente, orientamos o usuário a selecionar novamente
                     if (!allValid) {
                         Alert.alert(
                             'Erro',
                             'Arquivos de mídia inválidos. Tente selecionar novamente.'
                         );
-                        return; // finally abaixo garantirá reset do submitting
+                        return;
                     }
 
-                    // Garante não exceder o limite configurado de arquivos
+                    // Garante o respeito ao limite máximo de arquivos permitidos
                     const filesToUpload = form.mediaFiles.slice(0, OFERTA_MEDIA_CONFIG.MAX_FILES);
-
-                    // Chama serviço de upload que devolve arrays de URLs de imagens e vídeos
                     const uploadRes = await uploadFiles(filesToUpload);
                     imageUrls = uploadRes.images || [];
                     videoUrls = uploadRes.videos || [];
 
-                    // MELHORIA: exibir progresso de upload por arquivo e total (UX)
+                    console.log('Upload concluído:', { images: imageUrls.length, videos: videoUrls.length });
                 } catch (err: any) {
-                    console.error(
-                        'Erro no upload de mídia (uploadFiles):',
-                        err?.response?.data || err
-                    );
+                    console.error('Erro no upload:', err?.response?.data || err);
                     const message =
                         err?.response?.data?.message ||
                         err?.message ||
                         'Falha no upload de mídias.';
                     Alert.alert('Erro no upload', String(message));
-                    return; // finally garante reset de loading
+                    return;
                 }
             }
 
-            // 2) Monta o payload JSON esperado pelo backend
-            // Converte preço mascarado (R$) para número (centavos/reais conforme util)
+            // 3) Montagem do payload normalizado a partir do formulário
             const preco = parseCurrencyBRLToNumber(form.precoText);
-            // MELHORIA: substituir any por um tipo OfertaCreatePayload forte
             const payload: any = {
                 titulo: form.titulo.trim(),
                 descricao: form.descricao.trim(),
@@ -193,36 +275,31 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                 localizacao: { cidade: form.cidade, estado: form.estado },
                 imagens: imageUrls,
             };
-            if (form.subcategoria) payload.subcategoria = form.subcategoria;
-            if (videoUrls.length) payload.videos = videoUrls; // inclui vídeos apenas se houver
 
-            // 3) Cria a oferta na API e navega para o detalhe da oferta criada
+            // Campos opcionais
+            if (form.subcategoria) payload.subcategoria = form.subcategoria;
+            if (videoUrls.length) payload.videos = videoUrls;
+
+            // 4) Criação da oferta e redirecionamento para a tela de detalhes
             const created = await ofertaService.createOferta(payload);
             Alert.alert('Sucesso', 'Oferta criada com sucesso!');
-            // MELHORIA: validar se created tem o shape esperado antes de navegar
             navigation.replace('OfferDetail', { oferta: created });
         } catch (e: any) {
-            // Tratamento de erros genéricos do fluxo de criação
             console.error('Erro ao criar oferta:', e?.response?.data || e);
             const message =
                 e?.response?.data?.message || e?.message || 'Não foi possível criar a oferta.';
             Alert.alert('Erro', String(message));
         } finally {
-            // Garante que o loading será desligado mesmo em retornos antecipados
             setSubmitting(false);
         }
     };
 
-    // No formulário: ID de categoria selecionada (adaptado de watch)
     const categoriaId = form.categoria;
 
-    // Renderização do formulário dentro de um ScrollView para comportar telas pequenas
-    // MELHORIA: considerar KeyboardAvoidingView para melhor UX com teclado aberto.
     return (
         <ScrollView contentContainerStyle={styles.container}>
             <Text variant="titleLarge" style={styles.title}>Criar Oferta</Text>
 
-            {/* Campo: Título da oferta */}
             <TextInput
                 label="Título"
                 value={form.titulo}
@@ -230,11 +307,9 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                 style={styles.input}
                 mode="outlined"
                 error={!!errors.titulo}
-                // MELHORIA: adicionar accessibilityLabel e testID para testes e acessibilidade
             />
             {!!errors.titulo && <HelperText type="error">{errors.titulo}</HelperText>}
 
-            {/* Campo: Descrição da oferta */}
             <TextInput
                 label="Descrição"
                 value={form.descricao}
@@ -247,7 +322,6 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             />
             {!!errors.descricao && <HelperText type="error">{errors.descricao}</HelperText>}
 
-            {/* Preço + unidade lado a lado para melhor usabilidade */}
             <View style={styles.row}>
                 <TextInput
                     label="Preço"
@@ -257,12 +331,10 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                     mode="outlined"
                     keyboardType="numeric"
                     error={!!errors.precoText}
-                    // MELHORIA: em iOS/Android, avaliar usar keyboardType apropriado (decimal-pad)
                 />
 
                 <View style={styles.priceUnitContainer}>
                     <Text style={styles.label}>Preço por</Text>
-                    {/* Lista horizontal e compacta para evitar overflow em telas estreitas */}
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}
                                 contentContainerStyle={{ columnGap: 8 }}>
                         {[
@@ -286,21 +358,18 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             {!!errors.precoText && <HelperText type="error">{errors.precoText}</HelperText>}
             {!!errors.priceUnit && <HelperText type="error">{errors.priceUnit}</HelperText>}
 
-            {/* Seleção de categoria e subcategoria */}
             <CategorySubcategoryPicker
                 key={`cat-${categoriaId || 'none'}`}
                 selectedCategoryId={categoriaId}
                 selectedSubcategoryId={form.subcategoria}
                 onCategoryChange={(id) => {
                     setField('categoria', id);
-                    // Ao trocar a categoria, limpamos a subcategoria para evitar estado inválido
                     setField('subcategoria', undefined as any);
                 }}
                 onSubcategoryChange={(id) => setField('subcategoria', id)}
             />
             {!!errors.categoria && <HelperText type="error">{errors.categoria}</HelperText>}
 
-            {/* Seleção de Estado (UF) com preenchimento automático da capital como cidade */}
             <EstadoSelect
                 value={form.estado}
                 onChange={(uf, capital) => {
@@ -310,7 +379,6 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             />
             {!!errors.estado && <HelperText type="error">{errors.estado}</HelperText>}
 
-            {/* Campo somente leitura para cidade (preenchido automaticamente) */}
             <TextInput
                 label="Cidade (automática)"
                 value={form.cidade}
@@ -318,21 +386,25 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                 mode="outlined"
                 editable={false}
                 error={!!errors.cidade}
-                // MELHORIA: permitir edição manual opcional caso o usuário não esteja na capital
             />
             {!!errors.cidade && <HelperText type="error">{errors.cidade}</HelperText>}
 
-            {/* Seletor de mídias com preview e remoção */}
-            <MediaChips
-                title={`Mídias (até ${OFERTA_MEDIA_CONFIG.MAX_FILES})`}
-                mediaFiles={form.mediaFiles}
-                onRemove={onRemoveMedia}
-                onAddPress={onPickMedia}
-                max={OFERTA_MEDIA_CONFIG.MAX_FILES}
-            />
+            {/* Seção de Mídias com Menu de Opções */}
+            <View style={styles.mediaSection}>
+                <Text variant="titleSmall" style={styles.mediaTitle}>
+                    Mídias (até {OFERTA_MEDIA_CONFIG.MAX_FILES}) - Vídeos até {OFERTA_MEDIA_CONFIG.MAX_VIDEO_DURATION}s
+                </Text>
+
+                <MediaChips
+                    title=""
+                    mediaFiles={form.mediaFiles}
+                    onRemove={onRemoveMedia}
+                    onAddPress={() => setMenuVisible(true)}
+                    max={OFERTA_MEDIA_CONFIG.MAX_FILES}
+                />
+            </View>
             {!!errors.mediaFiles && <HelperText type="error">{errors.mediaFiles}</HelperText>}
 
-            {/* Botão principal de envio */}
             <Button
                 mode="contained"
                 onPress={onSubmit}
@@ -342,12 +414,20 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             >
                 Publicar oferta
             </Button>
+
+            {/* Menu de Opções de Mídia */}
+            <MediaOptionsMenu
+                visible={menuVisible}
+                onDismiss={() => setMenuVisible(false)}
+                onTakePhoto={onTakePhoto}
+                onRecordVideo={onRecordVideo}
+                onPickPhoto={onPickPhoto}
+                onPickVideo={onPickVideo}
+            />
         </ScrollView>
     );
 };
 
-// Estilos básicos da tela
-// MELHORIA: padronizar estilos com theme spacing/typography escaláveis (RN Paper)
 const styles = StyleSheet.create({
     container: {
         padding: spacing.md,
@@ -364,21 +444,11 @@ const styles = StyleSheet.create({
         marginBottom: spacing.xs,
         color: colors.textSecondary,
     },
-    chipsRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        marginBottom: spacing.sm,
-    },
-    chip: {
-        marginRight: spacing.xs,
-        marginBottom: spacing.xs,
-    },
-    // Layout horizontal para Preço + Unidade
     row: {
         flexDirection: 'row',
         alignItems: 'flex-start',
         gap: 12,
-        flexWrap: 'wrap', // permite quebrar para a linha de baixo em telas pequenas
+        flexWrap: 'wrap',
     },
     priceInput: {
         flexBasis: '45%',
@@ -389,6 +459,14 @@ const styles = StyleSheet.create({
     priceUnitContainer: {
         flex: 1,
         minWidth: 180,
+    },
+    mediaSection: {
+        marginTop: spacing.md,
+        marginBottom: spacing.sm,
+    },
+    mediaTitle: {
+        marginBottom: spacing.sm,
+        color: colors.text,
     },
     submit: {
         marginTop: spacing.md,

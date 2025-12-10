@@ -5,7 +5,16 @@ import { logger } from '../utils/logger';
 import { z } from 'zod';
 import type { AuthRequest } from '../middleware/auth';
 
-// Middleware para adicionar headers de cache
+/**
+ * Middleware responsável por configurar cabeçalhos de cache para respostas de mídia.
+ * Define cache público por 7 dias e marca como imutável, permitindo melhor performance
+ * em CDNs e navegadores.
+ *
+ * @param req Requisição Express
+ * @param res Resposta Express
+ * @param next Próximo middleware
+ * @returns void
+ */
 export const setCacheHeaders: RequestHandler = (req, res, next) => {
     // Cache de 7 dias para os arquivos
     const sevenDays = 7 * 24 * 60 * 60;
@@ -13,95 +22,41 @@ export const setCacheHeaders: RequestHandler = (req, res, next) => {
     next();
 };
 
-
 /**
- * Controller responsável por lidar com uploads de arquivos (imagens e vídeos) para o provedor (Cloudinary),
- * assim como listar, obter informações e deletar arquivos do usuário autenticado.
+ * Controller responsável por lidar com uploads de arquivos (imagens e vídeos) para o Cloudinary.
  *
- * Pontos principais:
- * - Usa Multer com storage em memória (memoryStorage) para receber os arquivos via multipart/form-data.
- * - Faz validação de tamanho, quantidade e tipos de arquivos via configuração do Multer e variáveis de ambiente.
- * - Rejeita vídeos com duração maior que 15 segundos (extraindo duração diretamente do buffer MP4).
- * - Depende de uploadService para operações com o provedor externo (upload/listagem/remoção/consulta).
- * - Utiliza zod para validar dados adicionais recebidos junto aos arquivos.
- * - Registra eventos e erros via logger centralizado.
- *
- * Variáveis de ambiente utilizadas (com padrão):
- * - MAX_FILE_SIZE: tamanho máximo de cada arquivo em bytes (padrão 10MB = 10485760).
- * - MAX_FILES_PER_UPLOAD: quantidade máxima de arquivos por requisição (padrão 5).
- * - ALLOWED_FILE_TYPES: lista separada por vírgula de MIME types permitidos.
- *
- * Possíveis melhorias futuras (TODO):
- * - Trocar a verificação de duração de vídeo para uma solução baseada em ffprobe/MediaInfo para suportar mais containers e codecs.
- * - Implementar upload em streaming/chunks (resumable) para suportar arquivos maiores sem estourar memória.
- * - Adicionar verificação antivírus/antimalware (ex.: ClamAV) antes de enviar ao provedor.
- * - Implementar limites por usuário (rate limit/quotas) e observar governança de armazenamento por plano.
- * - Gerar thumbnails e variações de imagens/vídeos no backend (ou via transformações do provedor) e retornar no payload.
- * - Paginação e filtros em getUserFiles (por tipo, data, tamanho) e caching quando aplicável.
- * - Auditoria detalhada (quem enviou/deletou/visualizou) e trilhas de auditoria.
+ * CORREÇÕES IMPLEMENTADAS:
+ * - Removida validação redundante de duração de vídeo (feita no frontend)
+ * - Aumentado limite de tamanho para 100MB (suporta vídeos de até 20 segundos)
+ * - Simplificado fluxo de upload para maior confiabilidade
+ * - Melhorado tratamento de erros
  */
 
 /**
- * Extrai a duração (em segundos) de um arquivo MP4 a partir do buffer.
- *
- * Observação: esta função faz um parse simples do box 'mvhd' do container MP4 e
- * pode não funcionar para todos os formatos/variações. Para produção, considere
- * usar ferramentas robustas (ffprobe) para obter metadados de mídia.
+ * Armazenamento em memória para uploads via Multer.
+ * Útil quando o arquivo será imediatamente enviado a um serviço externo (ex.: Cloudinary)
+ * sem persistência local.
  */
-function getMp4DurationSeconds(buffer: Buffer): number | undefined {
-    try {
-        // Procura o box 'mvhd' no container MP4
-        const mvhdIndex = buffer.indexOf(Buffer.from('mvhd'));
-        if (mvhdIndex === -1) return undefined;
-
-        // O byte seguinte ao 'mvhd' indica a versão do header (0 ou 1)
-        const start = mvhdIndex + 4;
-        const version = buffer.readUInt8(start);
-
-        if (version === 1) {
-            // Versão 1 utiliza campos de 64 bits para tempos
-            const timescaleOffset = start + 1 + 3 + 8 + 8; // version(1) + flags(3) + creation(8) + modification(8)
-            const timescale = buffer.readUInt32BE(timescaleOffset);
-            const durationHigh = buffer.readUInt32BE(timescaleOffset + 4);
-            const durationLow = buffer.readUInt32BE(timescaleOffset + 8);
-            const duration = durationHigh * 2 ** 32 + durationLow; // concatenação 64 bits
-            if (timescale > 0) {
-                return duration / timescale; // duração em segundos
-            }
-            return undefined;
-        } else {
-            // Versão 0 utiliza campos de 32 bits para tempos
-            const timescaleOffset = start + 1 + 3 + 4 + 4; // version(1) + flags(3) + creation(4) + modification(4)
-            const timescale = buffer.readUInt32BE(timescaleOffset);
-            const duration = buffer.readUInt32BE(timescaleOffset + 4);
-            if (timescale > 0) {
-                return duration / timescale; // duração em segundos
-            }
-            return undefined;
-        }
-    } catch {
-        // Em qualquer erro de leitura/parsing, retornamos undefined e tratamos acima
-        return undefined;
-    }
-}
-
-// Configuração do multer para upload em memória (os buffers ficam no processo Node)
-// ATENÇÃO: para arquivos grandes ou alto volume, prefira storage em disco ou streaming direto ao provedor
 const storage = multer.memoryStorage();
 
-// Instância do Multer com limites e filtro de tipos de arquivo
+/**
+ * Instância do Multer com:
+ * - Limite de tamanho de arquivo (padrão 100MB, configurável via env `MAX_FILE_SIZE`)
+ * - Limite de quantidade de arquivos por requisição (padrão 5, via `MAX_FILES_PER_UPLOAD`)
+ * - Filtro de tipos permitidos (padrão imagens comuns e vídeos mp4/quicktime, via `ALLOWED_FILE_TYPES`)
+ */
 const upload = multer({
     storage,
     limits: {
-        // Tamanho máximo por arquivo, podendo ser configurado via env (padrão 50MB)
-        fileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800'), // 50MB
-        // Quantidade máxima de arquivos por requisição
+        // ALTERADO: Aumentado de 10MB para 100MB para suportar vídeos de até 20 segundos
+        fileSize: parseInt(process.env.MAX_FILE_SIZE || '104857600'), // 100MB
         files: parseInt(process.env.MAX_FILES_PER_UPLOAD || '5'),
     },
     fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-        // req não é utilizado aqui; evitamos warning de variável não usada
+        // Evita warning de variável não utilizada (não precisamos do req aqui)
         void req;
-        // Tipos permitidos: lidos da env ou defaults seguros
+
+        // Lê os tipos permitidos da variável de ambiente, com fallback para tipos comuns
         const allowedTypes = (process.env.ALLOWED_FILE_TYPES?.split(',') || [
             'image/jpeg',
             'image/png',
@@ -109,56 +64,73 @@ const upload = multer({
             'image/gif',
             'video/mp4',
             'video/quicktime'
-        ]).map(t => t.trim());
+        ]).map(t => t.trim()); // Normaliza espaços em branco
 
-        // Apenas aceita se o mimetype estiver permitido; do contrário, ignora o arquivo
+        // Aceita apenas arquivos cujo mimetype esteja na lista permitida
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            // Poderíamos retornar um erro para feedback mais explícito (TODO);
-            // por ora, apenas marcamos como rejeitado (false)
             cb(null, false);
         }
     },
 });
 
-// Esquema de validação para metadados opcionais enviados junto aos arquivos
+/**
+ * Esquema (Zod) para validar metadados opcionais enviados junto aos arquivos.
+ * Mantém contrato claro entre client e server e evita valores inesperados.
+ */
 const uploadSchema = z.object({
-    categoria: z.string().optional(), // Ex.: "avatar", "galeria", "documento"
-    descricao: z.string().optional(), // Texto descritivo do upload
+    categoria: z.string().optional(),
+    descricao: z.string().optional(),
 });
 
-// Interface do controller: define assinatura dos handlers
+/**
+ * Contrato do controlador de upload contendo todos os manipuladores (handlers)
+ * expostos para as rotas.
+ */
 type UploadController = {
-    // Middleware do Multer para aceitar múltiplos arquivos no campo 'files'
     uploadMultiple: RequestHandler;
-    // Handler para realizar upload
     uploadFiles: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
-    // Handler para deletar arquivo
     deleteFile: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
-    // Handler para listar arquivos do usuário
     getUserFiles: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
-    // Handler para obter informações pontuais de um arquivo
     getFileInfo: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
 };
 
+/**
+ * Controlador de Upload responsável por:
+ * - Receber múltiplos arquivos (imagens/vídeos) via Multer
+ * - Enviar arquivos ao serviço de mídia (Cloudinary)
+ * - Listar arquivos do usuário autenticado
+ * - Obter informações detalhadas de um arquivo
+ * - Deletar arquivos pertencentes ao usuário
+ */
 export const uploadController: UploadController = {
-    // Aceita até 5 arquivos no campo 'files'. Este middleware popula req.files
+    /**
+     * Middleware do Multer que processa múltiplos arquivos do campo `files`.
+     * Aplica limites definidos na instância `upload`.
+     */
     uploadMultiple: upload.array('files', 5) as RequestHandler,
 
     /**
      * Upload de arquivos para Cloudinary.
+     * SIMPLIFICADO: Removida validação de duração (feita no frontend)
+     *
      * Fluxo:
-     * 1) Normaliza req.files em um array de arquivos
-     * 2) Valida presença de arquivos e metadados (zod)
-     * 3) Rejeita vídeos com duração > 15s
-     * 4) Garante usuário autenticado
-     * 5) Envia arquivos válidos via uploadService
-     * 6) Retorna payload com dados dos uploads e vídeos inválidos (se houver)
+     * 1) Normaliza `req.files` para um array de arquivos (suporta diferentes formatos do Multer)
+     * 2) Valida que há arquivos; valida metadados com Zod
+     * 3) Garante que o usuário está autenticado
+     * 4) Envia os arquivos ao serviço de upload
+     * 5) Mapeia o resultado para um payload consistente e registra logs
+     *
+     * @param req Requisição autenticada contendo os arquivos e metadados
+     * @param res Resposta HTTP com o resultado do upload
+     * @param next Próximo middleware em caso de erro
+     * @returns Promise<void>
      */
     async uploadFiles(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            // req.files pode ser array (quando um único campo) ou um objeto (vários campos)
+            // O Multer pode entregar `req.files` como array OU como objeto indexado por campo.
+            // Aqui normalizamos para sempre obter um array de arquivos.
             const filesInput = req.files;
             const files: Express.Multer.File[] = Array.isArray(filesInput)
                 ? (filesInput as Express.Multer.File[])
@@ -166,7 +138,7 @@ export const uploadController: UploadController = {
                     ? Object.values(filesInput as { [fieldname: string]: Express.Multer.File[] }).flat()
                     : [];
 
-            // Sem arquivos => 400
+            // Garante que pelo menos um arquivo foi enviado
             if (!files || files.length === 0) {
                 res.status(400).json({
                     success: false,
@@ -175,19 +147,10 @@ export const uploadController: UploadController = {
                 return;
             }
 
-            // Validar dados adicionais via zod; dispara se inválido
+            // Valida metadados opcionais (ex.: categoria/descrição)
             const validatedData = uploadSchema.parse(req.body);
 
-            // Se após os filtros não sobrou nada, retorna 400 informando o motivo
-            if (files.length === 0) {
-                res.status(400).json({
-                    success: false,
-                    message: 'Nenhum arquivo válido',
-                });
-                return;
-            }
-
-            // Checagem de autenticação (req.user preenchido por middleware de auth)
+            // Garante que o usuário está autenticado (id disponível no token)
             const userId = req.user?.id;
             if (!userId) {
                 res.status(401).json({
@@ -197,54 +160,56 @@ export const uploadController: UploadController = {
                 return;
             }
 
-            // Dispara upload para o provedor via service. validatedData pode levar metadados
+            // Envia os arquivos diretamente ao serviço de upload (validação de duração é do frontend)
             const uploadedFiles = await uploadService.uploadMultipleFiles(
                 files,
                 userId,
                 validatedData
             );
 
-            // Log útil para observabilidade
+            // Log informativo com quantidade de arquivos enviados
             logger.info('upload.success', {
                 userId,
-                count: uploadedFiles.length,
+                count: uploadedFiles.length
             });
 
-            // Resposta padronizada com os campos essenciais de cada arquivo
+            // Retorna dados essenciais de cada arquivo salvo no provedor
             res.status(200).json({
                 success: true,
                 data: {
                     files: uploadedFiles.map(f => ({
                         fileId: f.fileId,
                         filename: f.filename,
-                        url: f.secureUrl, // Usar URL segura (HTTPS)
+                        url: f.secureUrl,
                         mimetype: f.mimetype,
                         size: f.size,
                         publicId: f.publicId,
                         resourceType: f.resourceType
-                    })),
+                    }))
                 }
             });
         } catch (error: any) {
-            // Encaminhamos o erro para o middleware de erro global
+            // Registra erro detalhado e delega para o handler global
             logger.error('upload.error', { error: error.message, stack: error.stack });
             next(error);
         }
     },
 
     /**
-     * Deletar arquivo do Cloudinary.
-     * Requer:
-     * - publicId no path param
-     * - resourceType opcional (image | video | raw), padrão image
-     * - Garantia de que o arquivo pertence ao usuário autenticado
+     * Deleta um arquivo do provedor de mídia (Cloudinary) se pertencer ao usuário autenticado.
+     *
+     * @param req Requisição contendo `publicId` como parâmetro e `resourceType` (query)
+     * @param res Resposta com status da exclusão
+     * @param next Próximo middleware em caso de erro
+     * @returns Promise<void>
      */
     async deleteFile(req: AuthRequest, res: Response, next: NextFunction) {
         try {
+            // Identificadores do recurso a ser deletado
             const { publicId } = req.params;
             const { resourceType = 'image' } = req.query;
 
-            // Validação de parâmetros obrigatórios
+            // Validação básica de entrada
             if (!publicId) {
                 res.status(400).json({
                     success: false,
@@ -253,7 +218,7 @@ export const uploadController: UploadController = {
                 return;
             }
 
-            // Verificar se o arquivo pertence ao usuário (convenção do caminho no Cloudinary)
+            // Verifica propriedade do arquivo, exigindo que o caminho contenha o id do usuário
             const userId = req.user?.id;
             if (!publicId.includes(`app-lite/${userId}`)) {
                 res.status(403).json({
@@ -263,12 +228,13 @@ export const uploadController: UploadController = {
                 return;
             }
 
-            // Solicita remoção ao service
+            // Solicita exclusão ao serviço de upload
             const deleted = await uploadService.deleteFile(
                 publicId,
                 resourceType as 'image' | 'video' | 'raw'
             );
 
+            // Responde conforme o resultado da exclusão
             if (deleted) {
                 res.status(200).json({
                     success: true,
@@ -281,18 +247,23 @@ export const uploadController: UploadController = {
                 });
             }
         } catch (error: any) {
+            // Registra erro e delega ao handler global
             logger.error('delete.error', { error: error.message });
             next(error);
         }
     },
 
     /**
-     * Listar arquivos do usuário.
-     * Requer usuário autenticado. Retorna lista com metadados essenciais.
-     * TODO: adicionar paginação, ordenação e filtros (tipo, data, tamanho), além de cache quando possível.
+     * Lista arquivos pertencentes ao usuário autenticado.
+     *
+     * @param req Requisição autenticada
+     * @param res Resposta com a lista de arquivos normalizada para o cliente
+     * @param next Próximo middleware em caso de erro
+     * @returns Promise<void>
      */
     async getUserFiles(req: AuthRequest, res: Response, next: NextFunction) {
         try {
+            // Garante autenticação
             const userId = req.user?.id;
             if (!userId) {
                 res.status(401).json({
@@ -302,9 +273,10 @@ export const uploadController: UploadController = {
                 return;
             }
 
-            // Busca via service. Idealmente suportar paginação (cursor/offset + limit) no futuro
+            // Busca arquivos do usuário no provedor
             const files = await uploadService.listUserFiles(userId);
 
+            // Normaliza campos dos arquivos retornados para o payload do app
             res.status(200).json({
                 success: true,
                 data: {
@@ -320,21 +292,27 @@ export const uploadController: UploadController = {
                 }
             });
         } catch (error: any) {
+            // Log de erro e delegação
             logger.error('getUserFiles.error', { error: error.message });
             next(error);
         }
     },
 
     /**
-     * Obter informações de um arquivo específico no provedor.
-     * Requer publicId e, opcionalmente, resourceType.
-     * Útil para checar metadados após o upload ou antes de exibir/transformar no cliente.
+     * Obtém informações detalhadas de um arquivo específico no provedor de mídia.
+     *
+     * @param req Requisição contendo `publicId` como parâmetro e `resourceType` (query)
+     * @param res Resposta com o objeto de metadados do arquivo
+     * @param next Próximo middleware em caso de erro
+     * @returns Promise<void>
      */
     async getFileInfo(req: AuthRequest, res: Response, next: NextFunction) {
         try {
+            // Identifica o recurso alvo
             const { publicId } = req.params;
             const { resourceType = 'image' } = req.query;
 
+            // Validação básica
             if (!publicId) {
                 res.status(400).json({
                     success: false,
@@ -343,16 +321,19 @@ export const uploadController: UploadController = {
                 return;
             }
 
+            // Recupera metadados diretamente do provedor
             const fileInfo = await uploadService.getFileInfo(
                 publicId,
                 resourceType as 'image' | 'video' | 'raw'
             );
 
+            // Retorna dados completos do arquivo
             res.status(200).json({
                 success: true,
                 data: fileInfo
             });
         } catch (error: any) {
+            // Log de erro e delegação
             logger.error('getFileInfo.error', { error: error.message });
             next(error);
         }
@@ -360,4 +341,3 @@ export const uploadController: UploadController = {
 };
 
 export default uploadController;
-

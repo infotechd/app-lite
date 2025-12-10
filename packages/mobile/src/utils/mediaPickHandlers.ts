@@ -1,10 +1,19 @@
-// Centralized media picker result handling to avoid duplication across screens
-// Follows project guidelines: TypeScript strict, error handling, and reusable utils
+// Tratamento centralizado do resultado do seletor de mídia para evitar duplicação entre telas
+// Segue as diretrizes do projeto: TypeScript estrito, tratamento de erros e utilitários reutilizáveis
 
 import { Alert, Linking } from 'react-native';
 import { OFERTA_MEDIA_CONFIG } from '@/utils/validation';
 
-// Keep this interface aligned with the result returned by pickMedia service
+/**
+ * Representa o resultado padronizado retornado pelo serviço de seleção de mídia (ex.: câmera/galeria).
+ * Mantenha esta interface alinhada ao que é retornado pelo serviço `pickMedia`.
+ *
+ * @template TFile Tipo do objeto de arquivo retornado pelo seletor de mídia.
+ * @property {boolean} [permissionDenied] Indica se o usuário negou as permissões necessárias.
+ * @property {TFile[]} files Lista de arquivos selecionados com sucesso (pode estar vazia).
+ * @property {string[]} [warnings] Mensagens de aviso sobre arquivos ignorados ou problemas não críticos.
+ * @property {boolean} [truncated] Indica se a seleção foi truncada por atingir um limite de quantidade.
+ */
 export interface MediaPickResult<TFile = any> {
     permissionDenied?: boolean;
     files: TFile[];
@@ -13,16 +22,27 @@ export interface MediaPickResult<TFile = any> {
 }
 
 /**
- * Handle a media picker result in a consistent way across the app.
- * - Shows permission alert and opens system settings if needed
- * - Applies files via callback
- * - Shows warnings and truncated alerts
+ * Trata o resultado do seletor de mídia de forma consistente em todo o app.
+ * - Exibe alerta de permissão e abre as configurações do sistema quando necessário.
+ * - Entrega os arquivos selecionados via callback `onFiles`.
+ * - Exibe avisos e alerta quando a seleção é truncada por limite.
+ *
+ * Efeitos colaterais:
+ * - Pode exibir Alertas nativos (via `Alert.alert`).
+ * - Pode abrir as configurações do sistema (via `Linking.openSettings`).
+ *
+ * @template TFile Tipo do objeto de arquivo retornado pelo seletor de mídia.
+ * @param {MediaPickResult<TFile>} res Resultado retornado pelo seletor de mídia.
+ * @param {(files: TFile[]) => void} onFiles Callback para aplicar os arquivos selecionados no estado/componente.
+ * @param {number} [maxFiles=OFERTA_MEDIA_CONFIG.MAX_FILES] Quantidade máxima de arquivos permitida para informar no alerta de truncamento.
+ * @returns {void} Não retorna valor; exibe alertas e invoca o callback `onFiles`.
  */
 export function handleMediaPickResult<TFile = any>(
     res: MediaPickResult<TFile>,
     onFiles: (files: TFile[]) => void,
     maxFiles: number = OFERTA_MEDIA_CONFIG.MAX_FILES
 ): void {
+    // 1) Se o usuário negou a permissão, informar e oferecer atalho para as configurações do sistema
     if (res.permissionDenied === true) {
         Alert.alert(
             'Permissão necessária',
@@ -35,16 +55,16 @@ export function handleMediaPickResult<TFile = any>(
         return;
     }
 
-    // Apply selected files
+    // 2) Aplicar os arquivos selecionados (se vier nulo/indefinido, usa lista vazia)
     onFiles(res.files ?? []);
 
-    // Show any collected warnings
+    // 3) Exibir quaisquer avisos coletados (ex.: arquivos de tipo inválido ignorados)
     const warnings = res.warnings ?? [];
     if (Array.isArray(warnings) && warnings.length) {
         Alert.alert('Alguns arquivos foram ignorados', warnings.join('\n'));
     }
 
-    // Inform user if the selection was truncated by a limit
+    // 4) Informar o usuário se a seleção foi truncada devido ao limite de arquivos
     if (res.truncated === true) {
         Alert.alert('Limite de arquivos', `Apenas os primeiros ${maxFiles} arquivos foram adicionados.`);
     }

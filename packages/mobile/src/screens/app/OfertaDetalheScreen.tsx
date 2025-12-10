@@ -1,5 +1,15 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, Image, Alert } from 'react-native';
+/**
+ * Tela de detalhes da oferta com suporte a expo-video (substituindo expo-av deprecado)
+ *
+ * CORREÇÕES IMPLEMENTADAS:
+ * - Migrado de expo-av para expo-video (não deprecado)
+ * - Adicionado carrossel unificado de mídias
+ * - Melhorado controles de vídeo
+ * - Suporte completo para Android e iOS
+ */
+
+import React, { useState } from 'react';
+import { View, StyleSheet, ScrollView, Image, Alert, Dimensions } from 'react-native';
 import { Text, Card, Chip, Button } from 'react-native-paper';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors, spacing } from '@/styles/theme';
@@ -8,34 +18,53 @@ import { OfertasStackParamList } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { ofertaService } from '@/services/ofertaService';
 import { toAbsoluteMediaUrl, toAbsoluteMediaUrls } from '@/utils/mediaUrl';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { formatCurrencyBRL } from '@/utils/currency';
 
-
 type Props = NativeStackScreenProps<OfertasStackParamList, 'OfferDetail'>;
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const MEDIA_WIDTH = SCREEN_WIDTH - (spacing.md * 2);
+const MEDIA_HEIGHT = 250;
 
 const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
     const { oferta } = route.params;
     const { user } = useAuth();
+
     const prestadorIdRaw: any = oferta?.prestador?._id as any;
-    const prestadorId = typeof prestadorIdRaw === 'object' && prestadorIdRaw?._id ? String(prestadorIdRaw._id) : String(prestadorIdRaw);
+    const prestadorId = typeof prestadorIdRaw === 'object' && prestadorIdRaw?._id
+        ? String(prestadorIdRaw._id)
+        : String(prestadorIdRaw);
     const userId = user?.id ?? (user as any)?._id;
     const isOwner = !!userId && String(userId) === prestadorId;
 
     const preco = oferta.preco;
     const unit: any = (oferta as any)?.unidadePreco;
-    const unitSuffix = unit === 'hora' ? '/hora' : unit === 'diaria' ? '/diária' : unit === 'mes' ? '/mês' : unit === 'aula' ? '/aula' : unit === 'pacote' ? ' (pacote)' : '';
+    const unitSuffix = unit === 'hora' ? '/hora'
+        : unit === 'diaria' ? '/diária'
+            : unit === 'mes' ? '/mês'
+                : unit === 'aula' ? '/aula'
+                    : unit === 'pacote' ? ' (pacote)'
+                        : '';
+
     const prestadorNome = oferta?.prestador?.nome ?? 'Prestador';
-    const avaliacaoNum = typeof oferta?.prestador?.avaliacao === 'number' ? oferta.prestador.avaliacao : Number(oferta?.prestador?.avaliacao ?? 0);
+    const avaliacaoNum = typeof oferta?.prestador?.avaliacao === 'number'
+        ? oferta.prestador.avaliacao
+        : Number(oferta?.prestador?.avaliacao ?? 0);
     const cidade = oferta?.localizacao?.cidade ?? 'Cidade';
     const estado = oferta?.localizacao?.estado ?? 'UF';
-    const primeiraImagemRaw = Array.isArray(oferta?.imagens) && oferta.imagens.length > 0 ? oferta.imagens[0] : undefined;
-    const primeiraImagem = toAbsoluteMediaUrl(primeiraImagemRaw);
-    const videoUrls = Array.isArray((oferta as any).videos) ? toAbsoluteMediaUrls((oferta as any).videos) : [];
+
+    // Unificar todas as mídias (imagens e vídeos)
+    const imageUrls = Array.isArray(oferta?.imagens)
+        ? toAbsoluteMediaUrls(oferta.imagens)
+        : [];
+    const videoUrls = Array.isArray((oferta as any).videos)
+        ? toAbsoluteMediaUrls((oferta as any).videos)
+        : [];
 
     const allMedia = [
-      ...(oferta.imagens || []).map(url => ({ type: 'image', url: toAbsoluteMediaUrl(url) })),
-      ...(oferta.videos || []).map(url => ({ type: 'video', url: toAbsoluteMediaUrl(url) }))
+        ...imageUrls.map(url => ({ type: 'image' as const, url })),
+        ...videoUrls.map(url => ({ type: 'video' as const, url })),
     ];
 
     const handleEdit = () => {
@@ -43,55 +72,75 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     const handleDelete = () => {
-        Alert.alert('Excluir oferta', 'Tem certeza que deseja excluir esta oferta? Esta ação não pode ser desfeita.', [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-                text: 'Excluir',
-                style: 'destructive',
-                onPress: async () => {
-                    try {
-                        await ofertaService.deleteOferta(oferta._id);
-                        Alert.alert('Sucesso', 'Oferta excluída com sucesso.');
-                        navigation.goBack();
-                    } catch (e: any) {
-                        const message = e?.response?.data?.message || e?.message || 'Não foi possível excluir a oferta.';
-                        Alert.alert('Erro', String(message));
-                    }
+        Alert.alert(
+            'Excluir oferta',
+            'Tem certeza que deseja excluir esta oferta? Esta ação não pode ser desfeita.',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Excluir',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await ofertaService.deleteOferta(oferta._id);
+                            Alert.alert('Sucesso', 'Oferta excluída com sucesso.');
+                            navigation.goBack();
+                        } catch (e: any) {
+                            const message = e?.response?.data?.message
+                                || e?.message
+                                || 'Não foi possível excluir a oferta.';
+                            Alert.alert('Erro', String(message));
+                        }
+                    },
                 },
-            },
-        ]);
+            ]
+        );
     };
 
     return (
         <ScrollView contentContainerStyle={styles.container}>
             <Card style={styles.card}>
-                {allMedia.length > 0 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaCarousel}>
-                    {allMedia.map((media, index) => (
-                      <View key={`media-${index}`} style={styles.mediaContainer}>
-                        {media.type === 'image' ? (
-                          <Image source={{ uri: media.url }} style={styles.mediaContent} resizeMode="cover" />
-                        ) : (
-                          <Video
-                            source={{ uri: media.url }}
-                            useNativeControls
-                            resizeMode={ResizeMode.COVER} // Use COVER para preencher o espaço
-                            style={styles.mediaContent}
-                            shouldPlay={false}
-                            isLooping={false}
-                          />
-                        )}
-                      </View>
-                    ))}
-                  </ScrollView>
+                {/* Carrossel de Mídias */}
+                {allMedia.length > 0 ? (
+                    <ScrollView
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.mediaCarousel}
+                    >
+                        {allMedia.map((media, index) => (
+                            <View key={`media-${index}`} style={styles.mediaContainer}>
+                                {media.type === 'image' ? (
+                                    <Image
+                                        source={{ uri: media.url }}
+                                        style={styles.mediaContent}
+                                        resizeMode="cover"
+                                    />
+                                ) : (
+                                    <VideoPlayer videoUrl={media.url} />
+                                )}
+                            </View>
+                        ))}
+                    </ScrollView>
+                ) : (
+                    <View style={[styles.mediaContainer, styles.mediaPlaceholder]}>
+                        <Icon name="image-off" size={48} color={colors.textSecondary} />
+                    </View>
                 )}
+
                 <Card.Content>
                     <View style={styles.headerRow}>
-                        <Text variant="titleLarge" style={styles.title}>{oferta.titulo}</Text>
-                        <Text style={styles.price}>{`${formatCurrencyBRL(preco)}${unitSuffix}`}</Text>
+                        <Text variant="titleLarge" style={styles.title}>
+                            {oferta.titulo}
+                        </Text>
+                        <Text style={styles.price}>
+                            {`${formatCurrencyBRL(preco)}${unitSuffix}`}
+                        </Text>
                     </View>
 
-                    <Chip mode="outlined" style={styles.categoryChip}>{oferta.categoria}</Chip>
+                    <Chip mode="outlined" style={styles.categoryChip}>
+                        {oferta.categoria}
+                    </Chip>
 
                     <View style={styles.providerRow}>
                         <Icon name="account" size={18} color={colors.textSecondary} />
@@ -107,10 +156,14 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
 
                     <Text style={styles.description}>{oferta.descricao}</Text>
 
-
                     {isOwner && (
-                        <View style={styles.ownerActions} accessibilityLabel="Ações do proprietário">
-                            <Button mode="outlined" icon="pencil" onPress={handleEdit} style={styles.actionBtn}>
+                        <View style={styles.ownerActions}>
+                            <Button
+                                mode="outlined"
+                                icon="pencil"
+                                onPress={handleEdit}
+                                style={styles.actionBtn}
+                            >
                                 Editar
                             </Button>
                             <Button
@@ -131,6 +184,25 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
     );
 };
 
+/**
+ * Componente de player de vídeo usando expo-video
+ */
+const VideoPlayer: React.FC<{ videoUrl: string }> = ({ videoUrl }) => {
+    const player = useVideoPlayer(videoUrl, (player) => {
+        player.loop = false;
+        player.muted = false;
+    });
+
+    return (
+        <VideoView
+            player={player}
+            style={styles.mediaContent}
+            contentFit="cover"
+            nativeControls
+        />
+    );
+};
+
 const styles = StyleSheet.create({
     container: {
         padding: spacing.md,
@@ -139,14 +211,21 @@ const styles = StyleSheet.create({
     card: {
         marginBottom: spacing.md,
     },
-    image: {
-        width: '100%',
-        height: 200,
+    mediaCarousel: {
+        height: MEDIA_HEIGHT,
+    },
+    mediaContainer: {
+        width: MEDIA_WIDTH,
+        height: MEDIA_HEIGHT,
         backgroundColor: colors.surface,
     },
-    imagePlaceholder: {
+    mediaPlaceholder: {
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    mediaContent: {
+        width: '100%',
+        height: '100%',
     },
     headerRow: {
         flexDirection: 'row',
@@ -201,12 +280,6 @@ const styles = StyleSheet.create({
     },
     actionBtn: {
         marginLeft: spacing.xs,
-    },
-    video: {
-        width: '100%',
-        height: 220,
-        backgroundColor: colors.surface,
-        borderRadius: 8,
     },
 });
 

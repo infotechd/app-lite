@@ -3,7 +3,6 @@ import { OfertaServico, IOfertaServico } from '../models/OfertaServico';
 import User from '../models/User';
 import { logger } from '../utils/logger';
 
-// --- INÍCIO DA CORREÇÃO 1 ---
 type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente' | 'distancia';
 
 export interface ListFilters {
@@ -15,14 +14,13 @@ export interface ListFilters {
     cidade?: string;
     estado?: string;
     busca?: string;
-    sort?: SortOption; // Adicionado
-    comMidia?: boolean; // Adicionado
-    lat?: number; // para ordenação por distância
-    lng?: number; // para ordenação por distância
+    sort?: SortOption;
+    comMidia?: boolean;
+    lat?: number;
+    lng?: number;
     page?: number;
     limit?: number;
 }
-// --- FIM DA CORREÇÃO 1 ---
 
 export interface PagedOfertas {
     ofertas: IOfertaServico[];
@@ -33,7 +31,6 @@ export interface PagedOfertas {
 
 export const ofertaService = {
     async list(filters: ListFilters = {}): Promise<PagedOfertas> {
-        // --- INÍCIO DA CORREÇÃO 2 ---
         const {
             categoria,
             subcategoria,
@@ -43,14 +40,13 @@ export const ofertaService = {
             cidade,
             estado,
             busca,
-            sort = 'relevancia', // Adicionado
-            comMidia, // Adicionado
+            sort = 'relevancia',
+            comMidia,
             lat,
             lng,
             page = 1,
             limit = 10,
         } = filters;
-        // --- FIM DA CORREÇÃO 2 ---
 
         const query: any = { status: { $ne: 'inativo' } };
 
@@ -62,17 +58,14 @@ export const ofertaService = {
         if (cidade) query['localizacao.cidade'] = cidade;
         if (estado) query['localizacao.estado'] = estado;
 
-        // Filtro comMidia: considerar imagens OU vídeos presentes
         if (comMidia === true) {
             const mediaOr = [
                 { imagens: { $exists: true, $ne: [] } },
                 { videos: { $exists: true, $ne: [] } },
             ];
-            // Evitar conflito com possíveis $or de busca textual: encapsular em $and
             query.$and = [...(query.$and || []), { $or: mediaOr }];
         }
 
-        // Para ordenações não baseadas em $text, mantemos um filtro regex simples.
         const hasBusca = Boolean(busca && busca.trim().length > 0);
         if (hasBusca && sort !== 'relevancia') {
             const regex = new RegExp((busca || '').trim(), 'i');
@@ -85,11 +78,8 @@ export const ofertaService = {
 
         const skip = (page - 1) * limit;
 
-        // Implementação completa de ordenações, incluindo 'distancia' e 'relevancia'
         if (sort === 'distancia' && typeof lat === 'number' && typeof lng === 'number') {
-            // Construir match sem $text (pois $geoNear.query não suporta $text de forma consistente)
             const matchWithoutText = { ...query };
-            // Se houver busca, aplicamos após $geoNear
             const textMatch = hasBusca ? { $text: { $search: (busca || ''), $language: 'portuguese' } } : undefined;
 
             const pipeline: any[] = [
@@ -126,11 +116,8 @@ export const ofertaService = {
         }
 
         if (sort === 'relevancia') {
-            // Ranking composto: textScore (titulo>descricao>tags) + mídia + avaliação + recência
-            // Montar $match com/sem $text
             const match: any = { ...query };
             if (hasBusca) {
-                // Remover o $or regex possivelmente setado acima (não deve existir pois evitamos no sort !== relevancia)
                 delete match.$or;
                 match.$text = { $search: (busca || ''), $language: 'portuguese' };
             }
@@ -154,7 +141,6 @@ export const ofertaService = {
                                 5
                             ]
                         },
-                        // recency: 0.5 / max(1, days_since_update)
                         recency_boost: {
                             $divide: [
                                 0.5,
@@ -202,7 +188,6 @@ export const ofertaService = {
             return { ofertas: ofertas as any, total, page, totalPages };
         }
 
-        // Demais ordenações simples
         let sortOptions: any = {};
         switch (sort) {
             case 'preco_menor':
@@ -252,20 +237,20 @@ export const ofertaService = {
     },
 
     async create(userId: string, payload: Partial<IOfertaServico>): Promise<IOfertaServico> {
-        // Obter dados do usuário para preencher prestador
         const user = await User.findById(userId).lean();
         if (!user) {
             logger.warn('ofertas.create.userNotFound', { userId });
             throw Object.assign(new Error('Usuário não encontrado'), { status: 404 });
         }
 
+        // ⚠️ SEM TRANSFORMAÇÃO: O schema agora aceita strings diretamente
         const doc = await OfertaServico.create({
             ...payload,
             prestador: {
                 _id: new mongoose.Types.ObjectId(userId),
                 nome: user.nome,
                 avatar: user.avatar,
-                avaliacao: 5.0, // TODO: Puxar a avaliação real do usuário
+                avaliacao: 5.0,
                 tipoPessoa: user.tipoPessoa || 'PF',
             },
             status: payload.status ?? 'ativo',
@@ -284,7 +269,6 @@ export const ofertaService = {
         }
 
         const prestadorRaw: any = (oferta as any).prestador?._id;
-        // Extrai o ID do prestador de forma robusta (ObjectId, string ou documento populado)
         const prestadorId = prestadorRaw && typeof prestadorRaw === 'object' && ('_id' in prestadorRaw)
             ? prestadorRaw._id
             : prestadorRaw;
@@ -296,6 +280,7 @@ export const ofertaService = {
             throw err;
         }
 
+        // ⚠️ SEM TRANSFORMAÇÃO: Apenas atribui diretamente
         Object.assign(oferta, payload);
         await oferta.save();
         logger.info('ofertas.update.success', { id, userId });
