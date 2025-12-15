@@ -19,7 +19,8 @@
 // - TODO: Log estruturado (com IDs de correlação) para facilitar debug em produção
 
 import api from './api';
-import type { MediaFile } from '@/utils/validation';
+// Aceitamos diferentes formas de MediaFile (de '@/types/media' e do Zod schema em '@/utils/validation').
+type AnyMediaFile = { uri: string; type: string; name?: string; size?: number };
 import { Platform } from 'react-native';
 
 /**
@@ -68,7 +69,7 @@ export interface UploadFilesResponse {
  * - Timeout padrão de 60s (pode ser ajustado futuramente).
  * - O backend pode responder em formatos distintos (data.data.files ou data.files); ambos são aceitos.
  */
-export async function uploadFiles(mediaFiles: MediaFile[]): Promise<UploadFilesResponse> {
+export async function uploadFiles(mediaFiles: AnyMediaFile[]): Promise<UploadFilesResponse> {
     // Curto-circuito: sem arquivos, retorna estruturas vazias
     if (!Array.isArray(mediaFiles) || mediaFiles.length === 0) {
         return { images: [], videos: [], raw: [] };
@@ -98,15 +99,25 @@ export async function uploadFiles(mediaFiles: MediaFile[]): Promise<UploadFilesR
             }
         }
 
-        // Heurística simples para nome default baseado no tipo MIME
-        const isVideo = (f.type || '').startsWith('video/');
-        const defaultName = isVideo ? 'video.mp4' : 'image.jpg';
+        // Resolver MIME type a partir do objeto recebido.
+        // Nosso MediaFile usa type: 'image'|'video'. Porém, se vier um MIME completo, preservamos.
+        const rawType: string | undefined = (f as any)?.mimeType || (f as any)?.type;
+        const isMime = typeof rawType === 'string' && rawType.includes('/');
+        const resourceType = typeof (f as any)?.type === 'string' && !isMime ? (f as any).type : (rawType?.startsWith('video/') ? 'video' : 'image');
+        const mime = isMime
+            ? (rawType as string)
+            : resourceType === 'video'
+                ? 'video/mp4'
+                : 'image/jpeg';
+
+        // Nome default com base no tipo resolvido
+        const defaultName = mime.startsWith('video/') ? 'video.mp4' : 'image.jpg';
 
         // Objeto compatível com FormData para React Native
         const fileObject = {
             uri, // caminho/uri do arquivo no dispositivo
-            type: f.type, // MIME type informado pela origem (ImagePicker, etc.)
-            name: f.name || defaultName, // fallback caso não haja nome
+            type: mime, // MIME type resolvido
+            name: (f as any)?.name || defaultName, // fallback caso não haja nome
         } as any;
 
         // Adiciona o arquivo no campo 'files' (o backend deve aceitar múltiplos)

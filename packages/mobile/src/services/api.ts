@@ -37,7 +37,7 @@ function ensureTrailingSlash(u: string): string {
 const env = envConfig;
 const baseCandidates: string[] = [
     env?.apiUrl || '',
-    'http://192.168.1.54:4000/api', // Casa — IP da sua casa
+    'http://192.168.1.54:4000/api', // Rede Mercúrio
     'http://192.168.1.12:4000/api',  // Trabalho — IP do seu trabalho
     'http://192.168.1.8:4000/api',   // Ip do Trabalho
     'http://192.168.1.3:4000/api',   // IP adicional solicitado

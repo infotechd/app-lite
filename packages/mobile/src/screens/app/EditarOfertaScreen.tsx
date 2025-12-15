@@ -5,21 +5,21 @@
 
 import React, { useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Button, Text, TextInput, HelperText, Chip, RadioButton } from 'react-native-paper';
+import { Button, Text, TextInput, HelperText, Chip } from 'react-native-paper';
 import { colors, spacing } from '@/styles/theme'; // Tokens de tema (cores, espaçamentos)
-import { criarOfertaSchema, MediaFile, OFERTA_MEDIA_CONFIG, PriceUnit } from '@/utils/validation'; // Schema de validação e configs de mídia
+import { criarOfertaSchema, OFERTA_MEDIA_CONFIG, PriceUnit } from '@/utils/validation'; // Schema de validação e configs de mídia
 import { ofertaService } from '@/services/ofertaService'; // Serviço de ofertas (API)
 import { uploadFiles } from '@/services/uploadService'; // Serviço de upload (imagens/vídeos)
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { OfertasStackParamList } from '@/types'; // Tipos da navegação
-import { maskCurrencyInput, parseCurrencyBRLToNumber, formatCurrencyBRL } from '@/utils/currency'; // Utilidades de moeda BRL
+import { OfertasStackParamList } from '@/types';
+import { maskCurrencyInput, parseCurrencyBRLToNumber, formatCurrencyBRL } from '@/utils/currency';
 
-import { CATEGORY_NAMES } from '@/constants/categories'; // Lista de categorias disponíveis
-import CategoryChips from '@/components/CategoryChips'; // Componente de chips para seleção de categoria
-import EstadoSelect from '@/components/EstadoSelect'; // Componente de seleção de UF (+ capital)
-import MediaChips from '@/components/MediaChips'; // Componente para visualizar/adicionar/remover mídias novas
-import { pickMedia } from '@/services/mediaPickerService'; // Picker de mídia nativo
-import { handleMediaPickResult } from '@/utils/mediaPickHandlers'; // Tratador do resultado de seleção de mídias
+import CategorySubcategoryPicker from '@/components/CategorySubcategoryPicker';
+import EstadoSelect from '@/components/EstadoSelect';
+import MediaPreview from '@/components/common/MediaPreview';
+import MediaOptionsMenu from '@/components/MediaOptionsMenu';
+import { useMediaPicker } from '@/hooks/useMediaPicker';
+import { MediaFile } from '@/types/media';
 
 // Tipagem das props recebidas via stack navigator: espera rota 'EditOferta'
 type Props = NativeStackScreenProps<OfertasStackParamList, 'EditOferta'>;
@@ -38,11 +38,9 @@ type EditForm = {
     precoText: string; // Preço no formato texto (mascarado em BRL)
     priceUnit: PriceUnit; // Unidade do preço
     categoria: string; // Categoria selecionada
+    subcategoria?: string; // Subcategoria selecionada (opcional)
     cidade: string; // Cidade (definida automaticamente a partir da UF selecionada)
     estado: string; // UF (sigla com 2 caracteres)
-    keptImages: string[]; // URLs remotas de imagens que serão mantidas
-    keptVideos: string[]; // URLs remotas de vídeos que serão mantidos
-    newMediaFiles: MediaFile[]; // Arquivos locais de mídias recém-selecionadas para upload
 };
 
 /**
@@ -57,23 +55,32 @@ type EditForm = {
  * @returns JSX.Element com a UI da tela de edição.
  */
 const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
-    // Oferta original recebida pela navegação
-    const oferta = route.params.oferta;
+    const { oferta } = route.params;
 
     // Estado do formulário, inicializado com os valores da oferta existente
-    const [form, setForm] = useState<EditForm>({
+    const [form, setForm] = useState({
         titulo: oferta.titulo || '',
         descricao: oferta.descricao || '',
-        precoText: oferta.preco > 0 ? formatCurrencyBRL(oferta.preco) : '', // Converte número em string monetária BRL
+        precoText: oferta.preco > 0 ? formatCurrencyBRL(oferta.preco) : '',
         priceUnit: (oferta as any)?.unidadePreco || 'pacote',
         categoria: oferta.categoria || '',
+        subcategoria: (oferta as any)?.subcategoria,
         cidade: oferta.localizacao?.cidade || '',
         estado: oferta.localizacao?.estado || '',
-        keptImages: Array.isArray(oferta.imagens) ? oferta.imagens : [], // Garante array mesmo se vier undefined
-        // Ponto de melhoria: evitar uso de "any" em oferta.videos. Ideal criar tipo forte para Oferta.
-        keptVideos: Array.isArray((oferta as any).videos) ? (oferta as any).videos : [],
-        newMediaFiles: [], // Começa vazio; apenas novas mídias selecionadas entram aqui
     });
+
+    // Estado das mídias, unificando existentes e novas
+    const [media, setMedia] = useState<MediaFile[]>(() => [
+        ...(oferta.imagens?.map(
+            (uri: string): MediaFile => ({ uri, type: 'image', name: 'imagem-existente' })
+        ) || []),
+        ...((oferta as any).videos?.map(
+            (uri: string): MediaFile => ({ uri, type: 'video', name: 'video-existente' })
+        ) || []),
+    ]);
+
+    // Estado para controle da exibição das opções de mídia (câmera/galeria)
+    const [isMediaOptionsVisible, setIsMediaOptionsVisible] = useState(false);
 
     // Estado para mensagens de erro por campo (preenchido após validação)
     const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -81,12 +88,39 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
     // Flag de envio para desabilitar ações simultâneas e exibir loading
     const [submitting, setSubmitting] = useState(false);
 
-    // Quantidade total de mídias (existentes mantidas + novas)
-    const totalMidias = form.keptImages.length + form.keptVideos.length + form.newMediaFiles.length;
+    // Hook para seleção de mídia, encapsulando lógica de câmera e galeria
+    const onSelectMedia = (newMedia: MediaFile[]) => {
+        if (media.length + newMedia.length > OFERTA_MEDIA_CONFIG.MAX_FILES) {
+            Alert.alert(
+                'Limite de mídias atingido',
+                `Você pode adicionar no máximo ${OFERTA_MEDIA_CONFIG.MAX_FILES} mídias.`
+            );
+        } else {
+            setMedia(prevMedia => [...prevMedia, ...newMedia]);
+        }
+    };
+
+    // Dois pickers: um para imagens e outro para vídeos, para casar com as props do MediaOptionsMenu
+    const { pickFromGallery: onPickPhoto, takePhoto: onTakePhoto } = useMediaPicker({
+        onSelect: onSelectMedia,
+        mediaType: 'images',
+        maxFiles: OFERTA_MEDIA_CONFIG.MAX_FILES,
+        currentFilesCount: media.length,
+    });
+
+    const { pickFromGallery: onPickVideo, takePhoto: onRecordVideo } = useMediaPicker({
+        onSelect: onSelectMedia,
+        mediaType: 'videos',
+        maxFiles: OFERTA_MEDIA_CONFIG.MAX_FILES,
+        currentFilesCount: media.length,
+    });
+
+    // Remove uma mídia da lista (exclui da pré-visualização)
+    const handleRemoveMedia = (index: number) => {
+        setMedia(prevMedia => prevMedia.filter((_, i) => i !== index));
+    };
 
     // Regra para habilitar o botão de salvar
-    // Ponto de melhoria: totalMidias é lido do escopo externo; para evitar sutilezas,
-    // poderia ser recalculado dentro do useMemo ou adicionado como dependência.
     const canSubmit = useMemo(() => {
         const price = parseCurrencyBRLToNumber(form.precoText);
         return (
@@ -97,7 +131,6 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             form.categoria.trim().length > 0 &&
             form.cidade.trim().length > 0 &&
             form.estado.trim().length === 2 && // UF deve ter 2 caracteres
-            totalMidias <= OFERTA_MEDIA_CONFIG.MAX_FILES &&
             !submitting
         );
     }, [form, submitting]);
@@ -114,73 +147,8 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
      * @param value - Novo valor do campo correspondente.
      * @returns void
      */
-    const setField = <K extends keyof EditForm>(key: K, value: EditForm[K]) => {
-        setForm((prev) => ({ ...prev, [key]: value }));
-    };
-
-    /**
-     * Abre o seletor de mídias (galeria/câmera) respeitando o limite máximo permitido.
-     * Calcula o espaço restante com base nas mídias já mantidas e impede seleção quando o limite foi atingido.
-     * Ao concluir, delega o processamento e validações adicionais para o utilitário handleMediaPickResult.
-     *
-     * @returns Promise<void>
-     */
-    const onPickMedia = async () => {
-        try {
-            const spaceLeft = OFERTA_MEDIA_CONFIG.MAX_FILES - (form.keptImages.length + form.keptVideos.length);
-            if (spaceLeft <= 0) {
-                Alert.alert('Limite atingido', `Você pode enviar no máximo ${OFERTA_MEDIA_CONFIG.MAX_FILES} arquivos.`);
-                return;
-            }
-
-            // Abre a galeria/câmera com configuração de limite adaptada ao espaço restante
-            const res = await pickMedia(form.newMediaFiles, { ...OFERTA_MEDIA_CONFIG, MAX_FILES: spaceLeft });
-
-            // Delega ao utilitário o tratamento do resultado e atualização da lista de novas mídias
-            handleMediaPickResult(
-                res,
-                (files) => setForm((prev) => ({ ...prev, newMediaFiles: files })),
-                spaceLeft
-            );
-        } catch (err) {
-            console.error('Erro ao selecionar mídia:', err);
-            // Ponto de melhoria: padronizar mensagens em i18n e diferenciar cancelamento de erro real.
-            Alert.alert('Erro', 'Não foi possível abrir a galeria.');
-        }
-    };
-
-    /**
-     * Remove uma imagem existente (já hospedada) da lista de mídias mantidas.
-     * Não remove do servidor imediatamente; apenas exclui da lista local para que a atualização
-     * posterior envie o novo conjunto sem essa URL.
-     *
-     * @param index - Posição da imagem na lista de keptImages a ser removida.
-     * @returns void
-     */
-    const onRemoveKeptImage = (index: number) => {
-        setForm((prev) => ({ ...prev, keptImages: prev.keptImages.filter((_, i) => i !== index) }));
-    };
-
-    /**
-     * Remove um vídeo existente (já hospedado) da lista de mídias mantidas.
-     * Assim como imagens, a remoção efetiva frente ao backend ocorre ao enviar o novo payload.
-     *
-     * @param index - Posição do vídeo na lista de keptVideos a ser removido.
-     * @returns void
-     */
-    const onRemoveKeptVideo = (index: number) => {
-        setForm((prev) => ({ ...prev, keptVideos: prev.keptVideos.filter((_, i) => i !== index) }));
-    };
-
-    /**
-     * Remove uma nova mídia local antes do upload (útil para desfazer seleções).
-     * Não impacta mídias já hospedadas.
-     *
-     * @param index - Posição na lista de newMediaFiles a ser removida.
-     * @returns void
-     */
-    const onRemoveNewMedia = (index: number) => {
-        setForm((prev) => ({ ...prev, newMediaFiles: prev.newMediaFiles.filter((_, i) => i !== index) }));
+    const setField = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
+        setForm(prev => ({ ...prev, [key]: value }));
     };
 
     /**
@@ -201,24 +169,28 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
         setSubmitting(true);
         setErrors({});
 
+        // Separa arquivos locais (que precisam ser enviados) de URLs remotas (que são mantidas)
+        const localFiles = media.filter(m => m.uri.startsWith('file://'));
+        const remoteFiles = media.filter(m => m.uri.startsWith('http'));
+
+        // Dados para validação, incluindo preço convertido para número
+        const validationData = {
+            ...form,
+            preco: parseCurrencyBRLToNumber(form.precoText),
+            mediaFiles: localFiles,
+        };
+
         // Validação: reaproveita o schema de criação para os campos textuais/UF/preço e para novas mídias
-        // Ponto de melhoria: criar schema específico para edição se regras forem diferentes (ex: mídias podem ser 0).
-        const validateResult = criarOfertaSchema.safeParse({
-            titulo: form.titulo,
-            descricao: form.descricao,
-            precoText: form.precoText,
-            priceUnit: form.priceUnit,
-            categoria: form.categoria,
-            cidade: form.cidade,
-            estado: form.estado,
-            mediaFiles: form.newMediaFiles, // valida apenas os novos (tamanho/tipo/limite adicional gerido acima)
-        });
-        if (!validateResult.success) {
+        const result = criarOfertaSchema.safeParse(validationData);
+
+        if (!result.success) {
             // Converte issues do Zod em um dicionário de erros por campo
             const fieldErrors: Record<string, string> = {};
-            validateResult.error.issues.forEach((i) => {
-                const key = i.path.join('.') || 'form';
-                if (!fieldErrors[key]) fieldErrors[key] = i.message;
+            result.error.issues.forEach(issue => {
+                const key = issue.path.join('.');
+                if (!fieldErrors[key]) {
+                    fieldErrors[key] = issue.message;
+                }
             });
             setErrors(fieldErrors);
             setSubmitting(false);
@@ -227,41 +199,37 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
 
         try {
             // 1) Upload de novas mídias (se houver)
-            let imageUrls: string[] = [];
-            let videoUrls: string[] = [];
-            if (form.newMediaFiles.length > 0) {
-                const uploadRes = await uploadFiles(form.newMediaFiles);
-                imageUrls = uploadRes.images;
-                videoUrls = uploadRes.videos;
-                // Ponto de melhoria: tratar falhas parciais (alguns arquivos falharam) e informar ao usuário.
+            let uploadedImageUrls: string[] = [];
+            let uploadedVideoUrls: string[] = [];
+
+            if (localFiles.length > 0) {
+                const uploadResponse = await uploadFiles(localFiles);
+                uploadedImageUrls = uploadResponse.images || [];
+                uploadedVideoUrls = uploadResponse.videos || [];
             }
 
-            // 2) Conversão do preço de texto (BRL) para número
-            const preco = parseCurrencyBRLToNumber(form.precoText);
+            // 2) Consolidação final de listas de mídias (mantidas + recém-carregadas)
+            const finalImages = [
+                ...remoteFiles.filter(m => m.type === 'image').map(m => m.uri),
+                ...uploadedImageUrls,
+            ];
+            const finalVideos = [
+                ...remoteFiles.filter(m => m.type === 'video').map(m => m.uri),
+                ...uploadedVideoUrls,
+            ];
 
-            // 3) Consolidação final de listas de mídias (mantidas + recém-carregadas)
-            const finalImages = [...form.keptImages, ...imageUrls];
-            const finalVideos = [...form.keptVideos, ...videoUrls];
-            if (finalImages.length + finalVideos.length > OFERTA_MEDIA_CONFIG.MAX_FILES) {
-                Alert.alert('Limite de mídias', `Máximo de ${OFERTA_MEDIA_CONFIG.MAX_FILES} mídias (imagens + vídeos).`);
-                setSubmitting(false);
-                return;
-            }
-
-            // 4) Montagem do payload para API
+            // 3) Montagem do payload para API
             // Ponto de melhoria: evitar 'any' tipando o payload conforme contrato do backend.
             const payload: any = {
-                titulo: form.titulo.trim(),
-                descricao: form.descricao.trim(),
-                preco,
+                ...form,
+                preco: parseCurrencyBRLToNumber(form.precoText),
                 unidadePreco: form.priceUnit,
-                categoria: form.categoria,
                 localizacao: { cidade: form.cidade, estado: form.estado },
                 imagens: finalImages,
+                videos: finalVideos,
             };
-            if (finalVideos.length) payload.videos = finalVideos;
 
-            // 5) Chamada da API para atualizar a oferta e navegação para detalhe
+            // 4) Chamada da API para atualizar a oferta e navegação para detalhe
             const updated = await ofertaService.updateOferta(oferta._id, payload);
             Alert.alert('Sucesso', 'Oferta atualizada com sucesso!');
             // Ponto de melhoria: considerar navegação com goBack + atualização via contexto/estado global em vez de replace.
@@ -285,7 +253,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             <TextInput
                 label="Título"
                 value={form.titulo}
-                onChangeText={(t) => setField('titulo', t)}
+                onChangeText={t => setField('titulo', t)}
                 style={styles.input}
                 mode="outlined"
                 error={!!errors.titulo}
@@ -296,7 +264,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             <TextInput
                 label="Descrição"
                 value={form.descricao}
-                onChangeText={(t) => setField('descricao', t)}
+                onChangeText={t => setField('descricao', t)}
                 style={styles.input}
                 mode="outlined"
                 multiline
@@ -309,31 +277,69 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             <TextInput
                 label="Preço"
                 value={form.precoText}
-                onChangeText={(t) => setField('precoText', maskCurrencyInput(t))}
-                style={styles.input}
+                onChangeText={t => setField('precoText', maskCurrencyInput(t))}
+                style={[styles.input, styles.priceInput]}
                 mode="outlined"
                 keyboardType="numeric"
-                error={!!errors.precoText}
+                error={!!errors.preco}
             />
-            {!!errors.precoText && <HelperText type="error">{errors.precoText}</HelperText>}
+            {!!errors.preco && <HelperText type="error">{errors.preco}</HelperText>}
 
             {/* Unidade de preço */}
             <Text style={styles.label}>Preço por</Text>
-            <RadioButton.Group onValueChange={(v) => setField('priceUnit', v as PriceUnit)} value={form.priceUnit as any}>
-                <RadioButton.Item label="Hora" value="hora" />
-                <RadioButton.Item label="Diária" value="diaria" />
-                <RadioButton.Item label="Mês" value="mes" />
-                <RadioButton.Item label="Aula" value="aula" />
-                <RadioButton.Item label="Pacote" value="pacote" />
-            </RadioButton.Group>
-            {!!errors.priceUnit && <HelperText type="error">{errors.priceUnit}</HelperText>}
+            <View style={styles.priceUnitContainer}>
+                <Chip
+                    selected={form.priceUnit === 'hora'}
+                    onPress={() => setField('priceUnit', 'hora' as any)}
+                >
+                    Hora
+                </Chip>
+                <Chip
+                    selected={form.priceUnit === 'diaria'}
+                    onPress={() => setField('priceUnit', 'diaria' as any)}
+                >
+                    Diária
+                </Chip>
+                <Chip
+                    selected={form.priceUnit === 'mes'}
+                    onPress={() => setField('priceUnit', 'mes' as any)}
+                >
+                    Mês
+                </Chip>
+                <Chip
+                    selected={form.priceUnit === 'aula'}
+                    onPress={() => setField('priceUnit', 'aula' as any)}
+                >
+                    Aula
+                </Chip>
+                <Chip
+                    selected={form.priceUnit === 'pacote'}
+                    onPress={() => setField('priceUnit', 'pacote' as any)}
+                >
+                    Pacote
+                </Chip>
+            </View>
 
-            {/* Seleção de categoria por chips */}
-            <CategoryChips categories={CATEGORY_NAMES} value={form.categoria} onChange={(cat) => setField('categoria', cat)} />
+            {/* Seleção de categoria e subcategoria */}
+            <CategorySubcategoryPicker
+                selectedCategoryId={form.categoria}
+                selectedSubcategoryId={form.subcategoria}
+                onCategoryChange={id => {
+                    setField('categoria', id);
+                    setField('subcategoria', undefined);
+                }}
+                onSubcategoryChange={id => setField('subcategoria', id)}
+            />
             {!!errors.categoria && <HelperText type="error">{errors.categoria}</HelperText>}
 
             {/* Seleção de UF (define cidade automaticamente com capital, se disponível) */}
-            <EstadoSelect value={form.estado} onChange={(uf, capital) => { setField('estado', uf); if (capital) setField('cidade', capital); }} />
+            <EstadoSelect
+                value={form.estado}
+                onChange={(uf, capital) => {
+                    setField('estado', uf);
+                    if (capital) setField('cidade', capital);
+                }}
+            />
             {!!errors.estado && <HelperText type="error">{errors.estado}</HelperText>}
 
             {/* Campo de cidade somente leitura (preenchido automaticamente) */}
@@ -342,39 +348,46 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
                 value={form.cidade}
                 style={styles.input}
                 mode="outlined"
-                editable={false}
+                disabled
                 error={!!errors.cidade}
             />
             {!!errors.cidade && <HelperText type="error">{errors.cidade}</HelperText>}
 
-            {/* Listagem de mídias existentes (mantidas) com chips removíveis */}
-            <Text variant="titleSmall" style={styles.label}>Mídias (até {OFERTA_MEDIA_CONFIG.MAX_FILES})</Text>
-            <View style={styles.chipsRow}>
-                {form.keptImages.map((url, idx) => (
-                    <Chip key={`ki-${url}`} icon="image" onClose={() => onRemoveKeptImage(idx)} style={styles.chip}>
-                        Imagem {idx + 1}
-                    </Chip>
-                ))}
-                {form.keptVideos.map((url, idx) => (
-                    <Chip key={`kv-${url}`} icon="video" onClose={() => onRemoveKeptVideo(idx)} style={styles.chip}>
-                        Vídeo {idx + 1}
-                    </Chip>
-                ))}
+            {/* Seção de mídias (pré-visualização e adição) */}
+            <View style={styles.section}>
+                <Text style={styles.label}>Mídia (Fotos e Vídeos)</Text>
+                <MediaPreview mediaFiles={media} onRemove={handleRemoveMedia} />
+                {media.length < OFERTA_MEDIA_CONFIG.MAX_FILES && (
+                    <Button
+                        icon="camera"
+                        mode="outlined"
+                        onPress={() => setIsMediaOptionsVisible(true)}
+                        style={styles.button}
+                    >
+                        Adicionar Mídia
+                    </Button>
+                )}
             </View>
 
-            {/* Gerenciador de mídias novas (locais) */}
-            <MediaChips
-                title="Novas mídias"
-                mediaFiles={form.newMediaFiles}
-                onRemove={onRemoveNewMedia}
-                onAddPress={onPickMedia}
-                max={Math.max(0, OFERTA_MEDIA_CONFIG.MAX_FILES - (form.keptImages.length + form.keptVideos.length))}
+            {/* Menu de opções de mídia (câmera/galeria) */}
+            <MediaOptionsMenu
+                visible={isMediaOptionsVisible}
+                onDismiss={() => setIsMediaOptionsVisible(false)}
+                onTakePhoto={onTakePhoto}
+                onRecordVideo={onRecordVideo}
+                onPickPhoto={onPickPhoto}
+                onPickVideo={onPickVideo}
             />
-            {!!errors.mediaFiles && <HelperText type="error">{errors.mediaFiles}</HelperText>}
 
             {/* Botão de salvar alterações */}
-            <Button mode="contained" onPress={onSubmit} disabled={!canSubmit} loading={submitting} style={styles.submit}>
-                Salvar alterações
+            <Button
+                mode="contained"
+                onPress={onSubmit}
+                disabled={!canSubmit}
+                loading={submitting}
+                style={styles.submit}
+            >
+                Salvar Alterações
             </Button>
         </ScrollView>
     );
@@ -389,27 +402,36 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background,
     },
     title: {
-        marginBottom: spacing.md,
+        marginBottom: spacing.lg,
     },
     input: {
-        marginBottom: spacing.sm,
+        marginBottom: spacing.md,
+    },
+    row: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: spacing.md,
+    },
+    priceInput: {
+        flex: 1,
+    },
+    priceUnitContainer: {
+        flex: 1,
     },
     label: {
-        marginTop: spacing.sm,
-        marginBottom: spacing.xs,
-        color: colors.textSecondary,
-    },
-    chipsRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
         marginBottom: spacing.sm,
+        color: colors.textSecondary,
+        fontSize: 16,
     },
-    chip: {
-        marginRight: spacing.xs,
-        marginBottom: spacing.xs,
+    section: {
+        marginVertical: spacing.md,
+    },
+    button: {
+        marginTop: spacing.md,
     },
     submit: {
-        marginTop: spacing.md,
+        marginTop: spacing.lg,
+        paddingVertical: spacing.sm,
     },
 });
 
