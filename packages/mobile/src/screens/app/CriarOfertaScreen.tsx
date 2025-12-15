@@ -21,9 +21,9 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';
 import CategorySubcategoryPicker from '@/components/CategorySubcategoryPicker';
 import EstadoSelect from '@/components/EstadoSelect';
-import MediaChips from '@/components/MediaChips';
+import MediaPreview from '@/components/common/MediaPreview';
 import MediaOptionsMenu from '@/components/MediaOptionsMenu';
-import { takePhoto, recordVideo, pickPhoto, pickVideo } from '@/services/mediaPickerService';
+import { useMediaPicker } from '@/hooks/useMediaPicker';
 import { maskCurrencyInput, parseCurrencyBRLToNumber } from '@/utils/currency';
 
 type Props = NativeStackScreenProps<OfertasStackParamList, 'CreateOferta'>;
@@ -74,105 +74,45 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         );
     }, [form, submitting]);
 
-    /**
-     * Atualiza um campo do formulário de maneira tipada.
-     *
-     * Usa chave genérica para preservar o tipo do valor do campo alterado.
-     *
-     * @typeParam K - Chave do tipo `CriarOfertaForm` a ser atualizada.
-     * @param {K} key Chave do campo do formulário.
-     * @param {CriarOfertaForm[K]} value Novo valor para o campo selecionado.
-     * @returns {void} Não retorna valor; apenas atualiza o estado local do formulário.
-     */
-    const setField = <K extends keyof CriarOfertaForm>(key: K, value: CriarOfertaForm[K]) => {
+    const setField = (key: keyof CriarOfertaForm, value: any) => {
         setForm((prev) => ({ ...prev, [key]: value }));
     };
 
     /**
-     * Handler genérico para processar o resultado de uma ação de mídia (câmera/galeria).
-     *
-     * Centraliza o tratamento de:
-     * - Permissão negada (exibe alerta e interrompe);
-     * - Limite de arquivos atingido (exibe alerta e interrompe);
-     * - Avisos retornados (exibe alerta com mensagens);
-     * - Atualização da lista de arquivos válidos em `form.mediaFiles`.
-     *
-     * A função `action` deve executar a operação de mídia e retornar
-     * um objeto no formato esperado pelo `mediaPickerService` (com `files`, `warnings`, etc.).
-     *
-     * @param {string} actionName Nome amigável da ação (ex.: "tirar foto", "gravar vídeo").
-     * @param {() => Promise<any>} action Função assíncrona que realiza a operação de mídia.
-     * @returns {Promise<void>} Promessa concluída após processar o resultado e atualizar o estado.
+     * Adiciona novas mídias ao formulário, respeitando o limite máximo.
+     * Mantém comportamento equivalente ao da tela de edição.
      */
-    const handleMediaResult = async (
-        actionName: string,
-        action: () => Promise<any>
-    ) => {
-        try {
-            const res = await action();
-
-            if (res.permissionDenied) {
-                Alert.alert(
-                    'Permissão Negada',
-                    'É necessário permitir o acesso para usar esta funcionalidade.'
-                );
-                return;
-            }
-
-            if (res.truncated) {
-                Alert.alert(
-                    'Limite Atingido',
-                    `Você já atingiu o limite de ${OFERTA_MEDIA_CONFIG.MAX_FILES} arquivos.`
-                );
-                return;
-            }
-
-            if (res.warnings.length > 0) {
-                Alert.alert('Avisos', res.warnings.join('\n'));
-            }
-
-            setForm((prev) => ({ ...prev, mediaFiles: res.files }));
-        } catch (err) {
-            console.error(`Erro ao ${actionName}:`, err);
-            Alert.alert('Erro', `Não foi possível ${actionName}.`);
+    const onSelectMedia = (newMedia: any[]) => {
+        if (form.mediaFiles.length + newMedia.length > OFERTA_MEDIA_CONFIG.MAX_FILES) {
+            Alert.alert(
+                'Limite de mídias atingido',
+                `Você pode adicionar no máximo ${OFERTA_MEDIA_CONFIG.MAX_FILES} mídias.`
+            );
+            return;
         }
+        setForm(prev => ({ ...prev, mediaFiles: [...prev.mediaFiles, ...newMedia] }));
     };
 
-    /**
-     * Dispara a captura de foto pela câmera e aplica tratamentos padrão.
-     * @returns {Promise<void>} Promessa quando o processamento terminar.
-     */
-    const onTakePhoto = () => handleMediaResult(
-        'tirar foto',
-        () => takePhoto(form.mediaFiles, OFERTA_MEDIA_CONFIG)
-    );
+    // Hooks de seleção/captura iguais aos usados na tela de edição
+    const { pickFromGallery: pickPhotoFromGallery, takePhoto: takePhotoFromCamera } = useMediaPicker({
+        onSelect: onSelectMedia,
+        mediaType: 'images',
+        maxFiles: OFERTA_MEDIA_CONFIG.MAX_FILES,
+        currentFilesCount: form.mediaFiles.length,
+    });
 
-    /**
-     * Dispara a gravação de vídeo pela câmera e aplica tratamentos padrão.
-     * @returns {Promise<void>} Promessa quando o processamento terminar.
-     */
-    const onRecordVideo = () => handleMediaResult(
-        'gravar vídeo',
-        () => recordVideo(form.mediaFiles, OFERTA_MEDIA_CONFIG)
-    );
+    const { pickFromGallery: pickVideoFromGallery, takePhoto: captureVideoFromCamera } = useMediaPicker({
+        onSelect: onSelectMedia,
+        mediaType: 'videos',
+        maxFiles: OFERTA_MEDIA_CONFIG.MAX_FILES,
+        currentFilesCount: form.mediaFiles.length,
+    });
 
-    /**
-     * Abre a galeria para escolher foto e aplica tratamentos padrão.
-     * @returns {Promise<void>} Promessa quando o processamento terminar.
-     */
-    const onPickPhoto = () => handleMediaResult(
-        'escolher foto',
-        () => pickPhoto(form.mediaFiles, OFERTA_MEDIA_CONFIG)
-    );
-
-    /**
-     * Abre a galeria para escolher vídeo e aplica tratamentos padrão.
-     * @returns {Promise<void>} Promessa quando o processamento terminar.
-     */
-    const onPickVideo = () => handleMediaResult(
-        'escolher vídeo',
-        () => pickVideo(form.mediaFiles, OFERTA_MEDIA_CONFIG)
-    );
+    // Mapas para o menu de opções
+    const onTakePhoto = () => takePhotoFromCamera();
+    const onRecordVideo = () => captureVideoFromCamera();
+    const onPickPhoto = () => pickPhotoFromGallery();
+    const onPickVideo = () => pickVideoFromGallery();
 
     /**
      * Remove um item de mídia do array do formulário pelo índice.
@@ -330,7 +270,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                     style={[styles.input, styles.priceInput]}
                     mode="outlined"
                     keyboardType="numeric"
-                    error={!!errors.precoText}
+                    error={!!errors.preco}
                 />
 
                 <View style={styles.priceUnitContainer}>
@@ -355,7 +295,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                     </ScrollView>
                 </View>
             </View>
-            {!!errors.precoText && <HelperText type="error">{errors.precoText}</HelperText>}
+            {!!errors.preco && <HelperText type="error">{errors.preco}</HelperText>}
             {!!errors.priceUnit && <HelperText type="error">{errors.priceUnit}</HelperText>}
 
             <CategorySubcategoryPicker
@@ -395,13 +335,17 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                     Mídias (até {OFERTA_MEDIA_CONFIG.MAX_FILES}) - Vídeos até {OFERTA_MEDIA_CONFIG.MAX_VIDEO_DURATION}s
                 </Text>
 
-                <MediaChips
-                    title=""
-                    mediaFiles={form.mediaFiles}
-                    onRemove={onRemoveMedia}
-                    onAddPress={() => setMenuVisible(true)}
-                    max={OFERTA_MEDIA_CONFIG.MAX_FILES}
-                />
+                <MediaPreview mediaFiles={form.mediaFiles as any} onRemove={onRemoveMedia} />
+                {form.mediaFiles.length < OFERTA_MEDIA_CONFIG.MAX_FILES && (
+                    <Button
+                        icon="camera"
+                        mode="outlined"
+                        onPress={() => setMenuVisible(true)}
+                        style={styles.submit}
+                    >
+                        Adicionar Mídia
+                    </Button>
+                )}
             </View>
             {!!errors.mediaFiles && <HelperText type="error">{errors.mediaFiles}</HelperText>}
 

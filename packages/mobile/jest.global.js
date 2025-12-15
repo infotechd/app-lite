@@ -60,6 +60,14 @@ if (typeof globalThis.expo.SharedRef === 'undefined') {
     globalThis.expo.SharedRef = function SharedRef() {};
 }
 
+// Garantir que StyleSheet.flatten exista antes dos testes (necessário para RNTL formatters)
+try {
+    const RN = require('react-native');
+    if (RN && RN.StyleSheet && typeof RN.StyleSheet.flatten !== 'function') {
+        RN.StyleSheet.flatten = (s) => s;
+    }
+} catch {}
+
 // Mock react-native-paper with minimal components to make UI tests deterministic and avoid SafeArea deps
 jest.mock('react-native-paper', () => {
     const React = require('react');
@@ -83,6 +91,25 @@ jest.mock('react-native-paper', () => {
 
     // Minimal Chip mock
     const Chip = (props) => React.createElement('RNPChip', props, props.children);
+
+    // Minimal Card mock with nested Content
+    const Card = (props) => React.createElement('RNPCard', props, props.children);
+    Card.Content = (props) => React.createElement('RNPCardContent', props, props.children);
+
+    // Minimal IconButton mock: render as button-like element with accessible label via `icon`
+    const IconButton = ({ onPress, icon, testID, ...rest }) =>
+        React.createElement(
+            'RNPIconButton',
+            {
+                accessibilityRole: 'button',
+                accessibilityLabel: icon || 'icon-button',
+                testID: testID || 'icon-button',
+                onClick: onPress,
+                onPress,
+                ...rest,
+            },
+            null
+        );
 
     // Minimal Menu mock: renders anchor always and children when visible
     const Menu = ({ visible, anchor, children, ...rest }) => {
@@ -111,7 +138,7 @@ jest.mock('react-native-paper', () => {
         return React.createElement('RNPSegmentedButtons', { testID: 'segmented-buttons', value, ...rest }, items);
     };
 
-    return { Provider, Button, Text, TextInput, HelperText, Snackbar, SegmentedButtons, Menu, Chip, MD3LightTheme };
+    return { Provider, Button, Text, TextInput, HelperText, Snackbar, SegmentedButtons, Menu, Chip, Card, IconButton, MD3LightTheme };
 });
 
 // Mock expo-updates to avoid ESM import issues in tests
