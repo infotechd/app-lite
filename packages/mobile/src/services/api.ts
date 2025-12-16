@@ -40,6 +40,7 @@ const baseCandidates: string[] = [
     'http://192.168.1.54:4000/api', // Rede Mercúrio
     'http://192.168.1.12:4000/api',  // Trabalho — IP do seu trabalho
     'http://192.168.1.8:4000/api',   // Ip do Trabalho
+    'http://192.168.1.4:4000/api',   // Trabalho - Márcio
     'http://192.168.1.3:4000/api',   // IP adicional solicitado
     'http://192.168.15.12:4000/api', // Casa — faixa alternativa 192.168.15.x
     'http://192.168.15.1:4000/api',  // Casa — gateway/roteador comum

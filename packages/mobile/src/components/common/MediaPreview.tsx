@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Image, StyleSheet, FlatList } from 'react-native';
+import { View, Image, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Card, IconButton } from 'react-native-paper';
 import { spacing } from '@/styles/theme';
 import { MediaFile } from '@/types/media';
@@ -17,6 +17,11 @@ interface MediaPreviewProps {
    * Recebe o índice do item na lista como argumento.
    */
   onRemove: (index: number) => void;
+  /**
+   * Função opcional chamada ao pressionar um item de mídia.
+   * Recebe a URI do item como argumento.
+   */
+  onPreview?: (uri: string) => void;
 }
 
 /**
@@ -27,9 +32,10 @@ interface MediaPreviewProps {
  *
  * @param mediaFiles Lista de arquivos de mídia (imagens e vídeos) a serem exibidos.
  * @param onRemove Callback disparado ao tocar no botão de remover; recebe o índice do item.
+ * @param onPreview Callback opcional disparado ao tocar em um item de mídia.
  * @returns Elemento React contendo a lista horizontal de pré-visualizações.
  */
-const MediaPreview: React.FC<MediaPreviewProps> = ({ mediaFiles, onRemove }) => {
+const MediaPreview: React.FC<MediaPreviewProps> = ({ mediaFiles, onRemove, onPreview }) => {
   /**
    * Renderiza um item de mídia dentro de um cartão, alternando entre vídeo e imagem
    * conforme o tipo do arquivo. Também aplica o botão de remoção sobreposto.
@@ -41,13 +47,15 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({ mediaFiles, onRemove }) => 
   const renderItem = ({ item, index }: { item: MediaFile; index: number }) => (
     <Card style={styles.mediaItem}>
       <Card.Content>
-        {item.type === 'video' ? (
-          // Pré-visualização de vídeo usando o componente reutilizável
-          <VideoPlayer uri={item.uri} />
-        ) : (
-          // Pré-visualização de imagem nativa
-          <Image source={{ uri: item.uri }} style={styles.image} />
-        )}
+        <TouchableOpacity onPress={() => onPreview?.(item.uri)} disabled={!onPreview}>
+            {item.type === 'video' ? (
+              // Pré-visualização de vídeo usando o componente reutilizável
+              <VideoPlayer uri={item.uri} />
+            ) : (
+              // Pré-visualização de imagem nativa
+              <Image source={{ uri: item.uri }} style={styles.image} />
+            )}
+        </TouchableOpacity>
         <IconButton
           icon="close-circle"
           size={24}

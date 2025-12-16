@@ -25,6 +25,7 @@ import MediaPreview from '@/components/common/MediaPreview';
 import MediaOptionsMenu from '@/components/MediaOptionsMenu';
 import { useMediaPicker } from '@/hooks/useMediaPicker';
 import { maskCurrencyInput, parseCurrencyBRLToNumber } from '@/utils/currency';
+import MediaPreviewOverlay from '@/components/MediaPreviewOverlay';
 
 type Props = NativeStackScreenProps<OfertasStackParamList, 'CreateOferta'>;
 
@@ -59,6 +60,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
     const [errors, setErrors] = useState<Record<string, string | undefined>>({});
     const [submitting, setSubmitting] = useState(false);
     const [menuVisible, setMenuVisible] = useState(false);
+    const [previewMediaUri, setPreviewMediaUri] = useState<string | null>(null);
 
     const canSubmit = useMemo(() => {
         const price = parseCurrencyBRLToNumber(form.precoText);
@@ -124,6 +126,10 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             ...prev,
             mediaFiles: prev.mediaFiles.filter((_, i) => i !== index),
         }));
+    };
+
+    const handlePreviewMedia = (uri: string) => {
+        setPreviewMediaUri(uri);
     };
 
     /**
@@ -335,7 +341,11 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                     Mídias (até {OFERTA_MEDIA_CONFIG.MAX_FILES}) - Vídeos até {OFERTA_MEDIA_CONFIG.MAX_VIDEO_DURATION}s
                 </Text>
 
-                <MediaPreview mediaFiles={form.mediaFiles as any} onRemove={onRemoveMedia} />
+                <MediaPreview
+                    mediaFiles={form.mediaFiles as any}
+                    onRemove={onRemoveMedia}
+                    onPreview={handlePreviewMedia}
+                />
                 {form.mediaFiles.length < OFERTA_MEDIA_CONFIG.MAX_FILES && (
                     <Button
                         icon="camera"
@@ -367,6 +377,20 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                 onRecordVideo={onRecordVideo}
                 onPickPhoto={onPickPhoto}
                 onPickVideo={onPickVideo}
+            />
+
+            <MediaPreviewOverlay
+                mediaUri={previewMediaUri}
+                onClose={() => setPreviewMediaUri(null)}
+                onDelete={() => {
+                    if (previewMediaUri) {
+                        const index = form.mediaFiles.findIndex((m: any) => m.uri === previewMediaUri);
+                        if (index > -1) {
+                            onRemoveMedia(index);
+                        }
+                    }
+                    setPreviewMediaUri(null);
+                }}
             />
         </ScrollView>
     );
