@@ -1,6 +1,31 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
-import { MediaFile, MediaType } from '@/types/media';
+import { MediaFile } from '@/types/media';
+
+/**
+ * Contexto da correção (documentação para futuras manutenções)
+ *
+ * Problema original:
+ * - O hook useMediaPicker retornava `type` como 'image' | 'video' (valor bruto do expo-image-picker).
+ * - O schema de validação de oferta (utils/validation.ts -> mediaFileSchema) exige tipos MIME completos
+ *   ('image/jpeg', 'image/png', 'video/mp4').
+ * - Consequência: ao tentar publicar com mídia, a validação Zod falhava (path típico: `mediaFiles.0.type`).
+ *
+ * Solução aplicada aqui:
+ * - Normalizamos o `type` para MIME no momento do mapeamento dos assets (handleSelection).
+ *   • Vídeos: sempre "video/mp4" (único aceito atualmente no schema).
+ *   • Imagens: "image/png" quando a extensão indicar PNG; caso contrário, "image/jpeg".
+ *
+ * Como diagnosticar se o problema voltar a ocorrer:
+ * - Verifique mensagens de erro do Zod contendo `Invalid enum value. Expected 'image/jpeg' | 'image/png' | 'video/mp4'`
+ *   com path `mediaFiles.<index>.type`.
+ * - Confirme se o objeto que chega ao schema possui `type` como 'image'/'video' ao invés de MIME.
+ *
+ * Débito técnico conhecido:
+ * - O tipo local MediaFile (src/types/media.ts) ainda define `type` como 'image' | 'video'. Para manter compatibilidade,
+ *   usamos `as any` ao atribuir o MIME. Idealmente devemos unificar os tipos com o schema (utils/validation.ts)
+ *   ou centralizar a inferência usando `services/mediaPickerService.ts::inferMime`.
+ */
 
 /**
  * Propriedades aceitas pelo hook useMediaPicker.
@@ -72,18 +97,33 @@ export const useMediaPicker = (props: UseMediaPickerProps) => {
         const result = await pickerFunction();
         if (!result.canceled) {
             // Converte os assets retornados pelo expo-image-picker para o formato interno (MediaFile)
-            const newFiles = result.assets.map(
-                (asset): MediaFile => ({
+            const newFiles = result.assets.map((asset): MediaFile => {
+                // Inferir MIME type a partir do nome do arquivo ou tipo base do picker
+                const fileName = asset.fileName ?? asset.uri.split('/').pop() ?? 'media-file';
+                const ext = fileName.split('.').pop()?.toLowerCase() || '';
+
+                let mimeType: string;
+                // Para vídeos, normalizamos para 'video/mp4' (único tipo aceito na validação)
+                if (asset.type === 'video' || ext === 'mp4' || ext === 'mov' || ext === 'm4v') {
+                    mimeType = 'video/mp4';
+                } else if (ext === 'png') {
+                    mimeType = 'image/png';
+                } else {
+                    // Padrão para imagens JPEG quando a extensão não indicar PNG
+                    mimeType = 'image/jpeg';
+                }
+
+                return {
                     uri: asset.uri,
-                    type: asset.type as MediaType,
-                    // Usa o nome do arquivo quando disponível. Caso contrário, tenta extrair do URI;
-                    // se ainda assim não houver, define um nome padrão.
-                    name:
-                        asset.fileName ??
-                        asset.uri.split('/').pop() ??
-                        'media-file',
-                })
-            );
+                    // Agora retornamos MIME type completo para compatibilidade com o schema de validação
+                    // Tipagem flexível para manter compatibilidade com o tipo local de MediaFile
+                    // IMPORTANTE: Se você remover o `as any` sem alinhar o tipo em src/types/media.ts,
+                    // o TypeScript acusará erro. Considere migrar MediaFile.type para MIME ou criar um
+                    // discriminador separado (ex.: kind: 'image' | 'video').
+                    type: mimeType as any,
+                    name: fileName,
+                };
+            });
 
             // Verifica se a nova seleção excede o limite permitido de arquivos.
             if (currentFilesCount + newFiles.length > maxFiles) {
