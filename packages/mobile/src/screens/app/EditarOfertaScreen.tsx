@@ -20,6 +20,7 @@ import MediaPreview from '@/components/common/MediaPreview';
 import MediaOptionsMenu from '@/components/MediaOptionsMenu';
 import { useMediaPicker } from '@/hooks/useMediaPicker';
 import { MediaFile } from '@/types/media';
+import MediaPreviewOverlay from '@/components/MediaPreviewOverlay';
 
 // Tipagem das props recebidas via stack navigator: espera rota 'EditOferta'
 type Props = NativeStackScreenProps<OfertasStackParamList, 'EditOferta'>;
@@ -81,6 +82,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
 
     // Estado para controle da exibição das opções de mídia (câmera/galeria)
     const [isMediaOptionsVisible, setIsMediaOptionsVisible] = useState(false);
+    const [previewMediaUri, setPreviewMediaUri] = useState<string | null>(null);
 
     // Estado para mensagens de erro por campo (preenchido após validação)
     const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -118,6 +120,10 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
     // Remove uma mídia da lista (exclui da pré-visualização)
     const handleRemoveMedia = (index: number) => {
         setMedia(prevMedia => prevMedia.filter((_, i) => i !== index));
+    };
+
+    const handlePreviewMedia = (uri: string) => {
+        setPreviewMediaUri(uri);
     };
 
     // Regra para habilitar o botão de salvar
@@ -356,7 +362,11 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             {/* Seção de mídias (pré-visualização e adição) */}
             <View style={styles.section}>
                 <Text style={styles.label}>Mídia (Fotos e Vídeos)</Text>
-                <MediaPreview mediaFiles={media} onRemove={handleRemoveMedia} />
+                <MediaPreview
+                    mediaFiles={media}
+                    onRemove={handleRemoveMedia}
+                    onPreview={handlePreviewMedia}
+                />
                 {media.length < OFERTA_MEDIA_CONFIG.MAX_FILES && (
                     <Button
                         icon="camera"
@@ -377,6 +387,20 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
                 onRecordVideo={onRecordVideo}
                 onPickPhoto={onPickPhoto}
                 onPickVideo={onPickVideo}
+            />
+
+            <MediaPreviewOverlay
+                mediaUri={previewMediaUri}
+                onClose={() => setPreviewMediaUri(null)}
+                onDelete={() => {
+                    if (previewMediaUri) {
+                        const index = media.findIndex(m => m.uri === previewMediaUri);
+                        if (index > -1) {
+                            handleRemoveMedia(index);
+                        }
+                    }
+                    setPreviewMediaUri(null);
+                }}
             />
 
             {/* Botão de salvar alterações */}
