@@ -26,6 +26,7 @@ import MediaOptionsMenu from '@/components/MediaOptionsMenu';
 import { useMediaPicker } from '@/hooks/useMediaPicker';
 import { maskCurrencyInput, parseCurrencyBRLToNumber } from '@/utils/currency';
 import MediaPreviewOverlay from '@/components/MediaPreviewOverlay';
+import { MediaFile } from '@/types/media';
 
 type Props = NativeStackScreenProps<OfertasStackParamList, 'CreateOferta'>;
 
@@ -60,7 +61,8 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
     const [errors, setErrors] = useState<Record<string, string | undefined>>({});
     const [submitting, setSubmitting] = useState(false);
     const [menuVisible, setMenuVisible] = useState(false);
-    const [previewMediaUri, setPreviewMediaUri] = useState<string | null>(null);
+    // Mídia atualmente em pré-visualização no overlay (quando null, o overlay fica escondido)
+    const [previewMedia, setPreviewMedia] = useState<MediaFile | null>(null);
 
     const canSubmit = useMemo(() => {
         const price = parseCurrencyBRLToNumber(form.precoText);
@@ -128,8 +130,16 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         }));
     };
 
-    const handlePreviewMedia = (uri: string) => {
-        setPreviewMediaUri(uri);
+    /**
+     * Abre o overlay de pré-visualização para o item de mídia selecionado.
+     * Mantém o objeto completo para que possamos identificar corretamente tipo (imagem/vídeo)
+     * e permitir ações como exclusão do item diretamente a partir do overlay.
+     *
+     * @param mediaFile Objeto completo da mídia a ser pré-visualizada (contém uri, type e name).
+     * @returns void
+     */
+    const handlePreviewMedia = (mediaFile: MediaFile) => {
+        setPreviewMedia(mediaFile);
     };
 
     /**
@@ -379,17 +389,18 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                 onPickVideo={onPickVideo}
             />
 
+            {/* Overlay de pré-visualização (imagem/vídeo) com ações de fechar e excluir */}
             <MediaPreviewOverlay
-                mediaUri={previewMediaUri}
-                onClose={() => setPreviewMediaUri(null)}
+                media={previewMedia}
+                onClose={() => setPreviewMedia(null)}
                 onDelete={() => {
-                    if (previewMediaUri) {
-                        const index = form.mediaFiles.findIndex((m: any) => m.uri === previewMediaUri);
+                    if (previewMedia) {
+                        const index = form.mediaFiles.findIndex((m: any) => m.uri === previewMedia.uri);
                         if (index > -1) {
                             onRemoveMedia(index);
                         }
                     }
-                    setPreviewMediaUri(null);
+                    setPreviewMedia(null);
                 }}
             />
         </ScrollView>
