@@ -103,7 +103,7 @@ export type MediaConfig = {
  * - Tamanho máximo de arquivo aumentado para 100MB para suportar vídeos maiores.
  */
 export const OFERTA_MEDIA_CONFIG: MediaConfig = {
-    MAX_FILES: 5,
+    MAX_FILES: 3,
     MAX_SIZE: 100 * 1024 * 1024, // 100MB (aumentado para suportar vídeos de 20s)
     MAX_VIDEO_DURATION: 20, // ALTERADO: de 15 para 20 segundos
     ALLOWED_TYPES: ['image/jpeg', 'image/png', 'video/mp4'] as const,
