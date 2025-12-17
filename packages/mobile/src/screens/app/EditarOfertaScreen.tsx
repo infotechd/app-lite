@@ -71,18 +71,21 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
     });
 
     // Estado das mídias, unificando existentes e novas
+    // Mapeia mídias já hospedadas para objetos `MediaFile` com MIME type padronizado
+    // - Imagens: "image/jpeg"; Vídeos: "video/mp4"
+    // Isso evita inconsistências entre itens antigos (type: 'image'/'video') e novos (MIME types do picker)
     const [media, setMedia] = useState<MediaFile[]>(() => [
         ...(oferta.imagens?.map(
-            (uri: string): MediaFile => ({ uri, type: 'image', name: 'imagem-existente' })
+            (uri: string): MediaFile => ({ uri, type: 'image/jpeg' as any, name: 'imagem-existente.jpg' })
         ) || []),
         ...((oferta as any).videos?.map(
-            (uri: string): MediaFile => ({ uri, type: 'video', name: 'video-existente' })
+            (uri: string): MediaFile => ({ uri, type: 'video/mp4' as any, name: 'video-existente.mp4' })
         ) || []),
     ]);
 
     // Estado para controle da exibição das opções de mídia (câmera/galeria)
     const [isMediaOptionsVisible, setIsMediaOptionsVisible] = useState(false);
-    const [previewMediaUri, setPreviewMediaUri] = useState<string | null>(null);
+    const [previewMedia, setPreviewMedia] = useState<MediaFile | null>(null);
 
     // Estado para mensagens de erro por campo (preenchido após validação)
     const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -117,13 +120,26 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
         currentFilesCount: media.length,
     });
 
-    // Remove uma mídia da lista (exclui da pré-visualização)
+    /**
+     * Remove uma mídia da lista pelo índice informado.
+     * Útil tanto na miniatura (ícone de fechar) quanto a partir do overlay (ação Excluir).
+     *
+     * @param index Índice do item a ser removido do array `media`.
+     * @returns void
+     */
     const handleRemoveMedia = (index: number) => {
         setMedia(prevMedia => prevMedia.filter((_, i) => i !== index));
     };
 
-    const handlePreviewMedia = (uri: string) => {
-        setPreviewMediaUri(uri);
+    /**
+     * Abre o overlay de pré-visualização para o item de mídia selecionado.
+     * Mantém o objeto completo (uri/type/name) para detecção correta do tipo e ações subsequentes.
+     *
+     * @param mediaFile Objeto `MediaFile` que será exibido em tela cheia.
+     * @returns void
+     */
+    const handlePreviewMedia = (mediaFile: MediaFile) => {
+        setPreviewMedia(mediaFile);
     };
 
     // Regra para habilitar o botão de salvar
@@ -215,12 +231,15 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             }
 
             // 2) Consolidação final de listas de mídias (mantidas + recém-carregadas)
+            // Consolidação final: mantém URLs remotas existentes + adiciona URLs recém enviadas
+            // Usa startsWith('image/')/startsWith('video/') para compatibilidade com MIME types e
+            // também aceita os valores legados ('image'/'video') por segurança.
             const finalImages = [
-                ...remoteFiles.filter(m => m.type === 'image').map(m => m.uri),
+                ...remoteFiles.filter(m => m.type?.startsWith('image/') || (m as any).type === 'image').map(m => m.uri),
                 ...uploadedImageUrls,
             ];
             const finalVideos = [
-                ...remoteFiles.filter(m => m.type === 'video').map(m => m.uri),
+                ...remoteFiles.filter(m => m.type?.startsWith('video/') || (m as any).type === 'video').map(m => m.uri),
                 ...uploadedVideoUrls,
             ];
 
@@ -389,17 +408,18 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
                 onPickVideo={onPickVideo}
             />
 
+            {/* Overlay de pré-visualização (imagem/vídeo) com ações de fechar e excluir */}
             <MediaPreviewOverlay
-                mediaUri={previewMediaUri}
-                onClose={() => setPreviewMediaUri(null)}
+                media={previewMedia}
+                onClose={() => setPreviewMedia(null)}
                 onDelete={() => {
-                    if (previewMediaUri) {
-                        const index = media.findIndex(m => m.uri === previewMediaUri);
+                    if (previewMedia) {
+                        const index = media.findIndex(m => m.uri === previewMedia.uri);
                         if (index > -1) {
                             handleRemoveMedia(index);
                         }
                     }
-                    setPreviewMediaUri(null);
+                    setPreviewMedia(null);
                 }}
             />
 

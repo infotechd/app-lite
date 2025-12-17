@@ -1,35 +1,49 @@
 import React from 'react';
-import { Modal, View, Image, TouchableOpacity } from 'react-native';
+import { Modal, View, Image, TouchableOpacity, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './MediaPreviewOverlay.styles';
+import { MediaFile } from '@/types/media';
+import VideoPlayer from '@/components/common/VideoPlayer';
 
 /**
  * Propriedades do componente MediaPreviewOverlay.
  * Representa o overlay/modal para pré-visualização de uma mídia e ações associadas.
  *
- * @property mediaUri URI da mídia a ser exibida. Quando for `null`, o overlay não será renderizado.
+ * @property media Objeto da mídia a ser exibida. Quando for `null`, o overlay não será renderizado.
  * @property onClose Função chamada ao fechar o overlay (botão voltar ou gesto do sistema).
  * @property onDelete Função chamada ao solicitar a exclusão da mídia atual.
  */
 interface MediaPreviewOverlayProps {
-    mediaUri: string | null;
+    media: MediaFile | null;
     onClose: () => void;
     onDelete: () => void;
 }
 
 /**
- * Componente de overlay para pré-visualização de mídia (imagem), exibido dentro de um `Modal` transparente.
- * Renderiza botões de fechar (voltar) e excluir, além da imagem selecionada.
+ * Componente de overlay para pré-visualização de mídia (imagem/vídeo), exibido dentro de um `Modal` transparente.
+ * Renderiza botões de fechar (voltar) e excluir, além da mídia selecionada.
  * Usa retorno antecipado (early return) para não montar o `Modal` quando não há mídia.
  *
- * @param mediaUri URI da mídia a ser exibida. Quando ausente/`null`, nada é renderizado.
+ * @param media Objeto da mídia a ser exibida. Quando ausente/`null`, nada é renderizado.
  * @param onClose Callback disparado quando o usuário fecha o overlay.
  * @param onDelete Callback disparado quando o usuário solicita a exclusão da mídia atual.
  * @returns JSX.Element | null Retorna o `Modal` com a pré-visualização quando há mídia; caso contrário, `null`.
  */
-const MediaPreviewOverlay: React.FC<MediaPreviewOverlayProps> = ({ mediaUri, onClose, onDelete }) => {
+/**
+ * Overlay de pré-visualização de mídia (imagem/vídeo).
+ *
+ * Exibe um modal em tela cheia com a mídia selecionada e dois botões de ação: voltar/fechar e excluir.
+ * O componente é controlado externamente via prop `media`: quando `null`, nada é renderizado; quando
+ * há um objeto válido, o modal fica visível apresentando a mídia.
+ *
+ * @param media Objeto de mídia a ser exibido (contém pelo menos `uri` e `type`). Quando `null`, o modal é ocultado.
+ * @param onClose Função chamada ao fechar o overlay (seta `media` para `null` no componente pai, tipicamente).
+ * @param onDelete Função chamada ao solicitar exclusão do item atualmente pré-visualizado.
+ * @returns JSX.Element | null
+ */
+const MediaPreviewOverlay: React.FC<MediaPreviewOverlayProps> = ({ media, onClose, onDelete }) => {
     // Não renderiza o overlay se não houver uma mídia selecionada.
-    if (!mediaUri) {
+    if (!media) {
         return null;
     }
 
@@ -39,11 +53,11 @@ const MediaPreviewOverlay: React.FC<MediaPreviewOverlayProps> = ({ mediaUri, onC
             transparent={true}
             // Animação suave de aparecimento/desaparecimento.
             animationType="fade"
-            visible={!!mediaUri}
+            visible={!!media}
             // Necessário no Android: chamado ao pressionar o botão de "voltar" do sistema.
             onRequestClose={onClose}
         >
-            <View style={styles.modalContainer}>
+            <SafeAreaView style={styles.modalContainer}>
                 {/* Botão para fechar/voltar do overlay */}
                 <TouchableOpacity style={styles.closeButton} onPress={onClose}>
                     <Ionicons name="arrow-back" size={30} color="white" />
@@ -54,10 +68,14 @@ const MediaPreviewOverlay: React.FC<MediaPreviewOverlayProps> = ({ mediaUri, onC
                 </TouchableOpacity>
                 {/* Container que centraliza e limita a área da mídia */}
                 <View style={styles.mediaContainer}>
-                    {/* Exibe a imagem a partir do URI fornecido */}
-                    <Image source={{ uri: mediaUri }} style={styles.media} />
+                    {/* Renderiza vídeo em tela cheia ou imagem, conforme o tipo */}
+                    {media.type?.startsWith('video/') || media.type === 'video' ? (
+                        <VideoPlayer uri={media.uri} style={styles.media} />
+                    ) : (
+                        <Image source={{ uri: media.uri }} style={styles.media} resizeMode="contain" />
+                    )}
                 </View>
-            </View>
+            </SafeAreaView>
         </Modal>
     );
 };

@@ -19,9 +19,9 @@ interface MediaPreviewProps {
   onRemove: (index: number) => void;
   /**
    * Função opcional chamada ao pressionar um item de mídia.
-   * Recebe a URI do item como argumento.
+   * Recebe o objeto MediaFile completo como argumento.
    */
-  onPreview?: (uri: string) => void;
+  onPreview?: (media: MediaFile) => void;
 }
 
 /**
@@ -47,8 +47,9 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({ mediaFiles, onRemove, onPre
   const renderItem = ({ item, index }: { item: MediaFile; index: number }) => (
     <Card style={styles.mediaItem}>
       <Card.Content>
-        <TouchableOpacity onPress={() => onPreview?.(item.uri)} disabled={!onPreview}>
-            {item.type === 'video' ? (
+        <TouchableOpacity onPress={() => onPreview?.(item)} disabled={!onPreview}>
+            {/** Detecta vídeo com base em MIME type (ex: video/mp4) ou valor antigo 'video' */}
+            {item.type?.startsWith('video/') || item.type === 'video' ? (
               // Pré-visualização de vídeo usando o componente reutilizável
               <VideoPlayer uri={item.uri} />
             ) : (

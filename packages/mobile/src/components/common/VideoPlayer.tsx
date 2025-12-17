@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, ViewStyle } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import type { StyleProp } from 'react-native';
 
 /**
  * Propriedades aceitas pelo componente `VideoPlayer`.
@@ -9,9 +10,12 @@ import { VideoView, useVideoPlayer } from 'expo-video';
  * A fonte do vídeo é definida por meio de uma URI (local ou remota).
  *
  * @property uri - Endereço (URI) do arquivo de vídeo a ser reproduzido. Pode ser uma URL remota ou um caminho local.
+ * @property style - Estilo opcional para customizar tamanho/aparência do player externamente (e.g., tela cheia no overlay).
  */
 interface VideoPlayerProps {
     uri: string;
+    /** Estilo opcional para customizar o tamanho/aparência do player externamente */
+    style?: StyleProp<ViewStyle>;
 }
 
 /**
@@ -29,9 +33,10 @@ interface VideoPlayerProps {
  *
  * @param param0 - Objeto de propriedades do componente.
  * @param param0.uri - URI do vídeo a ser reproduzido.
+ * @param param0.style - Estilo adicional aplicado ao `VideoView` para ajustar dimensões/posicionamento.
  * @returns Elemento JSX contendo o player de vídeo.
  */
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ uri }) => {
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ uri, style }) => {
     // Inicializa o player com a fonte (URI) e configurações iniciais.
     // A função de configuração recebe a instância do player (p), permitindo ajustar opções antes da reprodução.
     const player = useVideoPlayer(uri, (p) => {
@@ -50,7 +55,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ uri }) => {
             */}
             <VideoView
                 player={player} // Conecta a instância do player ao componente visual
-                style={styles.video} // Aplica dimensões (150x150) e bordas arredondadas
+                style={[styles.video, style]} // Aplica dimensões padrão e permite sobreposição externa
                 contentFit="contain" // Mantém a proporção do vídeo sem cortar
                 nativeControls // Mostra controles nativos (play/pause, timeline, etc.)
             />
