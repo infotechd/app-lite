@@ -1,9 +1,10 @@
 import React from 'react';
-import { Modal, View, Image, TouchableOpacity, SafeAreaView } from 'react-native';
+import { Modal, View, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './MediaPreviewOverlay.styles';
 import { MediaFile } from '@/types/media';
 import VideoPlayer from '@/components/common/VideoPlayer';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 /**
  * Propriedades do componente MediaPreviewOverlay.
@@ -28,18 +29,6 @@ interface MediaPreviewOverlayProps {
  * @param onClose Callback disparado quando o usuário fecha o overlay.
  * @param onDelete Callback disparado quando o usuário solicita a exclusão da mídia atual.
  * @returns JSX.Element | null Retorna o `Modal` com a pré-visualização quando há mídia; caso contrário, `null`.
- */
-/**
- * Overlay de pré-visualização de mídia (imagem/vídeo).
- *
- * Exibe um modal em tela cheia com a mídia selecionada e dois botões de ação: voltar/fechar e excluir.
- * O componente é controlado externamente via prop `media`: quando `null`, nada é renderizado; quando
- * há um objeto válido, o modal fica visível apresentando a mídia.
- *
- * @param media Objeto de mídia a ser exibido (contém pelo menos `uri` e `type`). Quando `null`, o modal é ocultado.
- * @param onClose Função chamada ao fechar o overlay (seta `media` para `null` no componente pai, tipicamente).
- * @param onDelete Função chamada ao solicitar exclusão do item atualmente pré-visualizado.
- * @returns JSX.Element | null
  */
 const MediaPreviewOverlay: React.FC<MediaPreviewOverlayProps> = ({ media, onClose, onDelete }) => {
     // Não renderiza o overlay se não houver uma mídia selecionada.
