@@ -1,12 +1,5 @@
 import { z } from 'zod';
 
-// Função auxiliar para capitalizar a primeira letra, deixar o resto em minúsculo (preserva acentos)
-const capitalizeAndNormalize = (s: string | undefined): string | undefined => {
-    if (!s) return s;
-    const trimmed = s.trim();
-    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
-};
-
 // 1) Opções permitidas
 const SORT_OPTIONS = [
     'relevancia',
@@ -27,7 +20,7 @@ export const ofertaFiltersSchema = z.object({
         precoMin: z.coerce.number().min(0).optional(),
         precoMax: z.coerce.number().min(0).optional(),
         cidade: z.string().min(1).max(100).optional(),
-        estado: z.string().min(2).max(2).transform((v) => (typeof v === 'string' ? v.toUpperCase() : v)).optional(),
+        estado: z.string().min(2).max(2).transform((v) => v.toUpperCase()).optional(),
         busca: z.string().min(1).max(200).optional(),
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(50).default(10),
