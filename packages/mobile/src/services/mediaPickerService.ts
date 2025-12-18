@@ -15,7 +15,7 @@
 
 import * as ImagePicker from 'expo-image-picker';
 import { MediaFile, OFERTA_MEDIA_CONFIG, MediaConfig } from '@/utils/validation';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 /**
  * Resultado padronizado das operações de seleção/captura de mídia.
@@ -59,15 +59,24 @@ const getExt = (name?: string) => (name?.split('.').pop() || '').toLowerCase();
 const inferMime = (name?: string, fallbackType?: string): MediaFile['type'] | undefined => {
     const ext = getExt(name);
 
-    if (fallbackType === 'video') return 'video/mp4';
+    // Para vídeos, preservar o MIME type real no iOS (MOV será convertido no servidor)
+    if (fallbackType === 'video') {
+        if (Platform.OS === 'ios' && ext === 'mov') {
+            return 'video/quicktime';
+        }
+        return 'video/mp4';
+    }
+
     if (fallbackType === 'image') {
         if (ext === 'png') return 'image/png';
         if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+        if (Platform.OS === 'ios' && ext === 'heic') return 'image/heic';
     }
 
     if (ext === 'png') return 'image/png';
     if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
     if (ext === 'mp4') return 'video/mp4';
+    if (ext === 'mov' && Platform.OS === 'ios') return 'video/quicktime';
 
     return undefined;
 };
@@ -132,10 +141,15 @@ function processAssets(
             continue;
         }
 
-        // Vídeos devem ser exclusivamente MP4
-        if (mime.startsWith('video/') && mime !== 'video/mp4') {
-            warnings.push(`${nameGuess}: apenas vídeos MP4 são permitidos`);
-            continue;
+        // Vídeos: aceitar MP4 sempre, e MOV apenas no iOS (será convertido no servidor)
+        if (mime.startsWith('video/')) {
+            const isAllowedVideo = mime === 'video/mp4' ||
+                (Platform.OS === 'ios' && mime === 'video/quicktime');
+
+            if (!isAllowedVideo) {
+                warnings.push(`${nameGuess}: formato de vídeo não suportado. Use MP4${Platform.OS === 'ios' ? ' ou MOV' : ''}.`);
+                continue;
+            }
         }
 
         // Validar duração de vídeo (em segundos) com pequena tolerância para metadados

@@ -22,11 +22,11 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { AuthStackParamList } from '@/types';
 import { MESSAGES } from '@/constants/messages';
 import { AuthService } from '@/services/authService';
 import { formatPhoneNumber } from '@/utils/phoneFormatter';
+import { registerSchema, RegisterFormData } from '@/utils/validation';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
@@ -47,56 +47,6 @@ function formatCNPJ(value: string): string {
     if (numbers.length <= 12) return `${numbers.slice(0, 2)}.${numbers.slice(2, 5)}.${numbers.slice(5, 8)}/${numbers.slice(8)}`;
     return `${numbers.slice(0, 2)}.${numbers.slice(2, 5)}.${numbers.slice(5, 8)}/${numbers.slice(8, 12)}-${numbers.slice(12)}`;
 }
-
-// ✅ SCHEMA DE VALIDAÇÃO ÚNICO COM REGRA CONDICIONAL
-const registerSchema = z.object({
-    email: z.string().email('Email inválido').toLowerCase(),
-    password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
-    telefone: z.string().optional(),
-    tipo: z.enum(['buyer', 'provider', 'advertiser']),
-    tipoPessoa: z.enum(['PF', 'PJ']),
-
-    // Campos que variam por tipoPessoa
-    nome: z.string().default(''), // obrigatório quando PF; default garante tipo string
-    cpf: z.string().optional(),
-    razaoSocial: z.string().optional(), // obrigatório quando PJ
-    nomeFantasia: z.string().optional(),
-    cnpj: z.string().optional(),
-})
-.superRefine((data, ctx) => {
-    // Regras para PF
-    if (data.tipoPessoa === 'PF') {
-        const nome = data.nome ?? '';
-        if (nome.trim().length < 2) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['nome'], message: 'Nome deve ter no mínimo 2 caracteres' });
-        }
-        const cpfDigits = (data.cpf ?? '').replace(/\D/g, '');
-        if (cpfDigits.length !== 11) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF deve ter 11 dígitos' });
-        }
-    }
-    // Regras para PJ
-    if (data.tipoPessoa === 'PJ') {
-        const rz = data.razaoSocial ?? '';
-        if (rz.trim().length < 2) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['razaoSocial'], message: 'Razão social é obrigatória' });
-        }
-        const cnpjDigits = (data.cnpj ?? '').replace(/\D/g, '');
-        if (cnpjDigits.length !== 14) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cnpj'], message: 'CNPJ deve ter 14 dígitos' });
-        }
-    }
-})
-// Garante que, se PJ, o backend receba 'nome' preenchido com a razão social
-.transform((data) => (
-    data.tipoPessoa === 'PJ'
-        // garante que 'nome' seja sempre string no payload para o backend
-        ? { ...data, nome: data.razaoSocial ?? '' }
-        : data
-));
-
-// Tipo do formulário
-type RegisterFormData = z.infer<typeof registerSchema>;
 
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     const [submitting, setSubmitting] = useState(false);
