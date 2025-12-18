@@ -10,7 +10,7 @@ jest.mock('expo-image-picker', () => {
 });
 
 import * as ImagePicker from 'expo-image-picker';
-import { recordVideo } from '@/services/mediaPickerService';
+import { recordVideo } from '../mediaPickerService';
 
 describe('mediaPickerService - validação de duração de vídeo', () => {
   const buildAsset = (duration: number) => ({

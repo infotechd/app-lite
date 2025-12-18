@@ -1,9 +1,14 @@
 // Mock react-native early to avoid loading actual RN/Expo modules in Jest
-const mockPlatform = { OS: 'ios', select: (obj: any) => obj['ios'] };
-jest.mock('react-native', () => ({ Platform: mockPlatform }));
+jest.mock('react-native', () => ({
+  Platform: {
+    OS: 'ios',
+    select: jest.fn((obj: any) => obj.ios),
+  },
+}));
 
+import { Platform } from 'react-native';
 import { uploadFiles } from '../uploadService';
-import type { MediaFile } from '@/utils/validation';
+import type { MediaFile } from '../../utils/validation';
 
 // Mock the api module used by uploadService (../api relative to this test file location)
 jest.mock('../api', () => ({
@@ -18,7 +23,8 @@ import api from '../api';
 
 // Helper to set Platform.OS dynamically
 function setPlatform(os: 'android' | 'ios' | 'web') {
-  mockPlatform.OS = os as any;
+  (Platform as any).OS = os;
+  (Platform.select as jest.Mock).mockImplementation((obj: any) => obj[os]);
 }
 
 // Minimal FormData mock to capture appended entries
@@ -37,7 +43,7 @@ beforeEach(() => {
   // Reset api mock
   (api.post as jest.Mock).mockReset();
   // Install fresh FormData mock
-  // @ts-expect-error override for tests
+  
   global.FormData = MockFormData as any;
   // Default to ios unless specified by a test
   setPlatform('ios');
@@ -51,7 +57,7 @@ describe('uploadService.uploadFiles', () => {
   });
 
   it('returns empty arrays when input is not an array', async () => {
-    // @ts-expect-error intentional bad input
+    
     const res = await uploadFiles(undefined);
     expect(res).toEqual({ images: [], videos: [], raw: [] });
     expect(api.post).not.toHaveBeenCalled();

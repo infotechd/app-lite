@@ -123,6 +123,8 @@ export async function uploadFile(
                     transformation: resourceType === 'image' ? [
                         { quality: 'auto', fetch_format: 'auto' }
                     ] : undefined,
+                    // Força conversão/normalização de vídeos para MP4 (ex.: MOV no iOS)
+                    ...(resourceType === 'video' && { format: 'mp4' }),
                 },
                 (error, result) => {
                     // Callback do upload_stream: resolve em sucesso, reject em erro

@@ -1,5 +1,5 @@
-import { computeSummary, filterReviews, sortReviews } from '@/utils/reviews';
-import type { Review } from '@/types/reviews';
+import { computeSummary, filterReviews, sortReviews } from '../reviews';
+import type { Review } from '../../types/reviews';
 
 describe('utils/reviews - computeSummary', () => {
   it('retorna zeros quando não há reviews', () => {

@@ -11,73 +11,20 @@
  * - Não há alteração de comportamento em relação ao código original; apenas
  *   documentação e comentários foram adicionados para maior clareza.
  */
+import { Platform } from 'react-native';
 import { z } from 'zod';
 import { VALIDATION_CONFIG, MESSAGES } from '@/constants';
 import { parseCurrencyBRLToNumber } from '@/utils/currency';
 import { removeNonNumeric } from './phoneFormatter';
 
-/**
- * Schema de validação para o formulário de Login.
- *
- * Campos validados:
- * - email: obrigatório e em formato válido.
- * - senha: obrigatória e com tamanho mínimo configurado.
- *
- * @returns ZodSchema com a estrutura esperada do formulário de login.
- */
-export const loginSchema = z.object({
-    email: z
-        .string()
-        .min(1, MESSAGES.VALIDATION.REQUIRED)
-        .email(MESSAGES.VALIDATION.EMAIL_INVALID),
-    senha: z
-        .string()
-        .min(1, MESSAGES.VALIDATION.REQUIRED)
-        .min(VALIDATION_CONFIG.PASSWORD_MIN_LENGTH, MESSAGES.VALIDATION.PASSWORD_MIN),
-});
-
-/**
- * Schema de validação para o formulário de Registro.
- *
- * Campos validados:
- * - nome: obrigatório, com limites de tamanho mínimos e máximos.
- * - email: obrigatório e em formato válido.
- * - password: obrigatória e com tamanho mínimo.
- * - telefone: opcional; quando preenchido, deve conter 10 ou 11 dígitos (após
- *   remover caracteres não numéricos). Aceita formatos com máscara.
- * - tipo: enum fixo com os tipos de usuário aceitos.
- *
- * Regras específicas:
- * - A validação do telefone utiliza refine para permitir vazio e validar o
- *   comprimento numérico quando informado.
- *
- * @returns ZodSchema com a estrutura esperada do formulário de registro.
- */
-export const registerSchema = z.object({
-    nome: z
-        .string()
-        .min(1, MESSAGES.VALIDATION.REQUIRED)
-        .min(VALIDATION_CONFIG.NAME_MIN_LENGTH, MESSAGES.VALIDATION.NAME_MIN)
-        .max(VALIDATION_CONFIG.NAME_MAX_LENGTH, MESSAGES.VALIDATION.NAME_MAX),
-    email: z
-        .string()
-        .min(1, MESSAGES.VALIDATION.REQUIRED)
-        .email(MESSAGES.VALIDATION.EMAIL_INVALID),
-    password: z
-        .string()
-        .min(1, MESSAGES.VALIDATION.REQUIRED)
-        .min(VALIDATION_CONFIG.PASSWORD_MIN_LENGTH, MESSAGES.VALIDATION.PASSWORD_MIN),
-    // Telefone é opcional; se informado, deve possuir 10 (fixo) ou 11 (celular) dígitos
-    telefone: z.string().optional().refine(
-        (val) => {
-            if (!val || val.trim() === '') return true; // permite vazio
-            const numbers = removeNonNumeric(val); // remove caracteres não numéricos (parênteses, espaço, traço)
-            return numbers.length === 10 || numbers.length === 11; // 10 para telefones fixos; 11 para celulares (com DDD)
-        },
-        { message: 'Telefone inválido' }
-    ),
-    tipo: z.enum(['buyer', 'provider', 'advertiser']),
-});
+// Tipos base sempre permitidos
+const BASE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'video/mp4'] as const;
+// Tipos adicionais para iOS (convertidos no servidor)
+const IOS_ADDITIONAL_TYPES = ['video/quicktime', 'image/heic'] as const;
+export const PLATFORM_ALLOWED_TYPES = Platform.OS === 'ios'
+    ? [...BASE_ALLOWED_TYPES, ...IOS_ADDITIONAL_TYPES] as const
+    : BASE_ALLOWED_TYPES;
+export type AllowedMimeType = typeof PLATFORM_ALLOWED_TYPES[number];
 
 // ===== CONFIGURAÇÃO DE MÍDIA PARA OFERTAS =====
 /**
@@ -92,7 +39,7 @@ export type MediaConfig = {
     MAX_FILES: number;
     MAX_SIZE: number;
     MAX_VIDEO_DURATION: number; // NOVO: duração máxima em segundos
-    ALLOWED_TYPES: readonly ['image/jpeg', 'image/png', 'video/mp4'];
+    ALLOWED_TYPES: readonly AllowedMimeType[];
 };
 
 /**
@@ -103,10 +50,10 @@ export type MediaConfig = {
  * - Tamanho máximo de arquivo aumentado para 100MB para suportar vídeos maiores.
  */
 export const OFERTA_MEDIA_CONFIG: MediaConfig = {
-    MAX_FILES: 3,
+    MAX_FILES: 5,
     MAX_SIZE: 100 * 1024 * 1024, // 100MB (aumentado para suportar vídeos de 20s)
     MAX_VIDEO_DURATION: 20, // ALTERADO: de 15 para 20 segundos
-    ALLOWED_TYPES: ['image/jpeg', 'image/png', 'video/mp4'] as const,
+    ALLOWED_TYPES: PLATFORM_ALLOWED_TYPES,
 };
 
 // Limites de tamanho por tipo de mídia
@@ -132,7 +79,7 @@ const VIDEO_MAX = 100 * 1024 * 1024;  // 100MB para vídeos (aumentado)
 const mediaFileSchema = z.object({
     uri: z.string().min(1),
     name: z.string().min(1),
-    type: z.enum(OFERTA_MEDIA_CONFIG.ALLOWED_TYPES),
+    type: z.enum(OFERTA_MEDIA_CONFIG.ALLOWED_TYPES as [AllowedMimeType, ...AllowedMimeType[]]),
     size: z.number().positive().optional(),
 }).superRefine((f, ctx) => {
     if (f.size == null) return; // se não houver informação de tamanho, não valida limite
@@ -194,6 +141,92 @@ export const criarOfertaSchema = z.object({
         .max(OFERTA_MEDIA_CONFIG.MAX_FILES, `Máximo ${OFERTA_MEDIA_CONFIG.MAX_FILES} arquivos`) // limita a quantidade de arquivos anexados
         .default([]),
 });
+
+/**
+ * Schema para validação de Login.
+ */
+export const loginSchema = z.object({
+    email: z.string()
+        .min(1, MESSAGES.VALIDATION.REQUIRED)
+        .email(MESSAGES.VALIDATION.EMAIL_INVALID)
+        .toLowerCase()
+        .trim(),
+    password: z.string()
+        .min(1, MESSAGES.VALIDATION.REQUIRED)
+        .min(6, MESSAGES.VALIDATION.PASSWORD_MIN),
+});
+
+/**
+ * Schema para Registro de Usuário (PF e PJ).
+ * Inclui validações condicionais baseadas no tipo de pessoa e
+ * transformações para garantir compatibilidade com o backend.
+ */
+export const registerSchema = z.object({
+    email: z.string()
+        .min(1, MESSAGES.VALIDATION.REQUIRED)
+        .email(MESSAGES.VALIDATION.EMAIL_INVALID)
+        .toLowerCase()
+        .trim(),
+    password: z.string()
+        .min(1, MESSAGES.VALIDATION.REQUIRED)
+        .min(6, MESSAGES.VALIDATION.PASSWORD_MIN),
+    telefone: z.string().optional(),
+    tipo: z.enum(['buyer', 'provider', 'advertiser']),
+    tipoPessoa: z.enum(['PF', 'PJ']),
+
+    // Campos que variam por tipoPessoa
+    nome: z.string().default(''), // obrigatório quando PF
+    cpf: z.string().optional(),
+    razaoSocial: z.string().optional(), // obrigatório quando PJ
+    nomeFantasia: z.string().optional(),
+    cnpj: z.string().optional(),
+})
+.superRefine((data, ctx) => {
+    // Validações específicas para Pessoa Física (PF)
+    if (data.tipoPessoa === 'PF') {
+        const nome = data.nome ?? '';
+        if (nome.trim().length < 2) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['nome'],
+                message: MESSAGES.VALIDATION.NAME_MIN
+            });
+        }
+        const cpfDigits = (data.cpf ?? '').replace(/\D/g, '');
+        if (cpfDigits.length !== 11) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['cpf'],
+                message: 'CPF deve ter 11 dígitos'
+            });
+        }
+    }
+
+    // Validações específicas para Pessoa Jurídica (PJ)
+    if (data.tipoPessoa === 'PJ') {
+        const rz = data.razaoSocial ?? '';
+        if (rz.trim().length < 2) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['razaoSocial'],
+                message: 'Razão social é obrigatória'
+            });
+        }
+        const cnpjDigits = (data.cnpj ?? '').replace(/\D/g, '');
+        if (cnpjDigits.length !== 14) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['cnpj'],
+                message: 'CNPJ deve ter 14 dígitos'
+            });
+        }
+    }
+})
+.transform((data) => (
+    data.tipoPessoa === 'PJ'
+        ? { ...data, nome: data.razaoSocial ?? '' }
+        : data
+));
 
 /** Tipo inferido do schema de login. Útil para tipar formulários e handlers. */
 export type LoginFormData = z.infer<typeof loginSchema>;

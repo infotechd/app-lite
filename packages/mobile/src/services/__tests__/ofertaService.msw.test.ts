@@ -1,6 +1,6 @@
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
-import { ofertaService } from '@/services/ofertaService';
+import { ofertaService } from '../ofertaService';
 
 // Configura MSW server interceptando a base local
 const server = setupServer(
@@ -39,7 +39,7 @@ describe('ofertaService.getOfertas - geração de URLSearchParams', () => {
   beforeEach(() => {
     // Forçar baseURL do axios para localhost
     jest.resetModules();
-    const { api } = require('@/services/api');
+    const { api } = require('../api');
     api.defaults.baseURL = 'http://localhost:4000/api';
   });
 
