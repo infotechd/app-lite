@@ -23,7 +23,8 @@ export const SkeletonBox: React.FC<SkeletonBoxProps> = ({ width = '100%', height
   const shimmer = useRef(new Animated.Value(0)).current;
   const [containerW, setContainerW] = useState(0);
   const colorScheme = useColorScheme() ?? 'light';
-  const overlayWidth = Math.min(120, typeof width === 'number' ? Math.max(40, width * 0.3) : 120);
+  const isNumeric = typeof width === 'number';
+  const overlayWidth = isNumeric ? Math.min(120, Math.max(40, width * 0.3)) : 120;
 
   // Cor dinâmica do brilho (shimmer) de acordo com o tema do SO
   const shimmerColor = getShimmerColor(colorScheme);
