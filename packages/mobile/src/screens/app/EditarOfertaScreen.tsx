@@ -59,13 +59,13 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
     const { oferta } = route.params;
 
     // Estado do formulário, inicializado com os valores da oferta existente
-    const [form, setForm] = useState({
+    const [form, setForm] = useState<EditForm>({
         titulo: oferta.titulo || '',
         descricao: oferta.descricao || '',
         precoText: oferta.preco > 0 ? formatCurrencyBRL(oferta.preco) : '',
-        priceUnit: (oferta as any)?.unidadePreco || 'pacote',
+        priceUnit: oferta.unidadePreco || 'pacote',
         categoria: oferta.categoria || '',
-        subcategoria: (oferta as any)?.subcategoria,
+        subcategoria: oferta.subcategoria,
         cidade: oferta.localizacao?.cidade || '',
         estado: oferta.localizacao?.estado || '',
     });
@@ -78,7 +78,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
         ...(oferta.imagens?.map(
             (uri: string): MediaFile => ({ uri, type: 'image/jpeg' as any, name: 'imagem-existente.jpg' })
         ) || []),
-        ...((oferta as any).videos?.map(
+        ...(oferta.videos?.map(
             (uri: string): MediaFile => ({ uri, type: 'video/mp4' as any, name: 'video-existente.mp4' })
         ) || []),
     ]);
@@ -169,7 +169,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
      * @param value - Novo valor do campo correspondente.
      * @returns void
      */
-    const setField = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
+    const setField = <K extends keyof EditForm>(key: K, value: EditForm[K]) => {
         setForm(prev => ({ ...prev, [key]: value }));
     };
 
@@ -315,31 +315,31 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             <View style={styles.priceUnitContainer}>
                 <Chip
                     selected={form.priceUnit === 'hora'}
-                    onPress={() => setField('priceUnit', 'hora' as any)}
+                    onPress={() => setField('priceUnit', 'hora')}
                 >
                     Hora
                 </Chip>
                 <Chip
                     selected={form.priceUnit === 'diaria'}
-                    onPress={() => setField('priceUnit', 'diaria' as any)}
+                    onPress={() => setField('priceUnit', 'diaria')}
                 >
                     Diária
                 </Chip>
                 <Chip
                     selected={form.priceUnit === 'mes'}
-                    onPress={() => setField('priceUnit', 'mes' as any)}
+                    onPress={() => setField('priceUnit', 'mes')}
                 >
                     Mês
                 </Chip>
                 <Chip
                     selected={form.priceUnit === 'aula'}
-                    onPress={() => setField('priceUnit', 'aula' as any)}
+                    onPress={() => setField('priceUnit', 'aula')}
                 >
                     Aula
                 </Chip>
                 <Chip
                     selected={form.priceUnit === 'pacote'}
-                    onPress={() => setField('priceUnit', 'pacote' as any)}
+                    onPress={() => setField('priceUnit', 'pacote')}
                 >
                     Pacote
                 </Chip>
