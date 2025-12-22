@@ -31,5 +31,5 @@ export type ProfileStackParamList = {
     ProfileHome: undefined;
     Settings: undefined;
     Notifications: undefined;
-    ProfileAddPhoto: undefined;
+    EditProfile: undefined;
 };

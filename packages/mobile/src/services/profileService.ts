@@ -29,15 +29,15 @@ type AvatarFile = {
 /**
  * Realiza o envio de uma imagem de avatar para o backend.
  * 
- * Constrói um objeto FormData com o arquivo selecionado e executa uma requisição POST
- * para o endpoint de upload de avatar, utilizando cabeçalhos específicos para multipart/form-data.
+ * Constrói um objeto FormData com o arquivo selecionado e executa uma requisição PATCH
+ * para o endpoint de usuário, utilizando cabeçalhos específicos para multipart/form-data.
  * 
  * @async
  * @function uploadAvatar
  * @param {AvatarFile} file - O objeto contendo as informações do arquivo de imagem.
- * @returns {Promise<UploadAvatarResponse>} Dados do avatar processado pelo servidor.
+ * @returns {Promise<any>} Dados do usuário atualizados.
  */
-export async function uploadAvatar(file: AvatarFile): Promise<UploadAvatarResponse> {
+export async function uploadAvatar(file: AvatarFile): Promise<any> {
   /** Criação de um formulário multipart para suportar envio de binários via HTTP */
   const form = new FormData();
   
@@ -50,15 +50,26 @@ export async function uploadAvatar(file: AvatarFile): Promise<UploadAvatarRespon
 
   /** 
    * Execução da chamada de API.
-   * O timeout é definido para 45 segundos para acomodar conexões móveis mais lentas durante uploads.
+   * Rota atualizada para /v1/users/me/avatar conforme Versão 2.0
    */
-  const { data } = await api.post('/upload/avatar', form, {
+  const { data } = await api.patch('/v1/users/me/avatar', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 45000,
   });
   
-  // Retorna a propriedade data se o backend seguir o padrão de resposta aninhada, senão retorna o objeto raiz
   return data?.data ?? data;
 }
 
-export default { uploadAvatar };
+/**
+ * Remove o avatar do usuário autenticado.
+ * 
+ * @async
+ * @function removeAvatar
+ * @returns {Promise<any>} Dados do usuário atualizados.
+ */
+export async function removeAvatar(): Promise<any> {
+  const { data } = await api.delete('/v1/users/me/avatar');
+  return data?.data ?? data;
+}
+
+export default { uploadAvatar, removeAvatar };

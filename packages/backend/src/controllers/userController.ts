@@ -1,0 +1,132 @@
+import { Response, NextFunction } from 'express';
+import { uploadService } from '../services/uploadService';
+import { logger } from '../utils/logger';
+import User from '../models/User';
+import type { AuthRequest } from '../middleware/auth';
+
+/**
+ * Controller responsável por gerenciar as operações relacionadas ao perfil do usuário.
+ * Contém métodos para manipulação de recursos como fotos de perfil (avatar).
+ */
+export const userController = {
+  /**
+   * Atualiza ou adiciona a foto de perfil (avatar) do usuário autenticado.
+   * 
+   * Este método realiza as seguintes etapas:
+   * 1. Valida se um arquivo foi enviado na requisição.
+   * 2. Recupera o ID do usuário através do token de autenticação.
+   * 3. Busca o identificador da foto antiga (se existir) para substituição.
+   * 4. Realiza o upload da nova imagem para o serviço de armazenamento (Cloudinary).
+   * 5. Atualiza os campos 'avatar' e 'avatarPublicId' no documento do usuário no MongoDB.
+   * 
+   * @param {AuthRequest} req - Objeto de requisição do Express, contendo o arquivo e dados do usuário autenticado.
+   * @param {Response} res - Objeto de resposta do Express usado para retornar o status e dados do usuário atualizado.
+   * @param {NextFunction} next - Função do Express para passar o controle/erro para o próximo middleware de tratamento.
+   * @returns {Promise<void>} - Retorna uma resposta JSON com o sucesso da operação e os dados do usuário.
+   */
+  async updateAvatar(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      // Extrai o arquivo enviado via middleware de upload (ex: multer)
+      const file = req.file;
+      
+      // Verifica se o arquivo está presente na requisição
+      if (!file) {
+        return res.status(400).json({ success: false, message: 'Nenhum arquivo foi enviado.' });
+      }
+
+      // Obtém o ID do usuário autenticado (garantido pelo middleware de auth)
+      const userId = req.user!.id;
+      
+      // Busca apenas o campo avatarPublicId do usuário no banco de dados
+      // Necessário para informar ao serviço de upload qual imagem antiga deve ser substituída/deletada
+      const user = await User.findById(userId).select('avatarPublicId');
+      
+      // Realiza o upload da nova imagem através do serviço dedicado
+      // O serviço de upload já gerencia a lógica de deletar a imagem anterior se o previousPublicId for fornecido
+      const result = await uploadService.uploadAvatar(file, userId, user?.avatarPublicId);
+
+      // Atualiza o registro do usuário no banco de dados com a nova URL e o novo ID público do Cloudinary
+      // O método findByIdAndUpdate com { new: true } retorna o documento já atualizado
+      // .select('-password') garante que a senha não seja enviada na resposta por segurança
+      const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { 
+          avatar: result.secureUrl, 
+          avatarPublicId: result.publicId 
+        },
+        { new: true }
+      ).select('-password');
+
+      // Retorna a resposta de sucesso com os dados do usuário atualizados
+      res.status(200).json({ 
+        success: true, 
+        message: 'Avatar atualizado com sucesso.', 
+        data: updatedUser 
+      });
+    } catch (error: any) {
+      // Registra o erro no log do sistema para depuração
+      logger.error('userController.updateAvatar.error', { error: error.message, userId: req.user?.id });
+      // Encaminha o erro para o middleware global de tratamento de erros
+      next(error);
+    }
+  },
+
+  /**
+   * Remove a foto de perfil (avatar) do usuário autenticado.
+   * 
+   * Este método realiza as seguintes etapas:
+   * 1. Identifica o usuário e busca o seu identificador de imagem atual (avatarPublicId).
+   * 2. Se houver uma imagem vinculada, solicita a exclusão no serviço de armazenamento externo.
+   * 3. Limpa (remove) os campos relacionados ao avatar no documento do usuário no MongoDB.
+   * 
+   * @param {AuthRequest} req - Objeto de requisição do Express com os dados do usuário autenticado.
+   * @param {Response} res - Objeto de resposta do Express para confirmar a remoção.
+   * @param {NextFunction} next - Função do Express para tratamento de erros.
+   * @returns {Promise<void>} - Retorna uma resposta JSON confirmando a remoção e os dados atualizados do usuário.
+   */
+  async removeAvatar(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      // Obtém o ID do usuário a partir do objeto de requisição autenticada
+      const userId = req.user!.id;
+      
+      // Busca o registro do usuário para obter o ID público da imagem no Cloudinary
+      const user = await User.findById(userId).select('avatarPublicId');
+
+      // Verifica se o usuário possui um avatarPublicId registrado
+      if (user && user.avatarPublicId) {
+        try {
+          // Tenta deletar o arquivo fisicamente do Cloudinary
+          await uploadService.deleteFile(user.avatarPublicId, 'image');
+        } catch (deleteError: any) {
+          // Caso ocorra falha na deleção externa, registramos como aviso mas não interrompemos o processo
+          // Isso evita que o usuário fique preso com um registro no banco que aponta para um arquivo que ele quer remover
+          logger.warn('userController.removeAvatar.deleteFileError', { 
+            error: deleteError.message, 
+            publicId: user.avatarPublicId 
+          });
+          // Prossegue mesmo se falhar ao deletar no Cloudinary para garantir a limpeza do banco
+        }
+      }
+
+      // Remove os campos avatar e avatarPublicId do documento no banco usando o operador $unset do MongoDB
+      // .select('-password') oculta a senha nos dados retornados
+      const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { $unset: { avatar: '', avatarPublicId: '' } },
+        { new: true }
+      ).select('-password');
+
+      // Responde informando que a operação foi concluída com sucesso
+      res.status(200).json({ 
+        success: true, 
+        message: 'Avatar removido com sucesso.', 
+        data: updatedUser 
+      });
+    } catch (error: any) {
+      // Registro de log em caso de erro inesperado durante o processo
+      logger.error('userController.removeAvatar.error', { error: error.message, userId: req.user?.id });
+      // Delegação para o middleware de erro
+      next(error);
+    }
+  }
+};

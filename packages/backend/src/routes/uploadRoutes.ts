@@ -86,20 +86,5 @@ router.post('/video',
     uploadController.uploadFiles
 );
 
-const avatarUpload = multer({ storage: multer.memoryStorage() });
-const avatarMw: RequestHandler = avatarUpload.single('avatar') as unknown as RequestHandler;
-
-/**
- * @route   POST /api/upload/avatar
- * @desc    Upload de avatar do usuário
- * @access  Private
- * @body    avatar: File
- */
-router.post('/avatar',
-    authMiddleware,
-    uploadRateLimitMw,
-    avatarMw,
-    uploadController.uploadAvatar
-);
 
 export default router;
