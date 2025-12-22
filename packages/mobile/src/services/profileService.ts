@@ -1,4 +1,5 @@
 import api from './api';
+import type { User } from '@/types';
 
 /**
  * Estrutura de resposta retornada pela API após o upload bem-sucedido de um avatar.
@@ -37,7 +38,7 @@ type AvatarFile = {
  * @param {AvatarFile} file - O objeto contendo as informações do arquivo de imagem.
  * @returns {Promise<any>} Dados do usuário atualizados.
  */
-export async function uploadAvatar(file: AvatarFile): Promise<any> {
+export async function uploadAvatar(file: AvatarFile): Promise<User> {
   /** Criação de um formulário multipart para suportar envio de binários via HTTP */
   const form = new FormData();
   
@@ -53,11 +54,11 @@ export async function uploadAvatar(file: AvatarFile): Promise<any> {
    * Rota atualizada para /v1/users/me/avatar conforme Versão 2.0
    */
   const { data } = await api.patch('/v1/users/me/avatar', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 45000,
-  });
-  
-  return data?.data ?? data;
+     headers: { 'Content-Type': 'multipart/form-data' },
+     timeout: 45000,
+   });
+
+   return normalizeUser(data?.data ?? data);
 }
 
 /**
@@ -67,9 +68,62 @@ export async function uploadAvatar(file: AvatarFile): Promise<any> {
  * @function removeAvatar
  * @returns {Promise<any>} Dados do usuário atualizados.
  */
-export async function removeAvatar(): Promise<any> {
+export async function removeAvatar(): Promise<User> {
   const { data } = await api.delete('/v1/users/me/avatar');
-  return data?.data ?? data;
+  return normalizeUser(data?.data ?? data);
 }
 
-export default { uploadAvatar, removeAvatar };
+/**
+ * Atualiza o nome do usuário autenticado.
+ * @param nome Novo nome a ser definido
+ * @returns Dados do usuário atualizados.
+ */
+export async function updateName(nome: string): Promise<User> {
+  const { data } = await api.patch('/v1/users/me/nome', { nome });
+  return normalizeUser(data?.data ?? data);
+}
+
+/**
+ * Mapeia o tipo do backend (pt/en) para o tipo usado no app
+ */
+const toAppTipo = (t: string): User['tipo'] => {
+  const v = (t || '').toLowerCase();
+  switch (v) {
+    case 'comprador':
+    case 'buyer':
+      return 'buyer';
+    case 'prestador':
+    case 'provider':
+      return 'provider';
+    case 'anunciante':
+    case 'advertiser':
+      return 'advertiser';
+    default:
+      return 'buyer';
+  }
+};
+
+/**
+ * Normaliza a resposta de usuário do backend para o formato esperado pelo app
+ */
+const normalizeUser = (u: any): User => ({
+  id: String(u?.id ?? u?._id ?? ''),
+  nome: String(u?.nome ?? ''),
+  email: String(u?.email ?? ''),
+  tipo: toAppTipo(u?.tipo ?? ''),
+  avatar: u?.avatar ?? undefined,
+  avatarBlurhash: u?.avatarBlurhash ?? undefined,
+  telefone: u?.telefone ?? undefined,
+  localizacao: u?.localizacao ?? undefined,
+  avaliacao: u?.avaliacao ?? undefined,
+  createdAt: String(u?.createdAt ?? new Date().toISOString()),
+  updatedAt: String(u?.updatedAt ?? new Date().toISOString()),
+  tipoPessoa: u?.tipoPessoa === 'PJ' ? 'PJ' : 'PF',
+  cpf: u?.cpf ?? undefined,
+  cnpj: u?.cnpj ?? undefined,
+  razaoSocial: u?.razaoSocial ?? undefined,
+  nomeFantasia: u?.nomeFantasia ?? undefined,
+  ativo: u?.ativo ?? false,
+});
+
+export default { uploadAvatar, removeAvatar, updateName };

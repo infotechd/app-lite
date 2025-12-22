@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, TextInput, Button, Appbar } from 'react-native-paper';
+import React, { useState, useMemo } from 'react';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { Text, TextInput, Button, Appbar, ActivityIndicator } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '@/context/AuthContext';
 import AvatarEditor from '@/components/profile/AvatarEditor';
 import { colors, spacing } from '@/styles/theme';
+import { updateName as updateNameService } from '@/services/profileService';
 
 /**
  * Tela de Edição de Perfil (Versão 2.0).
@@ -12,7 +13,28 @@ import { colors, spacing } from '@/styles/theme';
  */
 const EditProfileScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
+  const [nome, setNome] = useState(user?.nome ?? '');
+  const [isSaving, setIsSaving] = useState(false);
+  const trimmed = useMemo(() => nome.replace(/\s+/g, ' ').trim(), [nome]);
+  const onlyLetters = useMemo(() => /^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/.test(trimmed || ''), [trimmed]);
+  const isValid = trimmed.length >= 3 && trimmed.length <= 50 && onlyLetters;
+  const isChanged = trimmed !== (user?.nome ?? '').trim();
+
+  const handleSave = async () => {
+    if (!isValid || !isChanged) return;
+    try {
+      setIsSaving(true);
+      const updated = await updateNameService(trimmed);
+      await setUser(updated);
+      Alert.alert('Sucesso', 'Nome atualizado com sucesso.');
+      navigation.goBack();
+    } catch (error: any) {
+      Alert.alert('Erro', error?.message || 'Não foi possível atualizar o nome.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -32,14 +54,15 @@ const EditProfileScreen: React.FC = () => {
           
           <TextInput
             label="Nome"
-            value={user?.nome}
+            value={nome}
             mode="outlined"
-            disabled
+            onChangeText={setNome}
             style={styles.input}
-            right={<TextInput.Icon icon="lock" color={colors.textSecondary} />}
+            error={!!nome && !isValid}
+            right={isSaving ? <ActivityIndicator size="small" /> : undefined}
           />
           <Text variant="bodySmall" style={styles.helperText}>
-            Para alterar seu nome, entre em contato com o suporte.
+            Use apenas letras e espaços, entre 3 e 50 caracteres. Removemos espaços duplicados automaticamente.
           </Text>
 
           <TextInput
@@ -52,11 +75,13 @@ const EditProfileScreen: React.FC = () => {
           />
 
           <Button 
-            mode="text" 
-            onPress={() => { /* Navegar para edição de outros campos no futuro */ }}
+            mode="contained"
+            onPress={handleSave}
+            disabled={!isValid || !isChanged || isSaving}
+            loading={isSaving}
             style={styles.moreButton}
           >
-            Editar outros dados
+            Salvar
           </Button>
         </View>
       </ScrollView>

@@ -3,12 +3,57 @@ import { uploadService } from '../services/uploadService';
 import { logger } from '../utils/logger';
 import User from '../models/User';
 import type { AuthRequest } from '../middleware/auth';
+import { updateNameSchema } from '../validation/userValidation';
+import { validate } from '../middleware/validation';
 
 /**
  * Controller responsável por gerenciar as operações relacionadas ao perfil do usuário.
  * Contém métodos para manipulação de recursos como fotos de perfil (avatar).
  */
 export const userController = {
+  /**
+   * Atualiza o nome do usuário autenticado.
+   *
+   * Este método realiza as seguintes etapas:
+   * 1. Valida os dados da requisição com base no schema definido.
+   * 2. Recupera o ID do usuário através do token de autenticação.
+   * 3. Atualiza o nome do usuário no banco de dados.
+   * 4. Retorna os dados atualizados do usuário.
+   *
+   * @param {AuthRequest} req - Objeto de requisição do Express, contendo os dados do usuário autenticado.
+   * @param {Response} res - Objeto de resposta do Express usado para retornar o status e dados do usuário atualizado.
+   * @param {NextFunction} next - Função do Express para passar o controle/erro para o próximo middleware de tratamento.
+   * @returns {Promise<void>} - Retorna uma resposta JSON com o sucesso da operação e os dados do usuário.
+   */
+  updateName: [
+    validate(updateNameSchema),
+    async (req: AuthRequest, res: Response, next: NextFunction) => {
+      try {
+        const userId = req.user!.id;
+        const { nome } = req.body as { nome: string };
+
+        const updatedUser = await User.findByIdAndUpdate(
+          userId,
+          { nome },
+          { new: true }
+        ).select('-senha -password');
+
+        if (!updatedUser) {
+          return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+        }
+
+        res.status(200).json({
+          success: true,
+          message: 'Nome atualizado com sucesso.',
+          data: updatedUser,
+        });
+      } catch (error: any) {
+        logger.error('userController.updateName.error', { error: error.message, userId: req.user?.id });
+        next(error);
+      }
+    }
+  ],
+
   /**
    * Atualiza ou adiciona a foto de perfil (avatar) do usuário autenticado.
    * 
