@@ -11,6 +11,7 @@ export interface User {
     email: string;
     tipo: 'buyer' | 'provider' | 'advertiser';
     avatar?: string;
+    avatarBlurhash?: string;
     telefone?: string;
     localizacao?: {
         cidade: string;

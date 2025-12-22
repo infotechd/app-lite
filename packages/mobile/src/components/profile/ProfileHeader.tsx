@@ -100,8 +100,8 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user, profileId }) => {
           onPress={() => {
             // Log de evento para análise de comportamento do usuário
             AnalyticsService.track('profile_edit_click');
-            // Navegação para a tela de alteração de foto
-            (navigation as any).navigate('ProfileAddPhoto');
+            // Navegação para a tela de edição de perfil Versão 2.0
+            (navigation as any).navigate('EditProfile');
           }}
         >
           Editar Perfil

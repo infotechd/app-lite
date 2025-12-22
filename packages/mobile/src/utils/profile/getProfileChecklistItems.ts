@@ -65,7 +65,7 @@ export function getProfileChecklistItems(user: User, navigate?: (route: string) 
       id: 'avatar',
       title: 'Adicionar foto de perfil',
       isComplete: hasAvatar,
-      onPress: go('ProfileAddPhoto'),
+      onPress: go('EditProfile'),
     },
     {
       id: 'phone',

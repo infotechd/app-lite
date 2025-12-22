@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Router as ExpressRouter, Request, Response, RequestHandler } from 'express';
 import authRoutes from './authRoutes';
+import userRoutes from './userRoutes';
 import uploadRoutes from './uploadRoutes';
 import ofertaRoutes from './ofertaRoutes';
 import { generalLimiter } from '../middleware/rateLimiter';
@@ -15,6 +16,7 @@ router.use(generalLimiterMw);
 
 // Rotas da API
 router.use('/auth', authRoutes);
+router.use('/v1/users', userRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/ofertas', ofertaRoutes);
 
