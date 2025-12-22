@@ -34,4 +34,7 @@ router.patch(
 // Remove a foto de perfil do usuário autenticado
 router.delete('/me/avatar', authMiddleware, userController.removeAvatar);
 
+// Atualiza o nome do usuário autenticado
+router.patch('/me/nome', authMiddleware, ...userController.updateName);
+
 export default router;
