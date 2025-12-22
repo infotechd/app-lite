@@ -41,6 +41,10 @@ export interface UploadedFile {
     resourceType: 'image' | 'video' | 'raw'; // Tipo de recurso no Cloudinary
 }
 
+export interface AvatarUploadResult extends UploadedFile {
+    blurhash?: string;
+}
+
 /**
  * Converte Buffer em Stream para upload no Cloudinary.
  * - O Cloudinary aceita upload via stream; isso permite começar a enviar sem
@@ -263,6 +267,80 @@ export async function getFileInfo(publicId: string, resourceType: 'image' | 'vid
     }
 }
 
+/**
+ * Faz upload de um avatar para o Cloudinary.
+ * - O avatar é enviado para uma pasta dedicada (app-lite/{userId}/avatar).
+ * - O arquivo anterior pode ser deletado automaticamente.
+ *
+ * @param file - Arquivo do Multer (com buffer)
+ * @param userId - ID do usuário que está fazendo upload
+ * @param previousPublicId - Public ID do arquivo anterior (opcional, para deletar o antigo)
+ * @returns Informações do avatar enviado (AvatarUploadResult)
+ *
+ * Possíveis melhorias:
+ * - Validar tamanho máximo (bytes) e mime antes de enviar (defesa antecipada).
+ * - Usar um gerador de IDs (ex.: nanoid/uuid) em vez de timestamp para evitar colisões.
+ * - Implementar retries exponenciais com jitter em caso de erros transitórios de rede.
+ * - Definir limites de transformação e presets (upload presets) no Cloudinary para segurança.
+ * - Configurar pasta com prefixo de ambiente (ex.: prod/ ou dev/) para evitar colisões entre ambientes.
+ * - Considerar uploads assinados (signed) quando a origem for cliente, reforçando segurança.
+ */
+export async function uploadAvatar(
+    file: Express.Multer.File,
+    userId: string,
+    previousPublicId?: string
+): Promise<AvatarUploadResult> {
+    // Upload to dedicated avatar folder
+    const resourceType = 'image';
+    const timestamp = Date.now();
+    const sanitizedFilename = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const result = await new Promise<any>((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+            {
+                resource_type: resourceType,
+                folder: `app-lite/${userId}/avatar`,
+                public_id: `${timestamp}_${sanitizedFilename}`,
+                context: {
+                    userId,
+                    originalName: file.originalname,
+                    categoria: 'avatar'
+                },
+                transformation: [{ width: 512, height: 512, crop: 'limit', quality: 'auto', fetch_format: 'auto' }],
+            },
+            (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+            }
+        );
+        bufferToStream(file.buffer).pipe(uploadStream);
+    });
+
+    if (previousPublicId) {
+        try {
+            await deleteFile(previousPublicId, 'image');
+        } catch (err) {
+            logger.warn('cloudinary.avatar.delete_previous_failed', { err, previousPublicId, userId });
+        }
+    }
+
+    logger.info('cloudinary.avatar.upload.success', {
+        publicId: result.public_id,
+        userId,
+        size: result.bytes,
+    });
+
+    return {
+        fileId: result.public_id,
+        filename: file.originalname,
+        url: result.url,
+        secureUrl: result.secure_url,
+        mimetype: file.mimetype,
+        size: result.bytes,
+        publicId: result.public_id,
+        resourceType,
+    };
+}
+
 // Exporta o serviço agregando as funções disponibilizadas
 export const uploadService = {
     uploadFile,
@@ -270,6 +348,7 @@ export const uploadService = {
     deleteFile,
     listUserFiles,
     getFileInfo,
+    uploadAvatar,
 };
 
 export default uploadService;

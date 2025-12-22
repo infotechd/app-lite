@@ -7,6 +7,7 @@ export interface IUser extends Document {
     senha: string;
     telefone?: string;
     avatar?: string;
+    avatarPublicId?: string;
     avatarBlurhash?: string;
     tipo: 'comprador' | 'prestador' | 'anunciante';
 
@@ -59,6 +60,11 @@ const UserSchema = new Schema<IUser>({
     },
 
     avatar: {
+        type: String,
+        trim: true
+    },
+
+    avatarPublicId: {
         type: String,
         trim: true
     },

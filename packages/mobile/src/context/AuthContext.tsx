@@ -119,6 +119,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const clearPendingRedirect = () => setPendingRedirect(null);
 
+    const updateUser = async (nextUser: User | null) => {
+        setUser(nextUser);
+        if (nextUser) {
+            await AsyncStorage.setItem('user', JSON.stringify(nextUser));
+        } else {
+            await AsyncStorage.removeItem('user');
+        }
+    };
+
     const value: AuthContextType = {
         user,
         token,
@@ -130,6 +139,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         pendingRedirect,
         setPendingRedirect,
         clearPendingRedirect,
+        setUser: updateUser,
     };
 
     return (

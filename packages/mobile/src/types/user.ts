@@ -78,4 +78,5 @@ export interface AuthContextType {
     pendingRedirect: PendingRedirect | null;
     setPendingRedirect: (redirect: PendingRedirect | null) => void;
     clearPendingRedirect: () => void;
+    setUser: (user: User | null) => void;
 }
