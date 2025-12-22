@@ -3,6 +3,7 @@ import type { RequestHandler } from 'express';
 import { uploadController, setCacheHeaders } from '../controllers/uploadController';
 import { authMiddleware } from '../middleware/auth';
 import rateLimit from 'express-rate-limit';
+import multer from 'multer';
 
 const router: Router = Router();
 
@@ -85,5 +86,20 @@ router.post('/video',
     uploadController.uploadFiles
 );
 
-export default router;
+const avatarUpload = multer({ storage: multer.memoryStorage() });
+const avatarMw: RequestHandler = avatarUpload.single('avatar') as unknown as RequestHandler;
 
+/**
+ * @route   POST /api/upload/avatar
+ * @desc    Upload de avatar do usuário
+ * @access  Private
+ * @body    avatar: File
+ */
+router.post('/avatar',
+    authMiddleware,
+    uploadRateLimitMw,
+    avatarMw,
+    uploadController.uploadAvatar
+);
+
+export default router;

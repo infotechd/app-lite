@@ -91,6 +91,7 @@ const uploadSchema = z.object({
 type UploadController = {
     uploadMultiple: RequestHandler;
     uploadFiles: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
+    uploadAvatar: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
     deleteFile: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
     getUserFiles: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
     getFileInfo: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
@@ -337,7 +338,61 @@ export const uploadController: UploadController = {
             logger.error('getFileInfo.error', { error: error.message });
             next(error);
         }
-    }
+    },
+
+    /**
+     * Upload de um avatar para o usuário autenticado.
+     * Substitui o avatar anterior, se existir.
+     *
+     * Fluxo:
+     * 1) Recebe o arquivo de avatar via Multer
+     * 2) Garante que o usuário está autenticado
+     * 3) Envia o arquivo para o serviço de upload
+     * 4) Atualiza o registro do usuário com a nova URL do avatar
+     *
+     * @param req Requisição contendo o arquivo de avatar
+     * @param res Resposta HTTP com os dados do avatar atualizado
+     * @param next Próximo middleware em caso de erro
+     * @returns Promise<void>
+     */
+    async uploadAvatar(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const file = Array.isArray(req.files) ? req.files[0] : (req as any).file ?? undefined;
+            if (!file) {
+                res.status(400).json({ success: false, message: 'Nenhum arquivo foi enviado' });
+                return;
+            }
+
+            const userId = req.user?.id;
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Usuário não autenticado' });
+                return;
+            }
+
+            const user = await (await import('../models/User')).default.findById(userId).select('avatar avatarPublicId');
+            const previousPublicId = (user as any)?.avatarPublicId;
+
+            const uploaded = await uploadService.uploadAvatar(file, userId, previousPublicId);
+
+            await (await import('../models/User')).default.findByIdAndUpdate(userId, {
+                avatar: uploaded.secureUrl,
+                avatarPublicId: uploaded.publicId,
+            }, { new: true });
+
+            res.status(200).json({
+                success: true,
+                data: {
+                    avatar: uploaded.secureUrl,
+                    avatarPublicId: uploaded.publicId,
+                    mimetype: uploaded.mimetype,
+                    size: uploaded.size,
+                }
+            });
+        } catch (error: any) {
+            logger.error('upload.avatar.error', { error: error.message });
+            next(error);
+        }
+    },
 };
 
 export default uploadController;
