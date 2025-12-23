@@ -71,4 +71,40 @@ describe('ofertaValidation - normalização de categoria', () => {
       })
     ).toThrow();
   });
+
+  it('deve aceitar cidade vazia quando o estado for BR (Brasil)', () => {
+    const parsed = createOfertaSchema.parse({
+      body: {
+        titulo: 'Serviço Nacional',
+        descricao: 'Atendimento em todo o território nacional.',
+        preco: 500,
+        unidadePreco: 'pacote',
+        categoria: 'Tecnologia',
+        localizacao: {
+          cidade: '', // Vazia
+          estado: 'BR',
+        },
+      }
+    });
+    expect(parsed.body.localizacao.estado).toBe('BR');
+    expect(parsed.body.localizacao.cidade).toBe('');
+  });
+
+  it('deve rejeitar cidade vazia quando o estado NÃO for BR', () => {
+    expect(() =>
+      createOfertaSchema.parse({
+        body: {
+          titulo: 'Serviço Local',
+          descricao: 'Descrição válida com mais de 10 caracteres.',
+          preco: 50,
+          unidadePreco: 'hora',
+          categoria: 'Tecnologia',
+          localizacao: {
+            cidade: '', // Inválido para SP
+            estado: 'SP',
+          },
+        }
+      })
+    ).toThrow();
+  });
 });

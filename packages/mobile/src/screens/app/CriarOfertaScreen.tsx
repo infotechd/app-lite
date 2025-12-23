@@ -19,14 +19,16 @@ import { ofertaService } from '@/services/ofertaService';
 import { uploadFiles } from '@/services/uploadService';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';
-import CategorySubcategoryPicker from '@/components/CategorySubcategoryPicker';
-import EstadoSelect from '@/components/EstadoSelect';
+
 import MediaPreview from '@/components/common/MediaPreview';
 import MediaOptionsMenu from '@/components/MediaOptionsMenu';
 import { useMediaPicker } from '@/hooks/useMediaPicker';
+import { useOfertaOptions } from '@/hooks/useOfertaOptions';
 import { maskCurrencyInput, parseCurrencyBRLToNumber } from '@/utils/currency';
 import MediaPreviewOverlay from '@/components/MediaPreviewOverlay';
 import { MediaFile } from '@/types/media';
+import { CategoryFields } from '@/components/form/CategoryFields';
+import { LocationFields } from '@/components/form/LocationFields';
 
 type Props = NativeStackScreenProps<OfertasStackParamList, 'CreateOferta'>;
 
@@ -43,8 +45,8 @@ type Props = NativeStackScreenProps<OfertasStackParamList, 'CreateOferta'>;
  * - O botão de publicar é habilitado apenas quando há dados mínimos válidos (ver `canSubmit`).
  * - Em caso de permissões negadas/limites de mídia/avisos, são exibidos `Alert`s de forma amigável.
  *
- * @param {{ navigation: Props['navigation'] }} param0 Objeto com `navigation` injetado pelo React Navigation.
- * @returns JSX.Element da tela de criação de oferta.
+ * @param props Objeto com propriedades injetadas pelo React Navigation.
+ * @returns Elemento JSX da tela de criação de oferta.
  */
 const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
     const [form, setForm] = useState<CriarOfertaForm>({
@@ -63,6 +65,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
     const [menuVisible, setMenuVisible] = useState(false);
     // Mídia atualmente em pré-visualização no overlay (quando null, o overlay fica escondido)
     const [previewMedia, setPreviewMedia] = useState<MediaFile | null>(null);
+    const { categoryOptions, subcategoryOptions, stateOptions } = useOfertaOptions(form.categoria);
 
     const canSubmit = useMemo(() => {
         const price = parseCurrencyBRLToNumber(form.precoText);
@@ -71,7 +74,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             form.descricao.trim().length > 0 &&
             price > 0 &&
             form.categoria.trim().length > 0 &&
-            form.cidade.trim().length > 0 &&
+            (form.estado === 'BR' || form.cidade.trim().length > 0) &&
             form.estado.trim().length === 2 &&
             !!form.priceUnit &&
             !submitting
@@ -250,8 +253,6 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         }
     };
 
-    const categoriaId = form.categoria;
-
     return (
         <ScrollView contentContainerStyle={styles.container}>
             <Text variant="titleLarge" style={styles.title}>Criar Oferta</Text>
@@ -314,36 +315,27 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
             {!!errors.preco && <HelperText type="error">{errors.preco}</HelperText>}
             {!!errors.priceUnit && <HelperText type="error">{errors.priceUnit}</HelperText>}
 
-            <CategorySubcategoryPicker
-                key={`cat-${categoriaId || 'none'}`}
-                selectedCategoryId={categoriaId}
-                selectedSubcategoryId={form.subcategoria}
-                onCategoryChange={(id) => {
-                    setField('categoria', id);
-                    setField('subcategoria', undefined as any);
+            <CategoryFields
+                categoria={form.categoria}
+                subcategoria={form.subcategoria}
+                categoryOptions={categoryOptions}
+                subcategoryOptions={subcategoryOptions}
+                errors={errors}
+                onCategoriaChange={(val) => {
+                    setField('categoria', val);
+                    setField('subcategoria', undefined);
                 }}
-                onSubcategoryChange={(id) => setField('subcategoria', id)}
+                onSubcategoriaChange={(val) => setField('subcategoria', val)}
             />
-            {!!errors.categoria && <HelperText type="error">{errors.categoria}</HelperText>}
 
-            <EstadoSelect
-                value={form.estado}
-                onChange={(uf, capital) => {
-                    setField('estado', uf);
-                    if (capital) setField('cidade', capital);
-                }}
+            <LocationFields
+                estado={form.estado}
+                cidade={form.cidade}
+                stateOptions={stateOptions}
+                errors={errors}
+                onEstadoChange={(val) => setField('estado', val)}
+                onCidadeChange={(val) => setField('cidade', val)}
             />
-            {!!errors.estado && <HelperText type="error">{errors.estado}</HelperText>}
-
-            <TextInput
-                label="Cidade (automática)"
-                value={form.cidade}
-                style={styles.input}
-                mode="outlined"
-                editable={false}
-                error={!!errors.cidade}
-            />
-            {!!errors.cidade && <HelperText type="error">{errors.cidade}</HelperText>}
 
             {/* Seção de Mídias com Menu de Opções */}
             <View style={styles.mediaSection}>

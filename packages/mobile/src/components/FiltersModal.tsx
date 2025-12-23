@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { ScrollView, View, AccessibilityInfo, findNodeHandle } from 'react-native';
-import { Modal, Text, Divider, Chip, TextInput, HelperText, Switch, SegmentedButtons, Button } from 'react-native-paper';
+import { Modal, Text, Divider, TextInput, HelperText, Switch, SegmentedButtons, Button } from 'react-native-paper';
 import { colors, spacing, radius } from '@/styles/theme';
-import { UF_LIST } from '@/constants/oferta';
+import { BRAZIL_STATES } from '@/constants/brazilStates';
+import DropdownPicker, { DropdownOption } from './form/DropdownPicker';
 
 export type TipoPessoa = 'PF' | 'PJ' | 'todos';
 
@@ -28,6 +29,16 @@ type FiltersModalProps = {
 
 const FiltersModal: React.FC<FiltersModalProps> = ({ visible, onDismiss, draft, onChange, onApply, onClear, categories }) => {
   const categoriaTitleRef = useRef<any>(null);
+
+  const categoryOptions: DropdownOption[] = categories.map((cat) => ({
+    label: cat,
+    value: cat,
+  }));
+
+  const stateOptions: DropdownOption[] = BRAZIL_STATES.map((state) => ({
+    label: state.nome,
+    value: state.uf,
+  }));
 
   useEffect(() => {
     if (visible && categoriaTitleRef.current) {
@@ -58,23 +69,12 @@ const FiltersModal: React.FC<FiltersModalProps> = ({ visible, onDismiss, draft, 
         >
           Categoria
         </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          {categories.map((cat) => (
-            <Chip
-              key={cat}
-              mode={draft.categoria === cat ? 'flat' : 'outlined'}
-              selected={draft.categoria === cat}
-              onPress={() => onChange({ categoria: draft.categoria === cat ? undefined : cat })}
-              style={{ marginRight: spacing.sm, marginBottom: spacing.sm, minWidth: 92, justifyContent: 'center' }}
-              accessibilityLabel={`${cat}${draft.categoria === cat ? ', selecionado' : ''}`}
-              accessibilityHint={draft.categoria === cat ? 'Toque para desmarcar' : 'Toque para selecionar'}
-              accessibilityRole="button"
-              accessibilityState={{ selected: draft.categoria === cat }}
-            >
-              {cat}
-            </Chip>
-          ))}
-        </View>
+        <DropdownPicker
+          options={categoryOptions}
+          selectedValue={draft.categoria || null}
+          onValueChange={(value) => onChange({ categoria: value as string })}
+          placeholder="Todas as categorias"
+        />
 
         <Divider style={{ marginVertical: spacing.md }} />
         <Text variant="titleMedium" style={{ marginBottom: spacing.sm }}>Preço</Text>
@@ -100,30 +100,23 @@ const FiltersModal: React.FC<FiltersModalProps> = ({ visible, onDismiss, draft, 
 
         <Divider style={{ marginVertical: spacing.md }} />
         <Text variant="titleMedium" style={{ marginBottom: spacing.sm }}>Localização</Text>
+
+        <DropdownPicker
+          label="Estado"
+          options={stateOptions}
+          selectedValue={draft.estado || null}
+          onValueChange={(value) => onChange({ estado: value as string })}
+          placeholder="Todos os estados"
+        />
+
         <TextInput
           label="Cidade"
           mode="outlined"
           value={draft.cidade}
           onChangeText={(v) => onChange({ cidade: v })}
           style={{ marginBottom: spacing.sm }}
+          placeholder="Digite a cidade"
         />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          {UF_LIST.map((uf) => (
-            <Chip
-              key={uf}
-              mode={draft.estado === uf ? 'flat' : 'outlined'}
-              selected={draft.estado === uf}
-              onPress={() => onChange({ estado: draft.estado === uf ? undefined : uf })}
-              style={{ marginRight: spacing.sm, marginBottom: spacing.sm, minWidth: 60, justifyContent: 'center' }}
-              accessibilityLabel={`${uf}${draft.estado === uf ? ', selecionado' : ''}`}
-              accessibilityHint={draft.estado === uf ? 'Toque para desmarcar' : 'Toque para selecionar'}
-              accessibilityRole="button"
-              accessibilityState={{ selected: draft.estado === uf }}
-            >
-              {uf}
-            </Chip>
-          ))}
-        </View>
 
         <Divider style={{ marginVertical: spacing.md }} />
         <Text variant="titleMedium" style={{ marginBottom: spacing.sm }}>Preferências</Text>

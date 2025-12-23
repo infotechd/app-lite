@@ -55,13 +55,22 @@ export const ofertaFiltersSchema = z.object({
 
 // Schema base de localização
 const localizacaoBase = z.object({
-    cidade: z.string().min(1, 'Cidade é obrigatória').max(100),
+    cidade: z.string().max(100),
     estado: z.string().length(2, 'Estado deve ter 2 letras'),
     endereco: z.string().max(200).optional(),
     coordenadas: z.object({
         latitude: z.number(),
         longitude: z.number()
     }).optional()
+}).refine((data) => {
+    // Cidade só é obrigatória se o estado não for 'BR' (Brasil)
+    if (data.estado !== 'BR') {
+        return data.cidade.trim().length > 0;
+    }
+    return true;
+}, {
+    message: 'Cidade é obrigatória',
+    path: ['cidade']
 });
 
 const midiasSuperRefine = (data: unknown, ctx: z.RefinementCtx) => {

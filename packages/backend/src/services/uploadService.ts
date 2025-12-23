@@ -127,8 +127,14 @@ export async function uploadFile(
                     transformation: resourceType === 'image' ? [
                         { quality: 'auto', fetch_format: 'auto' }
                     ] : undefined,
-                    // Força conversão/normalização de vídeos para MP4 (ex.: MOV no iOS)
-                    ...(resourceType === 'video' && { format: 'mp4' }),
+                    // Para vídeos, usamos processamento assíncrono (eager) para evitar erros de timeout
+                    // ou limites de processamento síncrono em arquivos grandes, garantindo a conversão para MP4.
+                    ...(resourceType === 'video' && {
+                        eager: [
+                            { format: 'mp4', video_codec: 'auto', quality: 'auto' }
+                        ],
+                        eager_async: true
+                    }),
                 },
                 (error, result) => {
                     // Callback do upload_stream: resolve em sucesso, reject em erro
@@ -137,8 +143,11 @@ export async function uploadFile(
                 }
             );
 
-            // Conecta a stream do buffer ao upload do Cloudinary
-            bufferToStream(file.buffer).pipe(uploadStream);
+            // Conecta a stream do buffer ao upload do Cloudinary com tratamento de erro na stream
+            const readableStream = bufferToStream(file.buffer);
+            readableStream.on('error', reject);
+            uploadStream.on('error', reject);
+            readableStream.pipe(uploadStream);
         });
 
         // Log estruturado de sucesso de upload
@@ -312,7 +321,12 @@ export async function uploadAvatar(
                 else resolve(result);
             }
         );
-        bufferToStream(file.buffer).pipe(uploadStream);
+
+        // Conecta a stream do buffer ao upload do Cloudinary com tratamento de erro na stream
+        const readableStream = bufferToStream(file.buffer);
+        readableStream.on('error', reject);
+        uploadStream.on('error', reject);
+        readableStream.pipe(uploadStream);
     });
 
     if (previousPublicId) {

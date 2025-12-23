@@ -62,7 +62,10 @@ describe('uploadService (Backend) - Conversão para MP4', () => {
     
     expect(lastOptions).toBeDefined();
     expect(lastOptions.resource_type).toBe('video');
-    expect(lastOptions.format).toBe('mp4'); // Esta é a parte que garante a conversão
+    // Agora a conversão é feita via eager transformation assíncrona para suportar vídeos grandes
+    expect(lastOptions.eager).toBeDefined();
+    expect(lastOptions.eager[0].format).toBe('mp4');
+    expect(lastOptions.eager_async).toBe(true);
     expect(lastOptions.folder).toBe(`app-lite/${userId}`);
   });
 
