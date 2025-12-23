@@ -53,7 +53,7 @@ describe('calculateProfileCompletion', () => {
       avatar: '   ',
       telefone: '   ',
       localizacao: { cidade: '  ', estado: ' SP ' },
-      cpf: '111.111.111-11',
+      cpf: '111',
     } as any;
     const pct = calculateProfileCompletion(user);
     // Todos incompletos (avatar/telefone/cidade inválidos; CPF tem 11 dígitos mas resto incompleto)

@@ -567,10 +567,6 @@ const BuscarOfertasScreen: React.FC = () => {
         );
     });
 
-    const renderOferta = useCallback(({ item }: { item: OfertaServico }) => (
-        <OfferCard item={item} />
-    ), []);
-
     const keyExtractor = useCallback((item: OfertaServico) => item._id, []);
 
     const renderEmpty = () => {
@@ -690,11 +686,10 @@ const BuscarOfertasScreen: React.FC = () => {
                         setTimeout(() => setIsSearchFocused(false), 150);
                     }}
                     returnKeyType="search"
-                    blurOnSubmit
                     onSubmitEditing={() => {
                         // Sincroniza o debounce e busca imediatamente
                         setDebouncedQuery(searchQuery);
-                        loadOfertas(1, true);
+                        void loadOfertas(1, true);
                     }}
                     accessibilityLabel="Buscar serviços"
                     accessibilityHint="Digite um termo para buscar e pressione 'buscar' no teclado para resultados imediatos"
@@ -734,7 +729,7 @@ const BuscarOfertasScreen: React.FC = () => {
                                             {...props}
                                             icon="close"
                                             accessibilityLabel={`Remover termo ${term} do histórico`}
-                                            onPress={() => handleRemoveSearch(term)}
+                                            onPress={() => void handleRemoveSearch(term)}
                                         />
                                     )}
                                 />

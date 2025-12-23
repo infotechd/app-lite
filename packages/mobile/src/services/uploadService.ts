@@ -149,11 +149,11 @@ export async function uploadFiles(mediaFiles: AnyMediaFile[]): Promise<UploadFil
 
         // Separar por tipo para uso mais prático na UI
         const images = normalized
-            .filter((f) => typeof f.mimetype === 'string' && f.mimetype.startsWith('image/'))
+            .filter((f) => f.mimetype.startsWith('image/'))
             .map((f) => f.url);
 
         const videos = normalized
-            .filter((f) => typeof f.mimetype === 'string' && f.mimetype.startsWith('video/'))
+            .filter((f) => f.mimetype.startsWith('video/'))
             .map((f) => f.url);
 
         // Retorna URLs categorizadas e o array completo normalizado

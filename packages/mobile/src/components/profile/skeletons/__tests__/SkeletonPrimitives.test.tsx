@@ -1,4 +1,4 @@
-import { getShimmerColor } from '@/components/profile/skeletons/SkeletonPrimitives';
+import { getShimmerColor } from '../SkeletonPrimitives';
 
 describe('getShimmerColor', () => {
   it('retorna cor com maior contraste no modo claro', () => {

@@ -9,8 +9,6 @@ export interface AuthResponse {
     user: User;
 }
 
-type BackendUserTipo = 'comprador' | 'prestador' | 'anunciante';
-
 type AnyObject = Record<string, any>;
 
 // Converte o tipo do backend para o app (aceita pt-BR e en-US)

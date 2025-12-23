@@ -1,18 +1,18 @@
-import React from 'react';
 import ProfileHeaderSkeleton from '../ProfileHeaderSkeleton';
-import { colors } from '@/styles/theme';
+import { colors } from '../../../../styles/theme';
 
 // Mock do React Native com API mínima necessária ao teste
 jest.mock('react-native', () => {
   const React = require('react');
-  const View = (props: any) => React.createElement('view', props, props.children);
-  const StyleSheet = { create: (s: any) => s };
-  const Appearance = { getColorScheme: () => 'light' };
-  return { View, StyleSheet, Appearance };
+  return {
+    View: (props: any) => React.createElement('view', props, props.children),
+    StyleSheet: { create: (s: any) => s },
+    Appearance: { getColorScheme: () => 'light' },
+  };
 });
 
 // Mock do SkeletonPrimitives para evitar dependência de Animated real
-jest.mock('@/components/profile/skeletons/SkeletonPrimitives', () => {
+jest.mock('../SkeletonPrimitives', () => {
   const React = require('react');
   const { View } = require('react-native');
   const SkeletonBox = ({ style, testID, width, height }: any) =>
@@ -41,6 +41,10 @@ function findByTestId(node: Node, testID: string): Node | null {
 
 describe('ProfileHeaderSkeleton', () => {
   it('aplica colors.primary no selo e no botão, e fundo diferenciado no avatar', () => {
+    // Garante que o mock de Appearance está funcionando e sendo usado
+    const { Appearance } = require('react-native');
+    expect(Appearance.getColorScheme()).toBe('light');
+
     const tree = ProfileHeaderSkeleton({ testID: 'profile-header-skeleton' } as any);
 
     const badge = findByTestId(tree, 'profile-header-skeleton-badge');

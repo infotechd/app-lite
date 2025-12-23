@@ -49,11 +49,11 @@ interface MediaChipsProps {
  * - O título ajuda a contextualizar o grupo.
  * - Os chips indicam o nome do arquivo e permitem remoção rápida.
  *
- * @param props.title Título exibido acima da lista de chips. Padrão: 'Mídias'.
- * @param props.mediaFiles Lista de arquivos de mídia selecionados a serem exibidos.
- * @param props.onRemove Função chamada ao fechar um chip; recebe o índice removido.
- * @param props.onAddPress Função chamada ao tocar no chip "Adicionar".
- * @param props.max Limite máximo de mídias; controla a visibilidade do chip de adição.
+ * @param title Título exibido acima da lista de chips. Padrão: 'Mídias'.
+ * @param mediaFiles Lista de arquivos de mídia selecionados a serem exibidos.
+ * @param onRemove Função chamada ao fechar um chip; recebe o índice removido.
+ * @param onAddPress Função chamada ao tocar no chip "Adicionar".
+ * @param max Limite máximo de mídias; controla a visibilidade do chip de adição.
  * @returns Elemento JSX contendo o título e a linha de chips de mídia.
  */
 const MediaChips: React.FC<MediaChipsProps> = ({ title = 'Mídias', mediaFiles, onRemove, onAddPress, max }) => {

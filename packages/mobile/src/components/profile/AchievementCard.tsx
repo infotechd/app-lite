@@ -1,6 +1,6 @@
 // packages/mobile/src/components/profile/AchievementCard.tsx
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Achievement } from '@/types/achievements';
 import { colors, spacing, radius } from '@/styles/theme';

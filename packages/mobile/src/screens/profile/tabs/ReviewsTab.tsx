@@ -34,10 +34,10 @@ const ReviewsTab: React.FC = () => {
 
       // Força erro na primeira tentativa, simulando instabilidade de rede
       if (attempt === 0) {
-        throw new Error('Simulated error');
+        setIsError(true);
+      } else {
+        setReviews(REVIEWS_MOCK);
       }
-
-      setReviews(REVIEWS_MOCK);
     } catch (e) {
       setIsError(true);
     } finally {
@@ -48,7 +48,7 @@ const ReviewsTab: React.FC = () => {
   useEffect(() => {
     // carrega ao montar
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    load();
+    void load();
   }, []);
 
   const summary = useMemo(() => computeSummary(reviews), [reviews]);

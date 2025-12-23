@@ -8,7 +8,8 @@
  * - Suporte completo para Android e iOS
  */
 
-import React, { useState } from 'react';
+
+import React from 'react';
 import { View, StyleSheet, ScrollView, Image, Alert, Dimensions } from 'react-native';
 import { Text, Card, Chip, Button } from 'react-native-paper';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -17,7 +18,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { ofertaService } from '@/services/ofertaService';
-import { toAbsoluteMediaUrl, toAbsoluteMediaUrls } from '@/utils/mediaUrl';
+import { toAbsoluteMediaUrls } from '@/utils/mediaUrl';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { formatCurrencyBRL } from '@/utils/currency';
 

@@ -20,7 +20,8 @@ const AboutTab: React.FC = () => {
       await new Promise((r) => setTimeout(r, 400));
       // primeira tentativa: simula erro/offline
       if (attempt === 0) {
-        throw new Error('Simulated error');
+        setIsError(true);
+        return;
       }
     } catch (e) {
       setIsError(true);
@@ -30,7 +31,7 @@ const AboutTab: React.FC = () => {
   }, [attempt]);
 
   useEffect(() => {
-    load();
+    void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

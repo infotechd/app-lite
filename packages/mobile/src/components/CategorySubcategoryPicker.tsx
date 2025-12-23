@@ -9,7 +9,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Menu, Button } from 'react-native-paper';
-import { CATEGORIES, getSubcategories, type Categoria, type Subcategoria } from '@/constants/categories';
+import { CATEGORIES, getSubcategories, type Subcategoria } from '@/constants/categories';
 
 interface CategorySubcategoryPickerProps {
     selectedCategoryId?: string;

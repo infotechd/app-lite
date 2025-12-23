@@ -22,7 +22,7 @@ class AnalyticsService {
   }
 
   static track(eventName: string, properties?: AnalyticsProperties) {
-    if (!eventName || typeof eventName !== 'string') {
+    if (!eventName) {
       // eslint-disable-next-line no-console
       console.warn('[ANALYTICS] Ignorado: eventName inválido', eventName);
       return;

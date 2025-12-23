@@ -12,16 +12,6 @@ import { Platform } from 'react-native';
 import envConfig from '@/constants/config';
 
 /**
- * Garante que a URL termine com a barra final '/'.
- *
- * @param u URL base que pode ou não conter a barra final
- * @returns A mesma URL com a barra final garantida
- */
-function ensureTrailingSlash(u: string): string {
-    return u.endsWith('/') ? u : `${u}/`;
-}
-
-/**
  * Autodetecção de IPs do backend em desenvolvimento.
  * - Casa: 192.168.15.12 (exemplo)
  * - Trabalho: 192.168.1.12 (exemplo)
@@ -274,22 +264,6 @@ if (__DEV__ && !IS_TEST) {
             // Mantém base inicial se falhar a autodetecção
         }
     })();
-}
-
-// Helper opcional para mudar manualmente a base (ex.: tela de debug)
-// Também persiste a escolha no AsyncStorage para reutilização futura.
-/**
- * Sobrescreve manualmente a baseURL usada pelo Axios e persiste a escolha.
- * Útil para telas de debug ou cenários de troca dinâmica de ambiente.
- *
- * Observação: a URL deve incluir o caminho "/api" no final (ex.: http://host:4000/api).
- *
- * @param url Nova baseURL absoluta a ser utilizada
- * @returns Promise resolvida após persistência em AsyncStorage
- */
-export async function overrideBaseURL(url: string) {
-    api.defaults.baseURL = url;
-    await AsyncStorage.setItem(CACHE_KEY, url);
 }
 
 export default api;
