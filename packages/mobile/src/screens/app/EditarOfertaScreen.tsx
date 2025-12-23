@@ -13,13 +13,13 @@ import { uploadFiles } from '@/services/uploadService'; // Serviço de upload (i
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';
 import { maskCurrencyInput, parseCurrencyBRLToNumber, formatCurrencyBRL } from '@/utils/currency';
-
-import CategorySubcategoryPicker from '@/components/CategorySubcategoryPicker';
-import EstadoSelect from '@/components/EstadoSelect';
 import MediaPreview from '@/components/common/MediaPreview';
 import MediaOptionsMenu from '@/components/MediaOptionsMenu';
 import { useMediaPicker } from '@/hooks/useMediaPicker';
+import { useOfertaOptions } from '@/hooks/useOfertaOptions';
 import { MediaFile } from '@/types/media';
+import { CategoryFields } from '@/components/form/CategoryFields';
+import { LocationFields } from '@/components/form/LocationFields';
 import MediaPreviewOverlay from '@/components/MediaPreviewOverlay';
 
 // Tipagem das props recebidas via stack navigator: espera rota 'EditOferta'
@@ -51,9 +51,8 @@ type EditForm = {
  * categoria, UF/cidade (cidade preenchida automaticamente) e mídias (imagens/vídeos).
  * Concilia mídias já hospedadas com novas mídias selecionadas antes de enviar à API.
  *
- * @param route - Propriedade de navegação contendo os parâmetros, incluindo a oferta original (route.params.oferta).
- * @param navigation - Objeto de navegação para transitar entre telas.
- * @returns JSX.Element com a UI da tela de edição.
+ * @param props Propriedades injetadas pelo React Navigation, incluindo route.params.oferta.
+ * @returns Elemento JSX com a UI da tela de edição.
  */
 const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
     const { oferta } = route.params;
@@ -92,6 +91,8 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
 
     // Flag de envio para desabilitar ações simultâneas e exibir loading
     const [submitting, setSubmitting] = useState(false);
+
+    const { categoryOptions, subcategoryOptions, stateOptions } = useOfertaOptions(form.categoria);
 
     // Hook para seleção de mídia, encapsulando lógica de câmera e galeria
     const onSelectMedia = (newMedia: MediaFile[]) => {
@@ -151,7 +152,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             price > 0 && // Garante preço válido
             !!form.priceUnit &&
             form.categoria.trim().length > 0 &&
-            form.cidade.trim().length > 0 &&
+            (form.estado === 'BR' || form.cidade.trim().length > 0) &&
             form.estado.trim().length === 2 && // UF deve ter 2 caracteres
             !submitting
         );
@@ -346,37 +347,28 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
 
             {/* Seleção de categoria e subcategoria */}
-            <CategorySubcategoryPicker
-                selectedCategoryId={form.categoria}
-                selectedSubcategoryId={form.subcategoria}
-                onCategoryChange={id => {
-                    setField('categoria', id);
+            <CategoryFields
+                categoria={form.categoria}
+                subcategoria={form.subcategoria}
+                categoryOptions={categoryOptions}
+                subcategoryOptions={subcategoryOptions}
+                errors={errors}
+                onCategoriaChange={(val) => {
+                    setField('categoria', val);
                     setField('subcategoria', undefined);
                 }}
-                onSubcategoryChange={id => setField('subcategoria', id)}
+                onSubcategoriaChange={(val) => setField('subcategoria', val)}
             />
-            {!!errors.categoria && <HelperText type="error">{errors.categoria}</HelperText>}
 
-            {/* Seleção de UF (define cidade automaticamente com capital, se disponível) */}
-            <EstadoSelect
-                value={form.estado}
-                onChange={(uf, capital) => {
-                    setField('estado', uf);
-                    if (capital) setField('cidade', capital);
-                }}
+            <LocationFields
+                estado={form.estado}
+                cidade={form.cidade}
+                stateOptions={stateOptions}
+                errors={errors}
+                onEstadoChange={(val) => setField('estado', val)}
+                onCidadeChange={(val) => setField('cidade', val)}
+                inputStyle={styles.input}
             />
-            {!!errors.estado && <HelperText type="error">{errors.estado}</HelperText>}
-
-            {/* Campo de cidade somente leitura (preenchido automaticamente) */}
-            <TextInput
-                label="Cidade (automática)"
-                value={form.cidade}
-                style={styles.input}
-                mode="outlined"
-                disabled
-                error={!!errors.cidade}
-            />
-            {!!errors.cidade && <HelperText type="error">{errors.cidade}</HelperText>}
 
             {/* Seção de mídias (pré-visualização e adição) */}
             <View style={styles.section}>

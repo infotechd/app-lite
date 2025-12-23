@@ -91,3 +91,19 @@ describe('criarOfertaSchema - preço e unidade do preço', () => {
     }
   });
 });
+
+describe('criarOfertaSchema - localização condicional', () => {
+  it('valida com sucesso quando estado é BR e cidade está vazia', () => {
+    const res = criarOfertaSchema.safeParse(makeValidData({ estado: 'BR', cidade: '' }));
+    expect(res.success).toBe(true);
+  });
+
+  it('falha quando estado NÃO é BR e cidade está vazia', () => {
+    const res = criarOfertaSchema.safeParse(makeValidData({ estado: 'SP', cidade: '' }));
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const issue = res.error.issues.find((i) => i.path.join('.') === 'cidade');
+      expect(issue).toBeTruthy();
+    }
+  });
+});

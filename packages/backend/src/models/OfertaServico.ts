@@ -141,7 +141,10 @@ const OfertaServicoSchema = new Schema<IOfertaServico>({
     localizacao: {
         cidade: {
             type: String,
-            required: [true, 'Cidade é obrigatória'],
+            required: function(this: any) {
+                // Cidade só é obrigatória se o estado não for 'BR' (Brasil)
+                return this.localizacao?.estado !== 'BR';
+            },
             trim: true
         },
         estado: {

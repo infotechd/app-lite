@@ -134,12 +134,20 @@ export const criarOfertaSchema = z.object({
     priceUnit: z.enum(PRICE_UNITS, { required_error: 'Selecione a unidade do preço' }),
     categoria: z.string().min(1, 'Selecione uma categoria'),
     subcategoria: z.string().optional(),
-    cidade: z.string().min(1, MESSAGES.VALIDATION.REQUIRED),
+    cidade: z.string(),
     estado: z.string().min(2, 'UF inválida').max(2, 'Use UF, ex: SP'),
     mediaFiles: z
         .array(mediaFileSchema)
         .max(OFERTA_MEDIA_CONFIG.MAX_FILES, `Máximo ${OFERTA_MEDIA_CONFIG.MAX_FILES} arquivos`) // limita a quantidade de arquivos anexados
         .default([]),
+}).refine((data) => {
+    if (data.estado !== 'BR') {
+        return data.cidade.trim().length > 0;
+    }
+    return true;
+}, {
+    message: MESSAGES.VALIDATION.REQUIRED,
+    path: ['cidade'],
 });
 
 /**

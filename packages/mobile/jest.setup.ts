@@ -58,12 +58,33 @@ if (typeof (globalThis as any).fetch === 'undefined' || (globalThis as any).__FO
 try {
     const RN = require('react-native');
     // Some environments may miss StyleSheet.flatten; provide a noop fallback
-    if (typeof RN.StyleSheet.flatten !== 'function') {
-        RN.StyleSheet.flatten = (s: any) => s;
-    }
+    Object.defineProperty(RN.StyleSheet, 'flatten', {
+        value: (s: any) => s,
+        writable: true,
+        configurable: true,
+    });
 } catch {}
 
 // requestAnimationFrame polyfill for components or libraries relying on it
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
     ;(globalThis as any).requestAnimationFrame = (cb: any) => setTimeout(cb, 0);
 }
+
+// Mock @expo/vector-icons para evitar erros de importação nos testes
+jest.mock('@expo/vector-icons', () => ({
+    MaterialIcons: 'MaterialIcons',
+}));
+
+// Mock expo-video para evitar erro de modulo nativo nos testes
+jest.mock('expo-video', () => ({
+    VideoView: 'VideoView',
+    useVideoPlayer: jest.fn(() => ({})),
+}));
+
+// Mock react-native-safe-area-context
+jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaProvider: ({ children }: any) => children,
+  SafeAreaView: ({ children }: any) => children,
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+  useSafeAreaFrame: () => ({ x: 0, y: 0, width: 390, height: 844 }),
+}));
