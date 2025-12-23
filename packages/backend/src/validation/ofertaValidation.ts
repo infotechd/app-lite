@@ -20,7 +20,10 @@ export const ofertaFiltersSchema = z.object({
         precoMin: z.coerce.number().min(0).optional(),
         precoMax: z.coerce.number().min(0).optional(),
         cidade: z.string().min(1).max(100).optional(),
-        estado: z.string().min(2).max(2).transform((v) => v.toUpperCase()).optional(),
+        estado: z.union([
+            z.string().min(2).max(2).transform((v) => v.toUpperCase()),
+            z.array(z.string().min(2).max(2).transform((v) => v.toUpperCase())).max(3)
+        ]).optional(),
         busca: z.string().min(1).max(200).optional(),
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(50).default(10),

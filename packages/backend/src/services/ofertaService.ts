@@ -12,7 +12,7 @@ export interface ListFilters {
     precoMin?: number;
     precoMax?: number;
     cidade?: string;
-    estado?: string;
+    estado?: string | string[];
     busca?: string;
     sort?: SortOption;
     comMidia?: boolean;
@@ -56,7 +56,13 @@ export const ofertaService = {
         if (typeof precoMin === 'number') query.preco = { ...(query.preco || {}), $gte: precoMin };
         if (typeof precoMax === 'number') query.preco = { ...(query.preco || {}), $lte: precoMax };
         if (cidade) query['localizacao.cidade'] = cidade;
-        if (estado) query['localizacao.estado'] = estado;
+        if (estado) {
+            if (Array.isArray(estado)) {
+                query['localizacao.estado'] = { $in: estado };
+            } else {
+                query['localizacao.estado'] = estado;
+            }
+        }
 
         if (comMidia === true) {
             const mediaOr = [

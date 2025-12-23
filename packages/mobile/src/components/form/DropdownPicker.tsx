@@ -25,6 +25,7 @@ interface DropdownPickerProps {
   error?: string;
   testID?: string;
   optionTestIDPrefix?: string;
+  disabled?: boolean;
 }
 
 export const DropdownPicker: React.FC<DropdownPickerProps> = ({
@@ -36,6 +37,7 @@ export const DropdownPicker: React.FC<DropdownPickerProps> = ({
   error,
   testID,
   optionTestIDPrefix,
+  disabled,
 }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
 
@@ -76,13 +78,21 @@ export const DropdownPicker: React.FC<DropdownPickerProps> = ({
 
       <Pressable
         testID={testID}
-        style={[styles.button, error && styles.buttonError]}
-        onPress={() => setIsModalVisible(true)}
+        style={[
+          styles.button,
+          error && styles.buttonError,
+          disabled && styles.buttonDisabled
+        ]}
+        onPress={() => !disabled && setIsModalVisible(true)}
       >
-        <Text style={[styles.buttonText, !selectedValue && styles.placeholderText]}>
+        <Text style={[
+          styles.buttonText,
+          !selectedValue && styles.placeholderText,
+          disabled && styles.disabledText
+        ]}>
           {selectedLabel}
         </Text>
-        <MaterialIcons name="arrow-drop-down" size={24} color={colors.textSecondary} />
+        <MaterialIcons name="arrow-drop-down" size={24} color={disabled ? colors.textDisabled : colors.textSecondary} />
       </Pressable>
 
       {error && <Text style={styles.errorText}>{error}</Text>}
@@ -143,6 +153,10 @@ const styles = StyleSheet.create({
   buttonError: {
     borderColor: colors.error,
   },
+  buttonDisabled: {
+    backgroundColor: colors.background,
+    borderColor: colors.border,
+  },
   buttonText: {
     fontSize: 16,
     color: colors.text,
@@ -150,6 +164,9 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     color: colors.textSecondary,
+  },
+  disabledText: {
+    color: colors.textDisabled,
   },
   errorText: {
     fontSize: 12,

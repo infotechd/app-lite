@@ -47,6 +47,7 @@ type ColorTokens = {
     success: string;
     warning: string;
     backdrop: string;
+    textDisabled: string;
 };
 
 const lightTokens: ColorTokens = {
@@ -61,7 +62,7 @@ const lightTokens: ColorTokens = {
     success: '#4CAF50',
     warning: '#FF9800',
     backdrop: '#EAEAEA',
-
+    textDisabled: '#D1D1D1',
 };
 
 const darkTokens: ColorTokens = {
@@ -76,7 +77,7 @@ const darkTokens: ColorTokens = {
     success: '#4CAF50',
     warning: '#FFB74D',
     backdrop: '#1F1F1F',
-
+    textDisabled: '#4A4A4A',
 };
 
 // Exporta um proxy que resolve as cores com base no esquema atual do SO.

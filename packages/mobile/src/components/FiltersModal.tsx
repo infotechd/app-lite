@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ScrollView, View, AccessibilityInfo, findNodeHandle } from 'react-native';
-import { Modal, Text, Divider, TextInput, HelperText, Switch, SegmentedButtons, Button } from 'react-native-paper';
+import { Modal, Text, Divider, TextInput, HelperText, Switch, SegmentedButtons, Button, Chip } from 'react-native-paper';
 import { colors, spacing, radius } from '@/styles/theme';
 import { BRAZIL_STATES } from '@/constants/brazilStates';
 import DropdownPicker, { DropdownOption } from './form/DropdownPicker';
@@ -12,7 +12,7 @@ export type FiltersDraft = {
   precoMin: string;
   precoMax: string;
   cidade: string;
-  estado?: string;
+  estados: string[];
   comMidia: boolean;
   tipoPessoa: TipoPessoa;
 };
@@ -101,13 +101,44 @@ const FiltersModal: React.FC<FiltersModalProps> = ({ visible, onDismiss, draft, 
         <Divider style={{ marginVertical: spacing.md }} />
         <Text variant="titleMedium" style={{ marginBottom: spacing.sm }}>Localização</Text>
 
-        <DropdownPicker
-          label="Estado"
-          options={stateOptions}
-          selectedValue={draft.estado || null}
-          onValueChange={(value) => onChange({ estado: value as string })}
-          placeholder="Todos os estados"
-        />
+        <View style={{ marginBottom: spacing.sm }}>
+          <Text variant="labelMedium" style={{ marginBottom: spacing.xs }}>Estados (máx. 3)</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xs }}>
+            {draft.estados.map((uf) => {
+              const state = BRAZIL_STATES.find(s => s.uf === uf);
+              return (
+                <Chip
+                  key={uf}
+                  onClose={() => onChange({ estados: draft.estados.filter(e => e !== uf) })}
+                  style={{ backgroundColor: colors.backdrop }}
+                  textStyle={{ color: colors.text }}
+                >
+                  {state?.nome || uf}
+                </Chip>
+              );
+            })}
+            {draft.estados.length === 0 && (
+              <Text variant="bodySmall" style={{ color: colors.textSecondary, fontStyle: 'italic' }}>
+                Nenhum estado selecionado (Busca Nacional)
+              </Text>
+            )}
+          </View>
+          
+          <DropdownPicker
+            options={stateOptions.filter(opt => !draft.estados.includes(opt.value as string))}
+            selectedValue={null}
+            onValueChange={(value) => {
+              if (draft.estados.length < 3) {
+                onChange({ estados: [...draft.estados, value as string] });
+              }
+            }}
+            placeholder={draft.estados.length >= 3 ? "Limite atingido (3)" : "Adicionar estado"}
+            disabled={draft.estados.length >= 3}
+          />
+          {draft.estados.length >= 3 && (
+            <HelperText type="info">Você pode selecionar no máximo 3 estados.</HelperText>
+          )}
+        </View>
 
         <TextInput
           label="Cidade"
@@ -116,7 +147,11 @@ const FiltersModal: React.FC<FiltersModalProps> = ({ visible, onDismiss, draft, 
           onChangeText={(v) => onChange({ cidade: v })}
           style={{ marginBottom: spacing.sm }}
           placeholder="Digite a cidade"
+          disabled={draft.estados.length > 1}
         />
+        {draft.estados.length > 1 && (
+          <HelperText type="info">Filtro de cidade desabilitado para múltiplos estados.</HelperText>
+        )}
 
         <Divider style={{ marginVertical: spacing.md }} />
         <Text variant="titleMedium" style={{ marginBottom: spacing.sm }}>Preferências</Text>
