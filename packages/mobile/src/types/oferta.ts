@@ -50,7 +50,7 @@ export interface OfertaFilters {
     precoMin?: number;
     precoMax?: number;
     cidade?: string;
-    estado?: string;
+    estado?: string | string[];
     busca?: string;
     // Novos filtros avançados (opcionais)
     sort?: SortOption;

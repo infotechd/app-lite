@@ -18,7 +18,7 @@ import { openAuthModal } from '@/navigation/RootNavigation';
 import { formatCurrencyBRL } from '@/utils/currency';
 import FiltersModal, { FiltersDraft } from '@/components/FiltersModal';
 import { CATEGORIES_NAMES as CATEGORY_NAMES } from '@/constants/categories';
-import { parseNumber, isValidUF, validatePriceRange } from '@/utils/filtersValidation';
+import { parseNumber, validatePriceRange } from '@/utils/filtersValidation';
 
 // Rótulos para opções de ordenação
 const SORT_LABELS: Record<SortOption, string> = {
@@ -87,7 +87,7 @@ const BuscarOfertasScreen: React.FC = () => {
     const [precoMin, setPrecoMin] = useState<number | undefined>(undefined);
     const [precoMax, setPrecoMax] = useState<number | undefined>(undefined);
     const [cidade, setCidade] = useState<string | undefined>(undefined);
-    const [estado, setEstado] = useState<string | undefined>(undefined);
+    const [estados, setEstados] = useState<string[]>([]);
     const [total, setTotal] = useState<number>(0);
 
     // Novos filtros avançados
@@ -105,7 +105,7 @@ const BuscarOfertasScreen: React.FC = () => {
         precoMin: '',
         precoMax: '',
         cidade: '',
-        estado: undefined,
+        estados: [],
         comMidia: false,
         tipoPessoa: 'todos',
     });
@@ -248,7 +248,7 @@ const BuscarOfertasScreen: React.FC = () => {
                 precoMin,
                 precoMax,
                 cidade,
-                estado,
+                estado: estados.length > 0 ? (estados.length === 1 ? estados[0] : estados) : undefined,
                 sort: sortBy,
                 comMidia,
                 tipoPessoa,
@@ -305,7 +305,7 @@ const BuscarOfertasScreen: React.FC = () => {
                         precoMin,
                         precoMax,
                         cidade,
-                        estado,
+                        estado: estados,
                         comMidia,
                         tipoPessoa,
                         page: pageNum,
@@ -329,7 +329,7 @@ const BuscarOfertasScreen: React.FC = () => {
             // Encerra o span de performance
             try { span.end(); } catch {}
         }
-    }, [debouncedQuery, selectedCategory, precoMin, precoMax, cidade, estado, sortBy, comMidia, tipoPessoa, userLat, userLng, saveSuccessfulSearch]);
+    }, [debouncedQuery, selectedCategory, precoMin, precoMax, cidade, estados, sortBy, comMidia, tipoPessoa, userLat, userLng, saveSuccessfulSearch]);
 
     const retry = useCallback(() => {
         void loadOfertas(1, true);
@@ -391,7 +391,7 @@ const BuscarOfertasScreen: React.FC = () => {
             precoMin: typeof precoMin === 'number' ? String(precoMin) : '',
             precoMax: typeof precoMax === 'number' ? String(precoMax) : '',
             cidade: cidade ?? '',
-            estado,
+            estados: estados,
             comMidia,
             tipoPessoa: tipoPessoa ?? 'todos',
         });
@@ -407,19 +407,13 @@ const BuscarOfertasScreen: React.FC = () => {
             return;
         }
 
-        const ufRaw = (draft.estado || '').trim().toUpperCase();
-        if (!isValidUF(ufRaw)) {
-            Alert.alert('Validação', 'Estado (UF) deve ter 2 letras');
-            return;
-        }
-
         // Analytics: console.log + breadcrumb
         trackApplyFilters({
             categoria: draft.categoria,
             precoMin: min,
             precoMax: max,
             cidade: draft.cidade,
-            estado: ufRaw || undefined,
+            estados: draft.estados,
             comMidia: draft.comMidia,
             tipoPessoa: draft.tipoPessoa,
         });
@@ -427,7 +421,7 @@ const BuscarOfertasScreen: React.FC = () => {
         setPrecoMin(min);
         setPrecoMax(max);
         setCidade(draft.cidade.trim() || undefined);
-        setEstado(ufRaw ? ufRaw : undefined);
+        setEstados(draft.estados);
         // novos filtros
         // draft.comMidia já é boolean; evitar comparação redundante com true
         setComMidia(draft.comMidia);
@@ -441,7 +435,7 @@ const BuscarOfertasScreen: React.FC = () => {
         setPrecoMin(undefined);
         setPrecoMax(undefined);
         setCidade(undefined);
-        setEstado(undefined);
+        setEstados([]);
         setComMidia(false);
         setTipoPessoa(undefined);
         setIsFiltersVisible(false);
@@ -450,7 +444,7 @@ const BuscarOfertasScreen: React.FC = () => {
             precoMin: '',
             precoMax: '',
             cidade: '',
-            estado: undefined,
+            estados: [],
             comMidia: false,
             tipoPessoa: 'todos',
         });
@@ -459,7 +453,7 @@ const BuscarOfertasScreen: React.FC = () => {
     const clearFilter = (key: 'categoria' | 'cidade' | 'estado' | 'preco' | 'comMidia' | 'tipoPessoa') => {
         if (key === 'categoria') setSelectedCategory(undefined);
         if (key === 'cidade') setCidade(undefined);
-        if (key === 'estado') setEstado(undefined);
+        if (key === 'estado') setEstados([]);
         if (key === 'preco') { setPrecoMin(undefined); setPrecoMax(undefined); }
         if (key === 'comMidia') setComMidia(false);
         if (key === 'tipoPessoa') setTipoPessoa(undefined);
@@ -572,7 +566,7 @@ const BuscarOfertasScreen: React.FC = () => {
     const renderEmpty = () => {
         const priceApplied = typeof precoMin === 'number' || typeof precoMax === 'number';
         const hasAppliedFilters = Boolean(
-            selectedCategory || cidade || estado || priceApplied || comMidia || tipoPessoa
+            selectedCategory || cidade || estados.length > 0 || priceApplied || comMidia || tipoPessoa
         );
 
         if (hasAppliedFilters) {
@@ -751,7 +745,7 @@ const BuscarOfertasScreen: React.FC = () => {
                                     const appliedFiltersCount =
                                         (selectedCategory ? 1 : 0) +
                                         (cidade ? 1 : 0) +
-                                        (estado ? 1 : 0) +
+                                        (estados.length > 0 ? 1 : 0) +
                                         (priceApplied ? 1 : 0) +
                                         (comMidia ? 1 : 0) +
                                         (tipoPessoa ? 1 : 0);
@@ -851,7 +845,7 @@ const BuscarOfertasScreen: React.FC = () => {
         handleClearSearches,
         selectedCategory,
         cidade,
-        estado,
+        estados,
         precoMin,
         precoMax,
         comMidia,
@@ -889,16 +883,19 @@ const BuscarOfertasScreen: React.FC = () => {
                         {cidade}
                     </Chip>
                 ) : null}
-                {estado ? (
-                    <Chip
-                        mode="outlined"
-                        onPress={() => clearFilter('estado')}
-                        onClose={() => clearFilter('estado')}
-                        style={styles.appliedChip}
-                        {...getAppliedChipA11y(`Estado: ${estado}`)}
-                    >
-                        {estado}
-                    </Chip>
+                {estados.length > 0 ? (
+                    estados.map((uf) => (
+                        <Chip
+                            key={uf}
+                            mode="outlined"
+                            onPress={() => setEstados(prev => prev.filter(e => e !== uf))}
+                            onClose={() => setEstados(prev => prev.filter(e => e !== uf))}
+                            style={styles.appliedChip}
+                            {...getAppliedChipA11y(`Estado: ${uf}`)}
+                        >
+                            {uf}
+                        </Chip>
+                    ))
                 ) : null}
                 {(typeof precoMin === 'number' || typeof precoMax === 'number') ? (
                     <Chip
@@ -936,7 +933,7 @@ const BuscarOfertasScreen: React.FC = () => {
                         {tipoPessoa}
                     </Chip>
                 ) : null}
-                {(selectedCategory || cidade || estado || typeof precoMin === 'number' || typeof precoMax === 'number' || comMidia || tipoPessoa) ? (
+                {(selectedCategory || cidade || estados.length > 0 || typeof precoMin === 'number' || typeof precoMax === 'number' || comMidia || tipoPessoa) ? (
                     <Chip
                         mode="outlined"
                         icon="close-circle"
@@ -951,16 +948,16 @@ const BuscarOfertasScreen: React.FC = () => {
                 ) : null}
             </View>
         </View>
-    ), [selectedCategory, cidade, estado, precoMin, precoMax, comMidia, tipoPessoa]);
+    ), [selectedCategory, cidade, estados, precoMin, precoMax, comMidia, tipoPessoa]);
 
     const CHIPS_SENTINEL = '__chips__';
     const hasAppliedFilters = React.useMemo(() => (
         Boolean(
-            selectedCategory || cidade || estado ||
+            selectedCategory || cidade || estados.length > 0 ||
             typeof precoMin === 'number' || typeof precoMax === 'number' ||
             comMidia || tipoPessoa
         )
-    ), [selectedCategory, cidade, estado, precoMin, precoMax, comMidia, tipoPessoa]);
+    ), [selectedCategory, cidade, estados, precoMin, precoMax, comMidia, tipoPessoa]);
     const dataWithChips = React.useMemo(() => (
         hasAppliedFilters ? [CHIPS_SENTINEL, ...ofertas] : ofertas
     ), [hasAppliedFilters, ofertas]);

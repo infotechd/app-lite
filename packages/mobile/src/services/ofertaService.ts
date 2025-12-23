@@ -24,7 +24,7 @@ export interface ListOfertasParams {
     busca?: string;
     categoria?: string;
     subcategoria?: string;
-    estado?: string;
+    estado?: string | string[];
     cidade?: string;
     sort?: 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente' | 'distancia';
     comMidia?: boolean;
@@ -132,7 +132,13 @@ export const ofertaService = {
         if (filters?.precoMin !== undefined) params.append('precoMin', filters.precoMin.toString());
         if (filters?.precoMax !== undefined) params.append('precoMax', filters.precoMax.toString());
         if (filters?.cidade) params.append('cidade', filters.cidade);
-        if (filters?.estado) params.append('estado', filters.estado);
+        if (filters?.estado) {
+            if (Array.isArray(filters.estado)) {
+                filters.estado.forEach(e => params.append('estado', e));
+            } else {
+                params.append('estado', filters.estado);
+            }
+        }
         if (filters?.busca) params.append('busca', filters.busca);
         // Novos filtros avançados
         if (filters?.sort) params.append('sort', filters.sort);
