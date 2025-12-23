@@ -38,7 +38,7 @@ const ActivityTab: React.FC<Props> = ({ isLoading }) => {
 
   const handleEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+      void fetchNextPage();
     }
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 

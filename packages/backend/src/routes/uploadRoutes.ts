@@ -3,7 +3,7 @@ import type { RequestHandler } from 'express';
 import { uploadController, setCacheHeaders } from '../controllers/uploadController';
 import { authMiddleware } from '../middleware/auth';
 import rateLimit from 'express-rate-limit';
-import multer from 'multer';
+
 
 const router: Router = Router();
 

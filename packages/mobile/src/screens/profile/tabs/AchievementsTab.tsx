@@ -30,7 +30,7 @@ const AchievementsTab: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const onPressItem = useCallback((item: Achievement) => {

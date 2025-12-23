@@ -75,9 +75,9 @@ export interface AuthContextType {
     isAuthenticated: boolean;
     login: (email: string, password: string) => Promise<void>;
     register: (data: RegisterData) => Promise<void>; // Agora usa a RegisterData corrigida
-    logout: () => void;
+    logout: () => Promise<void>;
     pendingRedirect: PendingRedirect | null;
     setPendingRedirect: (redirect: PendingRedirect | null) => void;
     clearPendingRedirect: () => void;
-    setUser: (user: User | null) => void;
+    setUser: (user: User | null) => Promise<void>;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Card, List, IconButton, Button, Text } from 'react-native-paper';
+import { Card, List, IconButton, Button} from 'react-native-paper';
 import { spacing } from '@/styles/theme';
 
 interface SuggestionsCardProps {

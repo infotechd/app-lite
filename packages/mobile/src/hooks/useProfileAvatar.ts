@@ -6,20 +6,29 @@ import { useMediaPicker } from './useMediaPicker';
 import { User } from '@/types';
 
 /**
+ * Interface de retorno do hook useProfileAvatar.
+ */
+export interface UseProfileAvatarReturn {
+  pickFromGallery: () => Promise<void>;
+  takePhoto: () => Promise<void>;
+  remove: () => Promise<void>;
+  isLoading: boolean;
+  hasAvatar: boolean;
+}
+
+/**
  * Hook customizado para gerenciar o avatar (foto de perfil) do usuário.
  * Versão 2.0: Centraliza a lógica de upload e remoção, integrando com o AuthContext.
- * 
- * @returns {Object} Métodos e estados para manipulação do avatar.
  */
-export const useProfileAvatar = () => {
+export const useProfileAvatar = (): UseProfileAvatarReturn => {
   const { user, setUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   /**
    * Atualiza o estado global do usuário com os dados retornados do backend.
    */
-  const handleSuccess = useCallback((updatedUser: User) => {
-    setUser(updatedUser);
+  const handleSuccess = useCallback(async (updatedUser: User) => {
+    await setUser(updatedUser);
   }, [setUser]);
 
   /**
@@ -32,7 +41,7 @@ export const useProfileAvatar = () => {
         setIsLoading(true);
         try {
           const updatedUser = await uploadAvatarService(media[0]);
-          handleSuccess(updatedUser);
+          await handleSuccess(updatedUser);
         } catch (error: any) {
           Alert.alert('Erro ao carregar foto', error?.message || 'Tente novamente.');
         } finally {
@@ -62,7 +71,7 @@ export const useProfileAvatar = () => {
             setIsLoading(true);
             try {
               const updatedUser = await removeAvatarService();
-              handleSuccess(updatedUser);
+              await handleSuccess(updatedUser);
             } catch (error: any) {
               Alert.alert('Erro ao remover foto', error?.message || 'Tente novamente.');
             } finally {

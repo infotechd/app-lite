@@ -198,11 +198,11 @@ export function useUserActivity(userId: string, pageSize: number = 20) {
 
   // Carregamento inicial
   useEffect(() => {
-    loadInitial();
+    void loadInitial();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  const api = useMemo(
+  return useMemo(
     () => ({
       activities,
       isLoading,
@@ -215,8 +215,6 @@ export function useUserActivity(userId: string, pageSize: number = 20) {
     }),
     [activities, fetchNextPage, hasNextPage, isError, isFetchingNextPage, isLoading, isRefreshing, refresh],
   );
-
-  return api;
 }
 
 export default useUserActivity;

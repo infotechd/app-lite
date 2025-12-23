@@ -1,6 +1,6 @@
 // packages/mobile/src/components/profile/AchievementGrid.tsx
 import React from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
+import { StyleSheet, FlatList } from 'react-native';
 import { Achievement } from '@/types/achievements';
 import AchievementCard from './AchievementCard';
 

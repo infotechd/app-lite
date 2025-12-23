@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { User } from '@/types';
-import { colors, spacing, radius, elevation, typography } from '@/styles/theme';
+import { colors, spacing, typography } from '@/styles/theme';
 import { getProfileChecklistItems } from '@/utils/profile/getProfileChecklistItems';
 import { calculateProfileCompletion } from '@/utils/profile/calculateProfileCompletion';
 import { THEME_CONFIG } from '@/constants/config';

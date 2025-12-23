@@ -13,9 +13,9 @@
  */
 import { Platform } from 'react-native';
 import { z } from 'zod';
-import { VALIDATION_CONFIG, MESSAGES } from '@/constants';
+import { MESSAGES } from '@/constants';
 import { parseCurrencyBRLToNumber } from '@/utils/currency';
-import { removeNonNumeric } from './phoneFormatter';
+
 
 // Tipos base sempre permitidos
 const BASE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'video/mp4'] as const;
@@ -143,20 +143,6 @@ export const criarOfertaSchema = z.object({
 });
 
 /**
- * Schema para validação de Login.
- */
-export const loginSchema = z.object({
-    email: z.string()
-        .min(1, MESSAGES.VALIDATION.REQUIRED)
-        .email(MESSAGES.VALIDATION.EMAIL_INVALID)
-        .toLowerCase()
-        .trim(),
-    password: z.string()
-        .min(1, MESSAGES.VALIDATION.REQUIRED)
-        .min(6, MESSAGES.VALIDATION.PASSWORD_MIN),
-});
-
-/**
  * Schema para Registro de Usuário (PF e PJ).
  * Inclui validações condicionais baseadas no tipo de pessoa e
  * transformações para garantir compatibilidade com o backend.
@@ -228,8 +214,6 @@ export const registerSchema = z.object({
         : data
 ));
 
-/** Tipo inferido do schema de login. Útil para tipar formulários e handlers. */
-export type LoginFormData = z.infer<typeof loginSchema>;
 /** Tipo inferido do schema de registro. */
 export type RegisterFormData = z.infer<typeof registerSchema>;
 /** Tipo inferido para um arquivo de mídia individual. */
