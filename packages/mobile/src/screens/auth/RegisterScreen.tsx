@@ -150,7 +150,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     return (
         <ScrollView style={styles.container}>
             <View style={styles.content}>
-                <Text variant="headlineSmall" style={styles.title}>Criar conta</Text>
+                <Text testID="title-registrar" variant="headlineSmall" style={styles.title}>Criar conta</Text>
 
                 <View style={styles.section}>
                     <Text variant="labelLarge" style={styles.sectionLabel}>
@@ -160,8 +160,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                         value={tipoPessoa}
                         onValueChange={(value) => handleTipoPessoaChange(value as 'PF' | 'PJ')}
                         buttons={[
-                            { value: 'PF', label: 'Pessoa Física', icon: 'account' },
-                            { value: 'PJ', label: 'Pessoa Jurídica', icon: 'domain' },
+                            { value: 'PF', label: 'Pessoa Física', icon: 'account', testID: 'btn-pf' },
+                            { value: 'PJ', label: 'Pessoa Jurídica', icon: 'domain', testID: 'btn-pj' },
                         ]}
                     />
                 </View>
@@ -177,6 +177,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                             render={({ field: { onChange, onBlur, value } }) => (
                                 <>
                                     <TextInput
+                                        testID="input-nome"
                                         mode="outlined"
                                         label="Nome Completo *"
                                         value={value ?? ''}
@@ -200,6 +201,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                             render={({ field: { onChange, onBlur, value } }) => (
                                 <>
                                     <TextInput
+                                        testID="input-cpf"
                                         mode="outlined"
                                         label="CPF *"
                                         value={value ?? ''}
@@ -230,6 +232,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                             render={({ field: { onChange, onBlur, value } }) => (
                                 <>
                                     <TextInput
+                                        testID="input-razaoSocial"
                                         mode="outlined"
                                         label="Razão Social *"
                                         value={value ?? ''}
@@ -252,6 +255,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                             name="nomeFantasia"
                             render={({ field: { onChange, onBlur, value } }) => (
                                 <TextInput
+                                    testID="input-nomeFantasia"
                                     mode="outlined"
                                     label="Nome Fantasia (opcional)"
                                     value={value ?? ''}
@@ -268,6 +272,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                             render={({ field: { onChange, onBlur, value } }) => (
                                 <>
                                     <TextInput
+                                        testID="input-cnpj"
                                         mode="outlined"
                                         label="CNPJ *"
                                         value={value ?? ''}
@@ -296,6 +301,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     render={({ field: { onChange, onBlur, value } }) => (
                         <>
                             <TextInput
+                                testID="input-email"
                                 mode="outlined"
                                 label="E-mail *"
                                 value={value ?? ''}
@@ -321,6 +327,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     render={({ field: { onChange, onBlur, value } }) => (
                         <>
                             <TextInput
+                                testID="input-telefone"
                                 mode="outlined"
                                 label="Telefone (opcional)"
                                 value={value ?? ''}
@@ -347,6 +354,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     render={({ field: { onChange, onBlur, value } }) => (
                         <>
                             <TextInput
+                                testID="input-password"
                                 mode="outlined"
                                 label="Senha *"
                                 value={value ?? ''}
@@ -377,9 +385,9 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                 value={value}
                                 onValueChange={onChange}
                                 buttons={[
-                                    { value: 'buyer', label: 'Comprador' },
-                                    { value: 'provider', label: 'Prestador' },
-                                    { value: 'advertiser', label: 'Anunciante' },
+                                    { value: 'buyer', label: 'Comprador', testID: 'seg-buyer' },
+                                    { value: 'provider', label: 'Prestador', testID: 'seg-provider' },
+                                    { value: 'advertiser', label: 'Anunciante', testID: 'seg-advertiser' },
                                 ]}
                             />
                         </View>
@@ -387,6 +395,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 />
 
                 <Button
+                    testID="btn-registrar"
                     mode="contained"
                     loading={submitting}
                     disabled={submitting}
@@ -397,6 +406,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 </Button>
 
                 <Button
+                    testID="btn-ja-tenho-conta"
                     onPress={() => navigation.navigate('Login')}
                     style={styles.link}
                     disabled={submitting}
