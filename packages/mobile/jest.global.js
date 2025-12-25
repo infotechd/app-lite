@@ -33,7 +33,11 @@ if (typeof globalThis.expo.SharedRef === 'undefined') {
 try {
     const RN = require('react-native');
     if (RN && RN.StyleSheet && typeof RN.StyleSheet.flatten !== 'function') {
-        RN.StyleSheet.flatten = (s) => s;
+        Object.defineProperty(RN.StyleSheet, 'flatten', {
+            value: (s) => s,
+            writable: true,
+            configurable: true,
+        });
     }
 } catch {}
 
@@ -57,6 +61,8 @@ jest.mock('react-native-paper', () => {
     const HelperText = ({ children, visible, ...rest }) => visible ? React.createElement('RNPHelperText', rest, children) : null;
 
     const Snackbar = ({ children, visible, ...rest }) => visible ? React.createElement('RNPSnackbar', rest, children) : null;
+
+    const Divider = (props) => React.createElement('RNPDivider', props);
 
     // Minimal Chip mock
     const Chip = (props) => React.createElement('RNPChip', props, props.children);
@@ -107,7 +113,7 @@ jest.mock('react-native-paper', () => {
         return React.createElement('RNPSegmentedButtons', { testID: 'segmented-buttons', value, ...rest }, items);
     };
 
-    return { Provider, Button, Text, TextInput, HelperText, Snackbar, SegmentedButtons, Menu, Chip, Card, IconButton, MD3LightTheme };
+    return { Provider, Button, Text, TextInput, HelperText, Snackbar, SegmentedButtons, Menu, Chip, Card, IconButton, Divider, MD3LightTheme };
 });
 
 // Mock expo-updates to avoid ESM import issues in tests
