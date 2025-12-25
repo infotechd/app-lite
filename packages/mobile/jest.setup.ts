@@ -73,7 +73,10 @@ if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
 // Mock @expo/vector-icons para evitar erros de importação nos testes
 jest.mock('@expo/vector-icons', () => ({
     MaterialIcons: 'MaterialIcons',
+    MaterialCommunityIcons: 'MaterialCommunityIcons',
 }));
+
+jest.mock('@expo/vector-icons/MaterialCommunityIcons', () => 'MaterialCommunityIcons');
 
 // Mock expo-video para evitar erro de modulo nativo nos testes
 jest.mock('expo-video', () => ({

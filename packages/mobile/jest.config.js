@@ -12,7 +12,7 @@ module.exports = {
         '^react-native/jest/setup$': '<rootDir>/jest.mocks/rnJestSetupMock.js',
     },
     transformIgnorePatterns: [
-        'node_modules/(?!(.pnpm/)?((jest-)?react-native|@react-native|react-clone-referenced-element|@react-navigation|@react-native-community|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-paper|react-native-safe-area-context))'
+        'node_modules/(?!(.pnpm/)?((jest-)?react-native|@react-native|react-clone-referenced-element|@react-navigation|@react-native-community|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-paper|react-native-safe-area-context|until-async|msw))'
     ],
     testMatch: ['**/__tests__/**/*.test.{ts,tsx}', '**/?(*.)+(spec|test).{ts,tsx}'],
     collectCoverageFrom: [

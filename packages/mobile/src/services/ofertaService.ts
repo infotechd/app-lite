@@ -125,34 +125,27 @@ export const ofertaService = {
         limit = 10,
         signal?: AbortSignal
     ): Promise<OfertasResponse> {
-        const params = new URLSearchParams();
+        const params: any = {};
 
-        if (filters?.categoria) params.append('categoria', filters.categoria);
-        if (filters?.subcategoria) params.append('subcategoria', filters.subcategoria);
-        if (filters?.precoMin !== undefined) params.append('precoMin', filters.precoMin.toString());
-        if (filters?.precoMax !== undefined) params.append('precoMax', filters.precoMax.toString());
-        if (filters?.cidade) params.append('cidade', filters.cidade);
-        if (filters?.estado) {
-            if (Array.isArray(filters.estado)) {
-                filters.estado.forEach(e => params.append('estado', e));
-            } else {
-                params.append('estado', filters.estado);
-            }
-        }
-        if (filters?.busca) params.append('busca', filters.busca);
-        // Novos filtros avançados
-        if (filters?.sort) params.append('sort', filters.sort);
-        if (filters?.comMidia === true) params.append('comMidia', 'true');
-        if (filters?.tipoPessoa) params.append('tipoPessoa', filters.tipoPessoa);
+        if (filters?.categoria) params.categoria = filters.categoria;
+        if (filters?.subcategoria) params.subcategoria = filters.subcategoria;
+        if (filters?.precoMin !== undefined) params.precoMin = filters.precoMin;
+        if (filters?.precoMax !== undefined) params.precoMax = filters.precoMax;
+        if (filters?.cidade) params.cidade = filters.cidade;
+        if (filters?.estado) params.estado = filters.estado;
+        if (filters?.busca) params.busca = filters.busca;
+        if (filters?.sort) params.sort = filters.sort;
+        if (filters?.comMidia === true) params.comMidia = 'true';
+        if (filters?.tipoPessoa) params.tipoPessoa = filters.tipoPessoa;
         if (filters?.sort === 'distancia') {
-            if (typeof filters?.lat === 'number') params.append('lat', String(filters.lat));
-            if (typeof filters?.lng === 'number') params.append('lng', String(filters.lng));
+            if (typeof filters?.lat === 'number') params.lat = filters.lat;
+            if (typeof filters?.lng === 'number') params.lng = filters.lng;
         }
 
-        params.append('page', page.toString());
-        params.append('limit', limit.toString());
+        params.page = page;
+        params.limit = limit;
 
-        const response = await api.get(`ofertas?${params.toString()}`, { signal });
+        const response = await api.get('ofertas', { params, signal });
         const data = unwrapApiResponse<OfertasResponse>(response.data, { defaultValue: { ofertas: [], total: 0, page, totalPages: 1 } });
         // Normaliza a lista de ofertas e garante valores padrão seguros
         const ofertasNorm = mapOfertas(data?.ofertas);
