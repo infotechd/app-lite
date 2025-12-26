@@ -14,7 +14,7 @@ let transporter: nodemailer.Transporter | null = null;
  * - Reutiliza a mesma instância entre chamadas para eficiência
  * Melhoria: validar previamente as envs necessárias por provedor e falhar cedo.
  */
-function getTransporter(): nodemailer.Transporter {
+async function getTransporter(): Promise<nodemailer.Transporter> {
     // Se já existir um transporter em memória, apenas reutiliza
     if (transporter) return transporter;
 
@@ -58,15 +58,30 @@ function getTransporter(): nodemailer.Transporter {
     } else {
         // Fallback: modo de desenvolvimento (ethereal.email)
         logger.warn('emailService: Usando modo de desenvolvimento (Ethereal)');
-        // Nota: Para usar Ethereal, você precisa criar uma conta em https://ethereal.email/
-        // e configurar as credenciais nas variáveis de ambiente
-        // Melhoria: criar automaticamente conta Ethereal em ambiente de dev (nodemailer.createTestAccount)
+        
+        // Se não houver credenciais configuradas, cria uma conta de teste automaticamente
+        let user = process.env.ETHEREAL_USER;
+        let pass = process.env.ETHEREAL_PASSWORD;
+
+        if (!user || !pass) {
+            try {
+                logger.info('emailService: Criando conta Ethereal automática...');
+                const testAccount = await nodemailer.createTestAccount();
+                user = testAccount.user;
+                pass = testAccount.pass;
+                logger.info('emailService: Conta Ethereal criada com sucesso', { user });
+            } catch (err) {
+                logger.error('emailService: Erro ao criar conta Ethereal', { error: (err as Error).message });
+            }
+        }
+
         transporter = nodemailer.createTransport({
             host: 'smtp.ethereal.email',
             port: 587,
+            secure: false,
             auth: {
-                user: process.env.ETHEREAL_USER,
-                pass: process.env.ETHEREAL_PASSWORD,
+                user,
+                pass,
             },
         });
     }
@@ -96,10 +111,10 @@ export interface EmailData {
  * - Retorna true em caso de sucesso, false em caso de falha
  * Melhoria: lançar erros específicos para permitir tratamento granular no chamador
  */
-export async function sendEmail(data: EmailData): Promise<boolean> {
+async function sendEmail(data: EmailData): Promise<boolean> {
     try {
         // Obtém (ou inicializa) o transporter conforme o provedor escolhido
-        const transport = getTransporter();
+        const transport = await getTransporter();
 
         // Definição das opções do email
         // Melhoria: permitir sobrescrever "from" por chamada e suportar cc/bcc/anexos
@@ -132,12 +147,23 @@ export async function sendEmail(data: EmailData): Promise<boolean> {
 
         return true;
     } catch (error) {
+        const errorMessage = (error as Error).message;
+        
         // Log de erro com contexto mínimo
         // Melhoria: capturar códigos de erro do SMTP, classificar (transiente x permanente) e habilitar retries/backoff
         logger.error('email.error', {
-            error: (error as Error).message,
+            error: errorMessage,
             to: data.to,
         });
+
+        // Verificação específica para erro de autenticação no Gmail
+        if (errorMessage.includes('Invalid login') || errorMessage.includes('535 5.7.8')) {
+            logger.warn('Dica: O Gmail exige o uso de "Senhas de App" (App Passwords).');
+            logger.warn('1. Ative a Verificação em 2 Etapas na sua conta Google.');
+            logger.warn('2. Gere uma Senha de App em https://myaccount.google.com/apppasswords');
+            logger.warn('3. Se a verificação de 2 etapas estiver desativada, o Gmail bloqueará o acesso por segurança.');
+        }
+
         return false;
     }
 }
@@ -153,9 +179,13 @@ export async function sendRegistrationConfirmationEmail(
     userEmail: string,
     userName: string
 ): Promise<boolean> {
-    // Assunto do email (pode conter emojis). 
+    // Monta a URL de login usando a APP_URL de ambiente, com fallback local
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const loginUrl = `${appUrl}/login`;
+
+    // Assunto do email (pode conter emojis).
     // Melhoria: externalizar para arquivo de tradução e permitir customização por tenant
-    const subject = 'Bem-vindo ao App Lite! 🎉';
+    const subject = 'Bem-vindo ao App Lite';
 
     // Versão em texto simples (acessibilidade e fallback)
     const text = `
@@ -163,10 +193,7 @@ Olá ${userName},
 
 Seu cadastro foi realizado com sucesso!
 
-Agora você pode fazer login e aproveitar todos os recursos da plataforma:
-- Criar e gerenciar ofertas de serviços
-- Buscar prestadores de serviços
-- Conectar-se com outros usuários
+Acesse seu painel para começar: ${loginUrl}
 
 Obrigado por se juntar a nós!
 
@@ -177,7 +204,7 @@ Equipe App Lite
     // Melhoria: mover para template engine (Handlebars/MJML) e inserir variáveis dinamicamente
     const html = `
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <style>
@@ -226,7 +253,7 @@ Equipe App Lite
 </head>
 <body>
     <div class="header">
-        <h1>🎉 Bem-vindo ao App Lite!</h1>
+        <h1>Bem-vindo ao App Lite</h1>
     </div>
     <div class="content">
         <p>Olá <strong>${userName}</strong>,</p>
@@ -241,6 +268,10 @@ Equipe App Lite
             <li>💬 Conectar-se com outros usuários</li>
             <li>⭐ Avaliar e ser avaliado</li>
         </ul>
+        
+        <p style="text-align: center;">
+            <a href="${loginUrl}" class="button">Acessar minha conta</a>
+        </p>
         
         <p>Estamos felizes em tê-lo conosco!</p>
         
@@ -302,7 +333,7 @@ Equipe App Lite
     // Melhoria: adicionar tracking de cliques (ex: UTM) e ID de correlação para suporte
     const html = `
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <style>
@@ -391,7 +422,6 @@ Equipe App Lite
 // Objeto que consolida as funções do serviço de email
 // Melhoria: considerar expor tipos e constantes auxiliares, se necessário
 export const emailService = {
-    sendEmail,
     sendRegistrationConfirmationEmail,
     sendPasswordResetEmail,
 };
