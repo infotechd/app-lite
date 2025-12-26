@@ -50,10 +50,15 @@ export const register = async (req: AuthenticatedRequest, res: Response): Promis
 
         await user.save();
 
-        // Enviar e-mail de confirmação (não bloqueante)
-        emailService
-            .sendRegistrationConfirmationEmail(user.email, user.nome)
-            .catch(error => logger.error('Email error', { error }));
+        // Enviar e-mail de confirmação (síncrono, não bloqueia sucesso do cadastro se falhar o envio)
+        try {
+            const emailSent = await emailService.sendRegistrationConfirmationEmail(user.email, user.nome);
+            if (!emailSent) {
+                logger.warn('Email de boas-vindas não enviado', { userId: user._id, email: user.email });
+            }
+        } catch (error) {
+            logger.error('Email error', { error, userId: user._id, email: user.email });
+        }
 
         // Gerar token
         const token = signAccessToken({ userId: user._id });
