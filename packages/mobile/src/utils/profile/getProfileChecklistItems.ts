@@ -30,8 +30,12 @@ export function getProfileChecklistItems(user: User, navigate?: (route: string) 
    * Caso a função navigate não seja provida, realiza um log para propósitos de depuração.
    */
   const go = (route: string) => () => {
-    if (typeof navigate === 'function') navigate(route);
-    else console.log('Ação de navegação (simulada):', route);
+    // Só executa a navegação real se a rota não for um placeholder
+    if (typeof navigate === 'function' && !route.includes('Placeholder')) {
+      navigate(route);
+    } else {
+      console.log('Ação de navegação (simulada ou placeholder):', route);
+    }
   };
 
   // Verificações de preenchimento para campos básicos de contato e identificação visual
