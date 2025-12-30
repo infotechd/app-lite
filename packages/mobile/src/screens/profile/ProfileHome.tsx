@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, ScrollView } from 'react-native';
 import { Divider } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing } from '@/styles/theme';
 import ProfileHeader from '@/components/profile/ProfileHeader';
@@ -16,6 +17,7 @@ import ProfileHighlights from '@/components/profile/highlights/ProfileHighlights
 import type { Badge, Interest } from '@/components/profile/highlights/types';
 
 const ProfileHome: React.FC = () => {
+  const navigation = useNavigation();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false); // evita flicker
@@ -69,6 +71,7 @@ const ProfileHome: React.FC = () => {
           <View style={{ marginTop: spacing.md }}>
             <ProfileCompletionChecklist
               user={user as any}
+              navigate={(route) => (navigation as any).navigate(route)}
               onDismiss={() => {
                 sessionStore.dismissProfileChecklist();
                 setChecklistDismissed(true);
