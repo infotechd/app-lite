@@ -112,7 +112,27 @@ export const uploadController: UploadController = {
      * Middleware do Multer que processa múltiplos arquivos do campo `files`.
      * Aplica limites definidos na instância `upload`.
      */
-    uploadMultiple: upload.array('files', MAX_FILES) as RequestHandler,
+    uploadMultiple: (req: Request, res: Response, next: NextFunction) => {
+        const uploadMiddleware = upload.array('files', MAX_FILES);
+        uploadMiddleware(req, res, (err: any) => {
+            if (err instanceof multer.MulterError) {
+                // Erros específicos do Multer (ex: muitos arquivos, arquivo muito grande)
+                let message = 'Erro no upload de arquivos';
+                if (err.code === 'LIMIT_FILE_COUNT') message = `Limite de ${MAX_FILES} arquivos excedido`;
+                if (err.code === 'LIMIT_FILE_SIZE') message = 'Arquivo muito grande (máximo 100MB)';
+                
+                return res.status(400).json({
+                    success: false,
+                    message,
+                    error: err.code
+                });
+            } else if (err) {
+                // Outros erros
+                return next(err);
+            }
+            next();
+        });
+    },
 
     /**
      * Upload de arquivos para Cloudinary.
