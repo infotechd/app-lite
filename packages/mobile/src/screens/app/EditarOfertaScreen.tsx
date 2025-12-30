@@ -112,6 +112,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
         mediaType: 'images',
         maxFiles: OFERTA_MEDIA_CONFIG.MAX_FILES,
         currentFilesCount: media.length,
+        videoMaxDuration: OFERTA_MEDIA_CONFIG.MAX_VIDEO_DURATION,
     });
 
     const { pickFromGallery: onPickVideo, takePhoto: onRecordVideo } = useMediaPicker({
@@ -119,6 +120,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
         mediaType: 'videos',
         maxFiles: OFERTA_MEDIA_CONFIG.MAX_FILES,
         currentFilesCount: media.length,
+        videoMaxDuration: OFERTA_MEDIA_CONFIG.MAX_VIDEO_DURATION,
     });
 
     /**
