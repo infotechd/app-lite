@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Button, Card, Text } from 'react-native-paper';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
+import { SafeContainer } from '@/components/common/SafeContainer';
 
 /*
   Tela de Agenda — Em desenvolvimento
@@ -31,33 +32,35 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 
 const AgendaScreen: React.FC = () => {
     return (
-        <View style={styles.container}>
-            <Text variant="headlineSmall" accessibilityRole="header">
-                Agenda
-            </Text>
+        <SafeContainer>
+            <View style={styles.container}>
+                <Text variant="headlineSmall" accessibilityRole="header">
+                    Agenda
+                </Text>
 
-            <Card style={styles.card} accessible accessibilityLabel="Tela de Agenda em desenvolvimento">
-                <Card.Content>
-                    <View style={styles.row}>
-                        <Icon name="calendar-clock" size={24} color="#6200EE" style={styles.icon} />
-                        <Text variant="bodyMedium" style={styles.message}>
-                            Estamos trabalhando na sua Agenda. Aqui você verá seus compromissos, agendamentos e lembretes.
-                        </Text>
-                    </View>
+                <Card style={styles.card} accessible accessibilityLabel="Tela de Agenda em desenvolvimento">
+                    <Card.Content>
+                        <View style={styles.row}>
+                            <Icon name="calendar-clock" size={24} color="#6200EE" style={styles.icon} />
+                            <Text variant="bodyMedium" style={styles.message}>
+                                Estamos trabalhando na sua Agenda. Aqui você verá seus compromissos, agendamentos e lembretes.
+                            </Text>
+                        </View>
 
-                    <Text variant="labelLarge" style={styles.subtitle}>Próximos passos:</Text>
-                    <Text variant="bodySmall">• Listagem de compromissos por data</Text>
-                    <Text variant="bodySmall">• Filtros por status e período</Text>
-                    <Text variant="bodySmall">• Detalhe e ações (confirmar, reagendar, cancelar)</Text>
-                    <Text variant="bodySmall">• Notificações de lembrete</Text>
-                </Card.Content>
-                <Card.Actions>
-                    <Button mode="contained-tonal" disabled>
-                        Em breve
-                    </Button>
-                </Card.Actions>
-            </Card>
-        </View>
+                        <Text variant="labelLarge" style={styles.subtitle}>Próximos passos:</Text>
+                        <Text variant="bodySmall">• Listagem de compromissos por data</Text>
+                        <Text variant="bodySmall">• Filtros por status e período</Text>
+                        <Text variant="bodySmall">• Detalhe e ações (confirmar, reagendar, cancelar)</Text>
+                        <Text variant="bodySmall">• Notificações de lembrete</Text>
+                    </Card.Content>
+                    <Card.Actions>
+                        <Button mode="contained-tonal" disabled>
+                            Em breve
+                        </Button>
+                    </Card.Actions>
+                </Card>
+            </View>
+        </SafeContainer>
     );
 };
 

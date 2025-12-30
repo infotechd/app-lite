@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
+import { SafeContainer } from '@/components/common/SafeContainer';
 
 /*
   Tela de Chat — Em desenvolvimento
@@ -31,12 +32,14 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 
 const ChatScreen: React.FC = () => {
     return (
-        <View style={styles.container} accessible accessibilityLabel="Tela de Chat em desenvolvimento">
-            <Icon name="chat-processing" size={64} color="#6200EE" style={styles.icon} />
-            <Text variant="titleMedium" style={styles.text} accessibilityRole="header">
-                Esta tela está em desenvolvimento.
-            </Text>
-        </View>
+        <SafeContainer>
+            <View style={styles.container} accessible accessibilityLabel="Tela de Chat em desenvolvimento">
+                <Icon name="chat-processing" size={64} color="#6200EE" style={styles.icon} />
+                <Text variant="titleMedium" style={styles.text} accessibilityRole="header">
+                    Esta tela está em desenvolvimento.
+                </Text>
+            </View>
+        </SafeContainer>
     );
 };
 
