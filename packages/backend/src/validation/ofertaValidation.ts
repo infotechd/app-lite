@@ -80,11 +80,11 @@ const midiasSuperRefine = (data: unknown, ctx: z.RefinementCtx) => {
     const d: any = data as any;
     const imagensCount = Array.isArray(d?.imagens) ? d.imagens.length : 0;
     const videosCount = Array.isArray(d?.videos) ? d.videos.length : 0;
-    if (imagensCount + videosCount > 3) {
+    if (imagensCount + videosCount > 6) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ['videos'],
-            message: 'Máximo de 3 mídias no total (imagens + vídeos)'
+            message: 'Máximo de 6 mídias no total (imagens + vídeos)'
         });
     }
 };
@@ -139,8 +139,8 @@ export const createOfertaSchema = z.object({
             .transform((s) => normalizeCategoria(s))
             .pipe(z.enum(CATEGORIAS_VALIDAS)),
         subcategoria: z.string().trim().max(100).optional(),
-        imagens: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
-        videos: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
+        imagens: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(6).optional().default([]),
+        videos: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(6).optional().default([]),
         localizacao: localizacaoBase,
         tags: z.array(z.string().min(1).max(30)).max(10).optional(),
         disponibilidade: z.object({
@@ -166,8 +166,8 @@ export const updateOfertaSchema = z.object({
             .transform((s) => normalizeCategoria(s))
             .pipe(z.enum(CATEGORIAS_VALIDAS)).optional(),
         subcategoria: z.string().trim().max(100).optional(),
-        imagens: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
-        videos: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(3).optional().default([]),
+        imagens: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(6).optional().default([]),
+        videos: z.array(z.string().url().or(z.string().startsWith('/api/upload/file/'))).max(6).optional().default([]),
         localizacao: localizacaoBase.optional(),
         tags: z.array(z.string().min(1).max(30)).max(10).optional(),
         disponibilidade: z.object({

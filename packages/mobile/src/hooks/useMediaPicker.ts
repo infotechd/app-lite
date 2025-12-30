@@ -41,6 +41,7 @@ type UseMediaPickerProps = {
     mediaType?: 'images' | 'videos' | 'mixed';
     maxFiles?: number;
     currentFilesCount?: number;
+    videoMaxDuration?: number; // NOVO: duração máxima de vídeo em segundos
 };
 
 /**
@@ -60,6 +61,7 @@ export const useMediaPicker = (props: UseMediaPickerProps) => {
         mediaType = 'mixed',
         maxFiles = 10,
         currentFilesCount = 0,
+        videoMaxDuration = 20, // Padrão de 20 segundos
     } = props;
 
     /**
@@ -161,6 +163,7 @@ export const useMediaPicker = (props: UseMediaPickerProps) => {
                 quality: 1,
                 // Habilita selecionar mais de um arquivo, quando suportado
                 allowsMultipleSelection: true,
+                videoMaxDuration: videoMaxDuration,
             })
         );
     };
@@ -186,6 +189,7 @@ export const useMediaPicker = (props: UseMediaPickerProps) => {
                 // Edição desabilitada para manter o arquivo original
                 allowsEditing: false,
                 quality: 1,
+                videoMaxDuration: videoMaxDuration,
             })
         );
     };

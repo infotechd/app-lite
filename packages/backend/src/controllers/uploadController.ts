@@ -45,12 +45,14 @@ const storage = multer.memoryStorage();
  * - Limite de quantidade de arquivos por requisição (padrão 5, via `MAX_FILES_PER_UPLOAD`)
  * - Filtro de tipos permitidos (padrão imagens comuns e vídeos mp4/quicktime, via `ALLOWED_FILE_TYPES`)
  */
+const MAX_FILES = parseInt(process.env.MAX_FILES_PER_UPLOAD || '5');
+
 const upload = multer({
     storage,
     limits: {
         // ALTERADO: Aumentado de 10MB para 100MB para suportar vídeos de até 20 segundos
         fileSize: parseInt(process.env.MAX_FILE_SIZE || '104857600'), // 100MB
-        files: parseInt(process.env.MAX_FILES_PER_UPLOAD || '5'),
+        files: MAX_FILES,
     },
     fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
         // Evita warning de variável não utilizada (não precisamos do req aqui)
@@ -110,7 +112,7 @@ export const uploadController: UploadController = {
      * Middleware do Multer que processa múltiplos arquivos do campo `files`.
      * Aplica limites definidos na instância `upload`.
      */
-    uploadMultiple: upload.array('files', 5) as RequestHandler,
+    uploadMultiple: upload.array('files', MAX_FILES) as RequestHandler,
 
     /**
      * Upload de arquivos para Cloudinary.

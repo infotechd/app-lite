@@ -106,6 +106,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         mediaType: 'images',
         maxFiles: OFERTA_MEDIA_CONFIG.MAX_FILES,
         currentFilesCount: form.mediaFiles.length,
+        videoMaxDuration: OFERTA_MEDIA_CONFIG.MAX_VIDEO_DURATION,
     });
 
     const { pickFromGallery: pickVideoFromGallery, takePhoto: captureVideoFromCamera } = useMediaPicker({
@@ -113,6 +114,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
         mediaType: 'videos',
         maxFiles: OFERTA_MEDIA_CONFIG.MAX_FILES,
         currentFilesCount: form.mediaFiles.length,
+        videoMaxDuration: OFERTA_MEDIA_CONFIG.MAX_VIDEO_DURATION,
     });
 
     // Mapas para o menu de opções
