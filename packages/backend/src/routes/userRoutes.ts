@@ -37,4 +37,7 @@ router.delete('/me/avatar', authMiddleware, userController.removeAvatar);
 // Atualiza o nome do usuário autenticado
 router.patch('/me/nome', authMiddleware, ...userController.updateName);
 
+// Atualiza o telefone do usuário autenticado
+router.patch('/me/telefone', authMiddleware, ...userController.updatePhone);
+
 export default router;

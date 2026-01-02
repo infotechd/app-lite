@@ -3,7 +3,7 @@ import { uploadService } from '../services/uploadService';
 import { logger } from '../utils/logger';
 import User from '../models/User';
 import type { AuthRequest } from '../middleware/auth';
-import { updateNameSchema } from '../validation/userValidation';
+import { updateNameSchema, updatePhoneSchema } from '../validation/userValidation';
 import { validate } from '../middleware/validation';
 
 /**
@@ -49,6 +49,42 @@ export const userController = {
         });
       } catch (error: any) {
         logger.error('userController.updateName.error', { error: error.message, userId: req.user?.id });
+        next(error);
+      }
+    }
+  ],
+
+  /**
+   * Atualiza o telefone do usuário autenticado.
+   *
+   * @param {AuthRequest} req - Requisição contendo o novo telefone.
+   * @param {Response} res - Resposta com o usuário atualizado.
+   * @param {NextFunction} next - Middleware de erro.
+   */
+  updatePhone: [
+    validate(updatePhoneSchema),
+    async (req: AuthRequest, res: Response, next: NextFunction) => {
+      try {
+        const userId = req.user!.id;
+        const { telefone } = req.body as { telefone: string };
+
+        const updatedUser = await User.findByIdAndUpdate(
+          userId,
+          { telefone },
+          { new: true }
+        ).select('-senha -password');
+
+        if (!updatedUser) {
+          return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+        }
+
+        res.status(200).json({
+          success: true,
+          message: 'Telefone atualizado com sucesso.',
+          data: updatedUser,
+        });
+      } catch (error: any) {
+        logger.error('userController.updatePhone.error', { error: error.message, userId: req.user?.id });
         next(error);
       }
     }
