@@ -6,6 +6,10 @@ export interface IUser extends Document {
     email: string;
     senha: string;
     telefone?: string;
+    localizacao?: {
+        cidade: string;
+        estado: string;
+    };
     avatar?: string;
     avatarPublicId?: string;
     avatarBlurhash?: string;
@@ -58,7 +62,10 @@ const UserSchema = new Schema<IUser>({
         trim: true,
         match: [/^\(\d{2}\)\s\d{4,5}-\d{4}$/, 'Telefone inválido. Use formato: (11) 99999-9999']
     },
-
+    localizacao: {
+        cidade: { type: String, trim: true },
+        estado: { type: String, trim: true, uppercase: true, minlength: 2, maxlength: 2 }
+    },
     avatar: {
         type: String,
         trim: true

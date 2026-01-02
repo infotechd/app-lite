@@ -94,6 +94,17 @@ export async function updatePhone(telefone: string): Promise<User> {
 }
 
 /**
+ * Atualiza a localização do usuário autenticado.
+ * @param cidade Nome da cidade
+ * @param estado Sigla do estado (ex: SP)
+ * @returns Dados do usuário atualizados.
+ */
+export async function updateLocation(cidade: string, estado: string): Promise<User> {
+  const { data } = await api.patch('/v1/users/me/localizacao', { cidade, estado });
+  return normalizeUser(data?.data ?? data);
+}
+
+/**
  * Mapeia o tipo do backend (pt/en) para o tipo usado no app
  */
 const toAppTipo = (t: string): User['tipo'] => {
@@ -136,4 +147,4 @@ const normalizeUser = (u: any): User => ({
   ativo: u?.ativo ?? false,
 });
 
-export default { uploadAvatar, removeAvatar, updateName, updatePhone };
+export default { uploadAvatar, removeAvatar, updateName, updatePhone, updateLocation };

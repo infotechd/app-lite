@@ -30,5 +30,22 @@ export const updatePhoneSchema = z.object({
   }),
 });
 
+/**
+ * Validação para atualização de localização do usuário autenticado.
+ */
+export const updateLocationSchema = z.object({
+  body: z.object({
+    cidade: z.string()
+      .trim()
+      .min(2, 'Cidade deve ter no mínimo 2 caracteres')
+      .max(50, 'Cidade deve ter no máximo 50 caracteres'),
+    estado: z.string()
+      .trim()
+      .length(2, 'Estado deve ser a sigla com 2 caracteres (ex: SP)')
+      .transform((val) => val.toUpperCase()),
+  }),
+});
+
 export type UpdateNameInput = z.infer<typeof updateNameSchema>['body'];
 export type UpdatePhoneInput = z.infer<typeof updatePhoneSchema>['body'];
+export type UpdateLocationInput = z.infer<typeof updateLocationSchema>['body'];
