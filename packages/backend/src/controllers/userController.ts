@@ -3,7 +3,7 @@ import { uploadService } from '../services/uploadService';
 import { logger } from '../utils/logger';
 import User from '../models/User';
 import type { AuthRequest } from '../middleware/auth';
-import { updateNameSchema, updatePhoneSchema } from '../validation/userValidation';
+import { updateNameSchema, updatePhoneSchema, updateLocationSchema } from '../validation/userValidation';
 import { validate } from '../middleware/validation';
 
 /**
@@ -85,6 +85,44 @@ export const userController = {
         });
       } catch (error: any) {
         logger.error('userController.updatePhone.error', { error: error.message, userId: req.user?.id });
+        next(error);
+      }
+    }
+  ],
+
+  /**
+   * Atualiza a localização (cidade e estado) do usuário autenticado.
+   *
+   * @param {AuthRequest} req - Requisição contendo a nova localização.
+   * @param {Response} res - Resposta com o usuário atualizado.
+   * @param {NextFunction} next - Middleware de erro.
+   */
+  updateLocation: [
+    validate(updateLocationSchema),
+    async (req: AuthRequest, res: Response, next: NextFunction) => {
+      try {
+        const userId = req.user!.id;
+        const { cidade, estado } = req.body as { cidade: string; estado: string };
+
+        const updatedUser = await User.findByIdAndUpdate(
+          userId,
+          { 
+            localizacao: { cidade, estado } 
+          },
+          { new: true }
+        ).select('-senha -password');
+
+        if (!updatedUser) {
+          return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+        }
+
+        res.status(200).json({
+          success: true,
+          message: 'Localização atualizada com sucesso.',
+          data: updatedUser,
+        });
+      } catch (error: any) {
+        logger.error('userController.updateLocation.error', { error: error.message, userId: req.user?.id });
         next(error);
       }
     }

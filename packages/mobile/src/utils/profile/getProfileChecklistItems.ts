@@ -81,7 +81,7 @@ export function getProfileChecklistItems(user: User, navigate?: (route: string) 
       id: 'location',
       title: 'Adicionar localização',
       isComplete: hasLocation,
-      onPress: go('ProfileEditLocationPlaceholder'),
+      onPress: go('EditProfile'),
     },
   ];
 

@@ -78,6 +78,7 @@ export const register = async (req: AuthenticatedRequest, res: Response): Promis
                     cnpj: user.cnpj,
                     razaoSocial: user.razaoSocial,
                     nomeFantasia: user.nomeFantasia,
+                    localizacao: user.localizacao,
                     ativo: user.ativo,
                     createdAt: user.createdAt,
                     updatedAt: user.updatedAt,
@@ -179,6 +180,7 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
                     cnpj: user.cnpj,
                     razaoSocial: user.razaoSocial,
                     nomeFantasia: user.nomeFantasia,
+                    localizacao: user.localizacao,
                     ativo: user.ativo,
                     createdAt: user.createdAt,
                     updatedAt: user.updatedAt,
@@ -236,6 +238,7 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
                     cnpj: user.cnpj,
                     razaoSocial: user.razaoSocial,
                     nomeFantasia: user.nomeFantasia,
+                    localizacao: user.localizacao,
                 }
             }
         });
