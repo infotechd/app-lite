@@ -18,4 +18,17 @@ export const updateNameSchema = z.object({
   }),
 });
 
+/**
+ * Validação para atualização de telefone do usuário autenticado.
+ * - Garante o formato (99) 99999-9999 ou (99) 9999-9999.
+ */
+export const updatePhoneSchema = z.object({
+  body: z.object({
+    telefone: z.string()
+      .trim()
+      .regex(/^\(\d{2}\)\s\d{4,5}-\d{4}$/, 'Telefone inválido. Use o formato (11) 99999-9999'),
+  }),
+});
+
 export type UpdateNameInput = z.infer<typeof updateNameSchema>['body'];
+export type UpdatePhoneInput = z.infer<typeof updatePhoneSchema>['body'];

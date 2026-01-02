@@ -75,7 +75,7 @@ export function getProfileChecklistItems(user: User, navigate?: (route: string) 
       id: 'phone',
       title: 'Adicionar telefone',
       isComplete: hasPhone,
-      onPress: go('ProfileEditPhonePlaceholder'),
+      onPress: go('EditProfile'),
     },
     {
       id: 'location',

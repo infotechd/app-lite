@@ -5,7 +5,11 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '@/context/AuthContext';
 import AvatarEditor from '@/components/profile/AvatarEditor';
 import { colors, spacing } from '@/styles/theme';
-import { updateName as updateNameService } from '@/services/profileService';
+import { 
+  updateName as updateNameService,
+  updatePhone as updatePhoneService 
+} from '@/services/profileService';
+import { formatPhoneNumber, isValidPhoneNumber } from '@/utils/phoneFormatter';
 
 /**
  * Tela de Edição de Perfil (Versão 2.0).
@@ -14,23 +18,47 @@ import { updateName as updateNameService } from '@/services/profileService';
 const EditProfileScreen: React.FC = () => {
   const navigation = useNavigation();
   const { user, setUser } = useAuth();
+  
+  // Estados para os campos do formulário
   const [nome, setNome] = useState(user?.nome ?? '');
+  const [telefone, setTelefone] = useState(user?.telefone ?? '');
   const [isSaving, setIsSaving] = useState(false);
-  const trimmed = useMemo(() => nome.replace(/\s+/g, ' ').trim(), [nome]);
-  const onlyLetters = useMemo(() => /^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/.test(trimmed || ''), [trimmed]);
-  const isValid = trimmed.length >= 3 && trimmed.length <= 50 && onlyLetters;
-  const isChanged = trimmed !== (user?.nome ?? '').trim();
+
+  // Lógica de validação do Nome
+  const trimmedName = useMemo(() => nome.replace(/\s+/g, ' ').trim(), [nome]);
+  const onlyLetters = useMemo(() => /^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/.test(trimmedName || ''), [trimmedName]);
+  const isNameValid = trimmedName.length >= 3 && trimmedName.length <= 50 && onlyLetters;
+  const isNameChanged = trimmedName !== (user?.nome ?? '').trim();
+
+  // Lógica de validação do Telefone
+  // O telefone é opcional, mas se preenchido deve ser válido.
+  const isPhoneValid = !telefone || isValidPhoneNumber(telefone);
+  const isPhoneChanged = telefone !== (user?.telefone ?? '');
+
+  // O botão salvar é habilitado se houver mudanças E tudo for válido
+  const canSave = (isNameValid && isPhoneValid) && (isNameChanged || isPhoneChanged);
 
   const handleSave = async () => {
-    if (!isValid || !isChanged) return;
+    if (!canSave) return;
     try {
       setIsSaving(true);
-      const updated = await updateNameService(trimmed);
-      await setUser(updated);
-      Alert.alert('Sucesso', 'Nome atualizado com sucesso.');
+      let updatedUser = { ...user } as any;
+
+      // Se o nome mudou, atualiza
+      if (isNameChanged) {
+        updatedUser = await updateNameService(trimmedName);
+      }
+
+      // Se o telefone mudou, atualiza
+      if (isPhoneChanged) {
+        updatedUser = await updatePhoneService(telefone);
+      }
+
+      await setUser(updatedUser);
+      Alert.alert('Sucesso', 'Perfil atualizado com sucesso.');
       navigation.goBack();
     } catch (error: any) {
-      Alert.alert('Erro', error?.message || 'Não foi possível atualizar o nome.');
+      Alert.alert('Erro', error?.message || 'Não foi possível atualizar o perfil.');
     } finally {
       setIsSaving(false);
     }
@@ -58,11 +86,25 @@ const EditProfileScreen: React.FC = () => {
             mode="outlined"
             onChangeText={setNome}
             style={styles.input}
-            error={!!nome && !isValid}
+            error={!!nome && !isNameValid}
             right={isSaving ? <ActivityIndicator size="small" /> : undefined}
           />
           <Text variant="bodySmall" style={styles.helperText}>
             Use apenas letras e espaços, entre 3 e 50 caracteres. Removemos espaços duplicados automaticamente.
+          </Text>
+
+          <TextInput
+            label="Telefone"
+            value={telefone}
+            mode="outlined"
+            onChangeText={(text) => setTelefone(formatPhoneNumber(text))}
+            style={styles.input}
+            keyboardType="phone-pad"
+            error={!!telefone && !isPhoneValid}
+            placeholder="(11) 99999-9999"
+          />
+          <Text variant="bodySmall" style={styles.helperText}>
+            Obrigatório para facilitar o contato de interessados.
           </Text>
 
           <TextInput
@@ -77,7 +119,7 @@ const EditProfileScreen: React.FC = () => {
           <Button 
             mode="contained"
             onPress={handleSave}
-            disabled={!isValid || !isChanged || isSaving}
+            disabled={!canSave || isSaving}
             loading={isSaving}
             style={styles.moreButton}
           >

@@ -84,6 +84,16 @@ export async function updateName(nome: string): Promise<User> {
 }
 
 /**
+ * Atualiza o telefone do usuário autenticado.
+ * @param telefone Novo telefone a ser definido (formato: (11) 99999-9999)
+ * @returns Dados do usuário atualizados.
+ */
+export async function updatePhone(telefone: string): Promise<User> {
+  const { data } = await api.patch('/v1/users/me/telefone', { telefone });
+  return normalizeUser(data?.data ?? data);
+}
+
+/**
  * Mapeia o tipo do backend (pt/en) para o tipo usado no app
  */
 const toAppTipo = (t: string): User['tipo'] => {
@@ -126,4 +136,4 @@ const normalizeUser = (u: any): User => ({
   ativo: u?.ativo ?? false,
 });
 
-export default { uploadAvatar, removeAvatar, updateName };
+export default { uploadAvatar, removeAvatar, updateName, updatePhone };
