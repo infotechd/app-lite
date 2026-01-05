@@ -10,8 +10,14 @@ interface AuthenticatedRequest extends AuthRequest {
     body: RegisterInput | LoginInput;
 }
 
-// Mapeia o tipo do usuário do modelo (pt) para o padrão da API (en)
-// Esta função continua útil para formatar a RESPOSTA
+/**
+ * @function mapTipoToApi
+ * @description Mapeia a nomenclatura interna de tipos de usuário (em português ou inglês) 
+ * para o padrão esperado pela API e pelo Aplicativo Móvel (buyer, provider, advertiser).
+ * 
+ * @param {any} tipo - O valor bruto do tipo vindo do banco de dados ou input.
+ * @returns {'buyer' | 'provider' | 'advertiser'} O tipo normalizado para a API.
+ */
 const mapTipoToApi = (tipo: any): 'buyer' | 'provider' | 'advertiser' => {
     switch (tipo) {
         case 'comprador':
@@ -28,15 +34,25 @@ const mapTipoToApi = (tipo: any): 'buyer' | 'provider' | 'advertiser' => {
     }
 };
 
-// Registrar usuario
+/**
+ * @async
+ * @function register
+ * @description Realiza o cadastro de um novo usuário no sistema. 
+ * Valida a existência do e-mail, salva os dados no MongoDB, dispara e-mail de boas-vindas
+ * e retorna um token JWT para acesso imediato.
+ * 
+ * @param {AuthenticatedRequest} req - Objeto de requisição do Express contendo os dados do registro no body.
+ * @param {Response} res - Objeto de resposta do Express.
+ * @returns {Promise<void>}
+ */
 export const register = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
         const registerData = req.body as RegisterInput;
 
-        // Verificar se utilizador já existe
+        // Verificar se utilizador já existe para evitar duplicidade de contas
         const existingUser = await User.findOne({ email: registerData.email });
         if (existingUser) {
-            // Auditoria
+            // Auditoria de tentativa falha
             loggerUtils.logAuth('register', undefined, registerData.email, false);
             res.status(409).json({
                 success: false,
@@ -45,21 +61,29 @@ export const register = async (req: AuthenticatedRequest, res: Response): Promis
             return;
         }
 
-        // Criar usuário passando todos os dados
+        // Criar instância do modelo User passando todos os dados validados
         const user = new User(registerData);
 
         await user.save();
 
-        // Dispara email de boas-vindas em fire-and-forget (não bloqueia resposta)
-        void emailService.sendWelcomeEmail(user.email, user.nome);
+        // RESOLUÇÃO DO PROBLEMA: Envolvendo o envio em um try/catch e removendo o 'void'.
+        // Agora aguardamos o envio ou pelo menos capturamos o erro explicitamente para logs.
+        try {
+            await emailService.sendWelcomeEmail(user.email, user.nome);
+        } catch (emailError) {
+            // Registramos a falha especificamente no log para facilitar o diagnóstico (ex: domínio não verificado no Resend)
+            logger.error('⚠️ Usuário cadastrado, mas o e-mail de boas-vindas falhou:', emailError);
+            // Nota: Não retornamos erro 500 aqui pois o registro no banco de dados foi concluído com sucesso.
+        }
 
-        // Gerar token
+        // Gerar token de acesso JWT
         const token = signAccessToken({ userId: user._id });
 
-        // Auditoria
+        // Auditoria de sucesso
         loggerUtils.logAuth('register', String(user._id), user.email, true);
         logger.info('Usuário registrado:', { userId: user._id, email: user.email });
 
+        // Resposta de sucesso com dados do usuário formatados para a API
         res.status(201).json({
             success: true,
             message: 'Usuário criado com sucesso',
@@ -86,6 +110,7 @@ export const register = async (req: AuthenticatedRequest, res: Response): Promis
             }
         });
     } catch (error: any) {
+        // Tratamento de erros específicos e genéricos...
         // Tratar erros de validação do Mongoose
         if (error.name === 'ValidationError') {
             logger.warn('Erro de validação Mongoose:', { error: error.message });
@@ -119,12 +144,21 @@ export const register = async (req: AuthenticatedRequest, res: Response): Promis
     }
 };
 
-// Login
+/**
+ * @async
+ * @function login
+ * @description Autentica um usuário existente através de e-mail e senha.
+ * Verifica as credenciais, o status da conta (ativo) e retorna um novo token JWT.
+ * 
+ * @param {AuthenticatedRequest} req - Requisição contendo email e senha.
+ * @param {Response} res - Resposta com os dados do usuário e token.
+ * @returns {Promise<void>}
+ */
 export const login = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
         const { email, senha } = req.body as LoginInput;
 
-        // Buscar utilizador com senha
+        // Buscar utilizador com senha (o campo 'senha' é select: false por padrão no model)
         const user = await User.findOne({ email }).select('+senha');
         if (!user) {
             loggerUtils.logAuth('login', undefined, email, false);
@@ -135,7 +169,7 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
             return;
         }
 
-        // Verificar se conta está ativa
+        // Verificar se conta está ativa antes de permitir o acesso
         if (!user.ativo) {
             loggerUtils.logAuth('login', String(user._id), email, false);
             res.status(400).json({
@@ -145,7 +179,7 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
             return;
         }
 
-        // Verificar senha
+        // Verificar se a senha informada corresponde ao hash no banco
         const isMatch = await user.comparePassword(senha);
         if (!isMatch) {
             loggerUtils.logAuth('login', String(user._id), email, false);
@@ -156,12 +190,14 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
             return;
         }
 
-        // Gerar token
+        // Gerar novo token de acesso JWT
         const token = signAccessToken({ userId: user._id });
 
+        // Logs de auditoria
         loggerUtils.logAuth('login', String(user._id), email, true);
         logger.info('Login realizado:', { userId: user._id, email });
 
+        // Retorna sucesso e dados normalizados para o App
         res.json({
             success: true,
             message: 'Login realizado com sucesso',
@@ -197,7 +233,16 @@ export const login = async (req: AuthenticatedRequest, res: Response): Promise<v
     }
 };
 
-// Perfil do usuario
+/**
+ * @async
+ * @function getProfile
+ * @description Recupera os dados detalhados do perfil do usuário autenticado.
+ * Utiliza o ID contido no token JWT para buscar as informações no MongoDB.
+ * 
+ * @param {AuthRequest} req - Requisição contendo o objeto 'user' populado pelo middleware de autenticação.
+ * @param {Response} res - Resposta contendo os dados do perfil.
+ * @returns {Promise<void>}
+ */
 export const getProfile = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const authUser = req.user;
@@ -209,6 +254,7 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
+        // Buscar usuário pelo ID extraído do token
         const user = await User.findById(authUser.id);
         if (!user) {
             res.status(404).json({
@@ -218,6 +264,7 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
+        // Retornar perfil completo com dados normalizados
         res.json({
             success: true,
             message: 'Perfil recuperado com sucesso',
@@ -251,7 +298,15 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
     }
 };
 
-// Preferências do usuário (GET)
+/**
+ * @async
+ * @function getPreferences
+ * @description Recupera as configurações e preferências personalizadas do usuário.
+ * 
+ * @param {AuthRequest} req - Requisição autenticada.
+ * @param {Response} res - Resposta contendo o objeto de preferências.
+ * @returns {Promise<void>}
+ */
 export const getPreferences = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const authUser = req.user;
@@ -259,19 +314,35 @@ export const getPreferences = async (req: AuthRequest, res: Response): Promise<v
             res.status(401).json({ success: false, message: 'Não autenticado' });
             return;
         }
+        
+        // Busca apenas as preferências usando lean() para melhor performance
         const user = await User.findById(authUser.id).lean();
         if (!user) {
             res.status(404).json({ success: false, message: 'Usuário não encontrado' });
             return;
         }
-        res.json({ success: true, message: 'Preferências recuperadas', data: { preferencias: user.preferencias || {} } });
+        
+        res.json({ 
+            success: true, 
+            message: 'Preferências recuperadas', 
+            data: { preferencias: user.preferencias || {} } 
+        });
     } catch (error) {
         logger.error('Erro ao obter preferências:', error);
         res.status(500).json({ success: false, message: 'Erro interno do servidor' });
     }
 };
 
-// Preferências do usuário (PUT)
+/**
+ * @async
+ * @function updatePreferences
+ * @description Atualiza as preferências do usuário (ex: ordenação de ofertas).
+ * Realiza a mesclagem (merge) entre as preferências atuais e as novas enviadas no body.
+ * 
+ * @param {AuthRequest} req - Requisição contendo as novas preferências.
+ * @param {Response} res - Resposta confirmando a atualização.
+ * @returns {Promise<void>}
+ */
 export const updatePreferences = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const authUser = req.user;
@@ -283,7 +354,7 @@ export const updatePreferences = async (req: AuthRequest, res: Response): Promis
         const body = (req.body || {}) as { preferencias?: { ofertas?: { sort?: string } } };
         const prefs = body?.preferencias || {};
 
-        // Sanitizar sort se presente
+        // Sanitização: Garante que o parâmetro de ordenação seja um valor permitido
         const allowedSort = new Set(['relevancia','preco_menor','preco_maior','avaliacao','recente','distancia']);
         if (prefs?.ofertas?.sort && !allowedSort.has(prefs.ofertas.sort)) {
             res.status(400).json({ success: false, message: "Parâmetro 'sort' inválido" });
@@ -295,10 +366,18 @@ export const updatePreferences = async (req: AuthRequest, res: Response): Promis
             res.status(404).json({ success: false, message: 'Usuário não encontrado' });
             return;
         }
+
+        // Realiza o merge das preferências para não sobrescrever dados não enviados
         const current = (user as any).preferencias || {};
         (user as any).preferencias = { ...current, ...prefs };
+        
         await user.save();
-        res.json({ success: true, message: 'Preferências atualizadas', data: { preferencias: (user as any).preferencias } });
+        
+        res.json({ 
+            success: true, 
+            message: 'Preferências atualizadas', 
+            data: { preferencias: (user as any).preferencias } 
+        });
     } catch (error) {
         logger.error('Erro ao atualizar preferências:', error);
         res.status(500).json({ success: false, message: 'Erro interno do servidor' });
