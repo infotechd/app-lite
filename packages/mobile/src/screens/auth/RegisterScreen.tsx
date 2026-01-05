@@ -31,16 +31,37 @@ import { registerSchema, RegisterFormData } from '@/utils/validation';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
 // ✅ FUNÇÕES DE FORMATAÇÃO
+
+/**
+ * Formata uma string para o padrão de CPF (000.000.000-00).
+ * Remove caracteres não numéricos e aplica a máscara progressivamente.
+ *
+ * @param value - A string bruta informada pelo usuário.
+ * @returns A string formatada com a máscara de CPF.
+ */
 function formatCPF(value: string): string {
+    // Remove tudo que não for dígito e limita a 11 caracteres
     const numbers = value.replace(/\D/g, '').slice(0, 11);
+
+    // Aplica formatação de acordo com a quantidade de números digitados
     if (numbers.length <= 3) return numbers;
     if (numbers.length <= 6) return `${numbers.slice(0, 3)}.${numbers.slice(3)}`;
     if (numbers.length <= 9) return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
     return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9)}`;
 }
 
+/**
+ * Formata uma string para o padrão de CNPJ (00.000.000/0000-00).
+ * Remove caracteres não numéricos e aplica a máscara progressivamente.
+ *
+ * @param value - A string bruta informada pelo usuário.
+ * @returns A string formatada com a máscara de CNPJ.
+ */
 function formatCNPJ(value: string): string {
+    // Remove tudo que não for dígito e limita a 14 caracteres
     const numbers = value.replace(/\D/g, '').slice(0, 14);
+
+    // Aplica formatação de acordo com a quantidade de números digitados
     if (numbers.length <= 2) return numbers;
     if (numbers.length <= 5) return `${numbers.slice(0, 2)}.${numbers.slice(2)}`;
     if (numbers.length <= 8) return `${numbers.slice(0, 2)}.${numbers.slice(2, 5)}.${numbers.slice(5)}`;
@@ -48,16 +69,31 @@ function formatCNPJ(value: string): string {
     return `${numbers.slice(0, 2)}.${numbers.slice(2, 5)}.${numbers.slice(5, 8)}/${numbers.slice(8, 12)}-${numbers.slice(12)}`;
 }
 
+/**
+ * Componente de tela de Registro.
+ * Permite que novos usuários criem uma conta, selecionando entre Pessoa Física (PF)
+ * ou Pessoa Jurídica (PJ) e preenchendo os dados necessários.
+ *
+ * @param props - Propriedades de navegação recebidas pelo componente.
+ * @returns Elemento React que renderiza a tela de registro.
+ */
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
+    // Estado que controla se o formulário está sendo enviado para desabilitar botões
     const [submitting, setSubmitting] = useState(false);
+
+    // Referência para controlar submissão e evitar disparos duplicados (race conditions)
     const submittingRef = React.useRef(false);
+
+    // Estado para gerenciar a visibilidade e mensagem do Snackbar de feedback
     const [snack, setSnack] = useState<{ visible: boolean; message: string }>({
         visible: false,
         message: ''
     });
 
+    // Controla se o formulário exibido é para Pessoa Física ou Pessoa Jurídica
     const [tipoPessoa, setTipoPessoa] = useState<'PF' | 'PJ'>('PF');
 
+    // Inicialização do hook de formulário com validação via Zod
     const {
         control,
         handleSubmit,
@@ -82,56 +118,76 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         mode: 'onChange',
     });
 
-    // ✅ CORREÇÃO (BUG Original): Usar useEffect para resetar o form DEPOIS que o estado mudar
+    /**
+     * Efeito colateral acionado sempre que o tipo de pessoa (PF/PJ) é alterado.
+     * Limpa os campos específicos do tipo anterior para evitar submissão de dados incoerentes,
+     * enquanto mantém os dados de uso comum já preenchidos pelo usuário.
+     */
     React.useEffect(() => {
+        // Obtém valores atuais para não perder dados comuns como email e senha
         const currentValues = getValues();
 
+        // Reseta o formulário com o novo contexto de tipo de pessoa
         reset({
-            // Limpa campos específicos de PF/PJ
+            // Limpa campos que são exclusivos de um tipo ou de outro
             nome: '',
             cpf: '',
             cnpj: '',
             razaoSocial: '',
             nomeFantasia: '',
 
-            // Mantém campos comuns
+            // Preserva os dados que são compartilhados entre ambos os tipos
             email: currentValues.email,
             password: currentValues.password,
             telefone: currentValues.telefone,
             tipo: currentValues.tipo,
 
-            // Define o novo tipo de pessoa
+            // Atualiza o discriminador de tipo de pessoa no formulário
             tipoPessoa: tipoPessoa,
         });
     }, [tipoPessoa, reset, getValues]);
 
-    // Handler agora só deve mudar o estado
+    /**
+     * Altera o estado do tipo de pessoa (PF ou PJ).
+     *
+     * @param newTipo - O novo valor selecionado no SegmentedButton.
+     */
     const handleTipoPessoaChange = (newTipo: 'PF' | 'PJ') => {
+        // Apenas atualiza se houver uma mudança real para evitar re-renderizações inúteis
         if (newTipo && newTipo !== tipoPessoa) {
             setTipoPessoa(newTipo);
         }
     };
 
-    // 'data' aqui já virá com o 'nome' preenchido (seja por PF ou pelo transform de PJ)
+    /**
+     * Função chamada ao submeter o formulário após validação bem-sucedida.
+     * Realiza a chamada ao serviço de autenticação e trata a resposta/erros.
+     *
+     * @param data - Objeto contendo todos os dados validados do formulário.
+     */
     const onSubmit = async (data: RegisterFormData) => {
+        // Impede submissões simultâneas
         if (submittingRef.current) return;
         submittingRef.current = true;
+
         try {
             setSubmitting(true);
 
-            // O 'data' agora está 100% correto para o backend
-            // Se PF: data.nome = "Nome da Pessoa"
-            // Se PJ: data.nome = "Razão Social da Empresa" (devido ao .transform)
+            // Tenta realizar o registro através do serviço Auth
             await AuthService.register(data);
 
+            // Em caso de sucesso, mostra feedback e redireciona
             setSnack({ visible: true, message: MESSAGES.SUCCESS.REGISTER });
             setTimeout(() => {
                 navigation.replace('Login');
             }, 500);
         } catch (e: any) {
+            // Extrai mensagem de erro da resposta da API ou utiliza mensagem genérica
             const msg = e?.response?.data?.message || e?.message || MESSAGES.ERROR.GENERIC;
             setSnack({ visible: true, message: msg });
+
             const m = String(msg);
+            // Mapeia erros de validação do servidor de volta para os campos do formulário
             if (/email/i.test(m)) {
                 setError('email', { type: 'server', message: msg });
             }
@@ -142,6 +198,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 setError('cpf', { type: 'server', message: msg });
             }
         } finally {
+            // Finaliza estado de carregamento e libera a ref de submissão
             submittingRef.current = false;
             setSubmitting(false);
         }
@@ -150,8 +207,10 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     return (
         <ScrollView style={styles.container}>
             <View style={styles.content}>
+                {/* Título da tela de registro */}
                 <Text testID="title-registrar" variant="headlineSmall" style={styles.title}>Criar conta</Text>
 
+                {/* Seção de seleção do tipo de cadastro (PF/PJ) */}
                 <View style={styles.section}>
                     <Text variant="labelLarge" style={styles.sectionLabel}>
                         Tipo de Cadastro
@@ -168,7 +227,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
                 <Divider style={styles.divider} />
 
-                {/* CAMPOS PARA PESSOA FÍSICA */}
+                {/* Renderização condicional: Campos específicos para PESSOA FÍSICA */}
                 {tipoPessoa === 'PF' && (
                     <>
                         <Controller
@@ -186,6 +245,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                         style={styles.input}
                                         error={!!errors.nome}
                                     />
+                                    {/* Exibição de erro de validação para o campo Nome */}
                                     {!!errors.nome && (
                                         <HelperText type="error" visible>
                                             {errors.nome.message as string}
@@ -212,6 +272,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                         error={!!errors.cpf}
                                         maxLength={14}
                                     />
+                                    {/* Exibição de erro de validação para o campo CPF */}
                                     {!!errors.cpf && (
                                         <HelperText type="error" visible>
                                             {errors.cpf.message as string}
@@ -223,7 +284,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     </>
                 )}
 
-                {/* CAMPOS PARA PESSOA JURÍDICA */}
+                {/* Renderização condicional: Campos específicos para PESSOA JURÍDICA */}
                 {tipoPessoa === 'PJ' && (
                     <>
                         <Controller
@@ -241,6 +302,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                         style={styles.input}
                                         error={!!errors.razaoSocial}
                                     />
+                                    {/* Exibição de erro de validação para o campo Razão Social */}
                                     {!!errors.razaoSocial && (
                                         <HelperText type="error" visible>
                                             {errors.razaoSocial.message as string}
@@ -283,6 +345,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                                         error={!!errors.cnpj}
                                         maxLength={18}
                                     />
+                                    {/* Exibição de erro de validação para o campo CNPJ */}
                                     {!!errors.cnpj && (
                                         <HelperText type="error" visible>
                                             {errors.cnpj.message as string}
@@ -294,7 +357,9 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     </>
                 )}
 
-                {/* CAMPOS COMUNS */}
+                {/* SEÇÃO DE CAMPOS COMUNS (Aparecem para ambos os tipos) */}
+                
+                {/* Campo de E-mail com validação e teclado apropriado */}
                 <Controller
                     control={control}
                     name="email"
@@ -321,6 +386,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     )}
                 />
 
+                {/* Campo de Telefone com formatação automática de máscara */}
                 <Controller
                     control={control}
                     name="telefone"
@@ -348,6 +414,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     )}
                 />
 
+                {/* Campo de Senha com entrada protegida (secureTextEntry) */}
                 <Controller
                     control={control}
                     name="password"
@@ -373,6 +440,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     )}
                 />
 
+                {/* Seleção da finalidade do usuário no sistema */}
                 <Controller
                     control={control}
                     name="tipo"
@@ -394,6 +462,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     )}
                 />
 
+                {/* Botão de envio do formulário */}
                 <Button
                     testID="btn-registrar"
                     mode="contained"
@@ -405,6 +474,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     Registrar
                 </Button>
 
+                {/* Link para navegação de volta para a tela de Login */}
                 <Button
                     testID="btn-ja-tenho-conta"
                     onPress={() => navigation.navigate('Login')}
@@ -414,6 +484,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     Já tenho uma conta
                 </Button>
 
+                {/* Snackbar para exibição de alertas e mensagens de sucesso/erro */}
                 <Snackbar
                     visible={snack.visible}
                     onDismiss={() => setSnack({ visible: false, message: '' })}
