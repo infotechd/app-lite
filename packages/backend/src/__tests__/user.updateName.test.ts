@@ -62,7 +62,7 @@ describe('User - update name', () => {
       .expect(400);
 
     expect(res.body.success).toBe(false);
-    expect(res.body.errors?.[0]?.message).toMatch(/mínimo 2/);
+    expect(res.body.errors?.[0]?.message).toMatch(/mínimo 3/);
   });
 
   it('should reject when unauthenticated', async () => {

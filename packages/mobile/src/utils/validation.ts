@@ -15,6 +15,7 @@ import { Platform } from 'react-native';
 import { z } from 'zod';
 import { MESSAGES } from '@/constants';
 import { parseCurrencyBRLToNumber } from '@/utils/currency';
+import { validateCPF } from './cpf';
 
 
 // Tipos base sempre permitidos
@@ -186,12 +187,12 @@ export const registerSchema = z.object({
                 message: MESSAGES.VALIDATION.NAME_MIN
             });
         }
-        const cpfDigits = (data.cpf ?? '').replace(/\D/g, '');
-        if (cpfDigits.length !== 11) {
+        const cpf = data.cpf ?? '';
+        if (!validateCPF(cpf)) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 path: ['cpf'],
-                message: 'CPF deve ter 11 dígitos'
+                message: 'CPF inválido'
             });
         }
     }

@@ -1,4 +1,5 @@
 import { User } from '@/types';
+import { validateCPF } from '../cpf';
 
 /**
  * Representa um item individual no checklist de conclusão de perfil.
@@ -53,8 +54,8 @@ export function getProfileChecklistItems(user: User, navigate?: (route: string) 
   const isPF = user.tipoPessoa === 'PF';
   const isPJ = user.tipoPessoa === 'PJ';
   
-  // Validação simplificada de documentos: verifica se possuem a quantidade mínima de dígitos numéricos
-  const hasCPF = typeof user.cpf === 'string' && user.cpf.replace(/\D/g, '').length >= 11;
+  // Validação de documentos: CPF usa algoritmo real, CNPJ verifica apenas tamanho
+  const hasCPF = typeof user.cpf === 'string' && validateCPF(user.cpf);
   const hasCNPJ = typeof user.cnpj === 'string' && user.cnpj.replace(/\D/g, '').length >= 14;
   
   // Verificações de campos exclusivos para contas empresariais (PJ)
