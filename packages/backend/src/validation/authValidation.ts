@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validateCPF } from '../utils/validation';
 
 // Regex para validar telefone (formato (XX) XXXXX-XXXX ou (XX) XXXX-XXXX)
 const phoneRegex = /^\(\d{2}\)\s\d{4,5}-\d{4}$/;
@@ -29,8 +30,8 @@ const pfSchema = commonSchema.extend({
     tipoPessoa: z.literal('PF'),
     nome: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres').trim(),
     cpf: z.string().refine(
-        (val) => val.replace(/\D/g, '').length === 11,
-        'CPF deve ter 11 dígitos'
+        (val) => validateCPF(val),
+        'CPF inválido'
     ),
     // Campos de PJ não são esperados (mas podem vir vazios do form)
     razaoSocial: z.string().optional(),
