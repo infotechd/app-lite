@@ -661,201 +661,104 @@ const BuscarOfertasScreen: React.FC = () => {
         void loadOfertas(1, true);
     }, [loadOfertas]);
 
-    const renderListHeader = useCallback(() => {
-        return (
-            <View>
-                <Searchbar
-                    placeholder="Buscar serviços (ex.: encanador, elétrica, pintura)"
-                    onChangeText={setSearchQuery}
-                    value={searchQuery}
-                    style={styles.searchbar}
-                    testID="search-input"
-                    icon="magnify"
-                    loading={isLoading || isRefreshing}
-                    clearIcon="close"
-                    onClearIconPress={() => setSearchQuery("")}
-                    onFocus={() => { setIsSearchFocused(true); }}
-                    onBlur={() => {
-                        // pequeno atraso para permitir o toque em itens recentes
-                        setTimeout(() => setIsSearchFocused(false), 150);
-                    }}
-                    returnKeyType="search"
-                    onSubmitEditing={() => {
-                        // Sincroniza o debounce e busca imediatamente
-                        setDebouncedQuery(searchQuery);
-                        void loadOfertas(1, true);
-                    }}
-                    accessibilityLabel="Buscar serviços"
-                    accessibilityHint="Digite um termo para buscar e pressione 'buscar' no teclado para resultados imediatos"
-                />
-
-                {isSearchFocused && (
-                    <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
-                            <Text style={{ fontSize: 16, fontWeight: 'bold' }}>Buscas Recentes</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                {recentSearches.length > 0 && historyEnabled && (
-                                    <Button mode="text" onPress={handleClearSearches} compact accessibilityLabel="Limpar histórico de buscas">
-                                        Limpar
-                                    </Button>
-                                )}
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={{ marginRight: spacing.xs }}>Histórico</Text>
-                                    <RNSwitch
-                                        value={historyEnabled}
-                                        onValueChange={toggleHistoryEnabled}
-                                        accessibilityLabel={historyEnabled ? 'Desativar histórico de buscas' : 'Ativar histórico de buscas'}
-                                    />
-                                </View>
-                            </View>
-                        </View>
-                        {recentSearches.length > 0 ? (
-                            historyEnabled ? recentSearches.slice(0, 5).map((term) => (
-                                <List.Item
-                                    key={term}
-                                    title={term}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={`Buscar novamente por: ${term}`}
-                                    onPress={() => handleSelectSuggestion(term)}
-                                    left={(props) => <List.Icon {...props} icon="history" />}
-                                    right={(props) => (
-                                        <IconButton
-                                            {...props}
-                                            icon="close"
-                                            accessibilityLabel={`Remover termo ${term} do histórico`}
-                                            onPress={() => void handleRemoveSearch(term)}
-                                        />
-                                    )}
-                                />
-                            )) : (
-                                <List.Item title="Histórico desativado" disabled />
-                            )
-                        ) : (
-                            <List.Item title="Nenhuma busca recente" disabled />
-                        )}
-                    </View>
-                )}
-
-                {!isSearchFocused && (
-                    <View style={styles.filtersHeader}>
-                        <View style={styles.filtersRow}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                {(() => {
-                                    const priceApplied = typeof precoMin === 'number' || typeof precoMax === 'number';
-                                    const appliedFiltersCount =
-                                        (selectedCategory ? 1 : 0) +
-                                        (cidade ? 1 : 0) +
-                                        (estados.length > 0 ? 1 : 0) +
-                                        (priceApplied ? 1 : 0) +
-                                        (comMidia ? 1 : 0) +
-                                        (tipoPessoa ? 1 : 0);
-                                    const hasAppliedFilters = appliedFiltersCount > 0;
-                                    return (
-                                        <Button
-                                            mode={hasAppliedFilters ? 'contained' : 'outlined'}
-                                            icon="filter-variant"
-                                            onPress={openFilters}
-                                            contentStyle={styles.touchTargetButton}
-                                            accessibilityLabel={hasAppliedFilters
-                                                ? `Abrir filtros, ${appliedFiltersCount} filtros aplicados`
-                                                : 'Abrir filtros'}
-                                            accessibilityHint="Abre a modal com opções de filtro"
-                                            accessibilityState={{ selected: hasAppliedFilters }}
-                                        >
-                                            {hasAppliedFilters ? `Filtros (${appliedFiltersCount})` : 'Filtros'}
-                                        </Button>
-                                    );
-                                })()}
-                                <Menu
-                                    visible={isSortMenuVisible}
-                                    onDismiss={() => setIsSortMenuVisible(false)}
-                                    anchor={
-                                        <Button
-                                            mode="outlined"
-                                            icon="sort"
-                                            onPress={() => setIsSortMenuVisible(true)}
-                                            style={{ marginLeft: spacing.xs }}
-                                            contentStyle={styles.touchTargetButton}
-                                            accessibilityLabel={getSortButtonA11yLabel(sortBy)}
-                                            accessibilityHint={getSortButtonA11yHint()}
-                                        >
-                                            {SORT_LABELS[sortBy]}
-                                        </Button>
-                                    }
-                                >
-                                    {Object.entries(SORT_LABELS).map(([key, label]) => (
-                                        <Menu.Item
-                                            key={key}
-                                            onPress={async () => {
-                                                const selected = key as SortOption;
-                                                setIsSortMenuVisible(false);
-                                                if (selected === 'distancia') {
-                                                    try {
-                                                        const coords = await new Promise<GeolocationCoordinates>((resolve, reject) => {
-                                                            const navAny: any = navigator as any;
-                                                            const geo = navAny?.geolocation;
-                                                            if (!geo || !geo.getCurrentPosition) {
-                                                                reject(new Error('Permissão de localização não disponível neste dispositivo.'));
-                                                                return;
-                                                            }
-                                                            geo.getCurrentPosition(
-                                                                (pos: any) => resolve(pos.coords),
-                                                                (err: any) => reject(err),
-                                                                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-                                                            );
-                                                        });
-                                                        setUserLat(coords.latitude);
-                                                        setUserLng(coords.longitude);
-                                                        trackChangeSort(sortBy, 'distancia', { lat: coords.latitude, lng: coords.longitude });
-                                                        setSortBy('distancia');
-                                                        void loadOfertas(1, true);
-                                                    } catch (e: any) {
-                                                        setError('Não foi possível obter sua localização. Verifique as permissões.');
-                                                    }
-                                                } else {
-                                                    trackChangeSort(sortBy, selected);
-                                                    setSortBy(selected);
-                                                }
-                                            }}
-                                            title={label}
-                                            leadingIcon={sortBy === (key as SortOption) ? 'check' : SORT_ICONS[key as SortOption]}
-                                            accessibilityLabel={`${label}${sortBy === (key as SortOption) ? ', selecionado' : ''}`}
-                                        />
-                                    ))}
-                                </Menu>
-                            </View>
-                            <RNText
-                                style={styles.resultCount}
-                                accessibilityLiveRegion="polite"
-                                accessibilityLabel={`${total} resultados`}
+    const renderFiltersHeader = useCallback(() => (
+        <View style={styles.filtersHeader}>
+            <View style={styles.filtersRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    {(() => {
+                        const priceApplied = typeof precoMin === 'number' || typeof precoMax === 'number';
+                        const appliedFiltersCount =
+                            (selectedCategory ? 1 : 0) +
+                            (cidade ? 1 : 0) +
+                            (estados.length > 0 ? 1 : 0) +
+                            (priceApplied ? 1 : 0) +
+                            (comMidia ? 1 : 0) +
+                            (tipoPessoa ? 1 : 0);
+                        const hasAppliedFilters = appliedFiltersCount > 0;
+                        return (
+                            <Button
+                                mode={hasAppliedFilters ? 'contained' : 'outlined'}
+                                icon="filter-variant"
+                                onPress={openFilters}
+                                contentStyle={styles.touchTargetButton}
+                                accessibilityLabel={hasAppliedFilters
+                                    ? `Abrir filtros, ${appliedFiltersCount} filtros aplicados`
+                                    : 'Abrir filtros'}
+                                accessibilityHint="Abre a modal com opções de filtro"
+                                accessibilityState={{ selected: hasAppliedFilters }}
                             >
-                                {total} resultados
-                            </RNText>
-                        </View>
-                    </View>
-                )}
+                                {hasAppliedFilters ? `Filtros (${appliedFiltersCount})` : 'Filtros'}
+                            </Button>
+                        );
+                    })()}
+                    <Menu
+                        visible={isSortMenuVisible}
+                        onDismiss={() => setIsSortMenuVisible(false)}
+                        anchor={
+                            <Button
+                                mode="outlined"
+                                icon="sort"
+                                onPress={() => setIsSortMenuVisible(true)}
+                                style={{ marginLeft: spacing.xs }}
+                                contentStyle={styles.touchTargetButton}
+                                accessibilityLabel={getSortButtonA11yLabel(sortBy)}
+                                accessibilityHint={getSortButtonA11yHint()}
+                            >
+                                {SORT_LABELS[sortBy]}
+                            </Button>
+                        }
+                    >
+                        {Object.entries(SORT_LABELS).map(([key, label]) => (
+                            <Menu.Item
+                                key={key}
+                                onPress={async () => {
+                                    const selected = key as SortOption;
+                                    setIsSortMenuVisible(false);
+                                    if (selected === 'distancia') {
+                                        try {
+                                            const coords = await new Promise<GeolocationCoordinates>((resolve, reject) => {
+                                                const navAny: any = navigator as any;
+                                                const geo = navAny?.geolocation;
+                                                if (!geo || !geo.getCurrentPosition) {
+                                                    reject(new Error('Permissão de localização não disponível neste dispositivo.'));
+                                                    return;
+                                                }
+                                                geo.getCurrentPosition(
+                                                    (pos: any) => resolve(pos.coords),
+                                                    (err: any) => reject(err),
+                                                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                                                );
+                                            });
+                                            setUserLat(coords.latitude);
+                                            setUserLng(coords.longitude);
+                                            trackChangeSort(sortBy, 'distancia', { lat: coords.latitude, lng: coords.longitude });
+                                            setSortBy('distancia');
+                                            void loadOfertas(1, true);
+                                        } catch (e: any) {
+                                            setError('Não foi possível obter sua localização. Verifique as permissões.');
+                                        }
+                                    } else {
+                                        trackChangeSort(sortBy, selected);
+                                        setSortBy(selected);
+                                    }
+                                }}
+                                title={label}
+                                leadingIcon={sortBy === (key as SortOption) ? 'check' : SORT_ICONS[key as SortOption]}
+                                accessibilityLabel={`${label}${sortBy === (key as SortOption) ? ', selecionado' : ''}`}
+                            />
+                        ))}
+                    </Menu>
+                </View>
+                <RNText
+                    style={styles.resultCount}
+                    accessibilityLiveRegion="polite"
+                    accessibilityLabel={`${total} resultados`}
+                >
+                    {total} resultados
+                </RNText>
             </View>
-        );
-    }, [
-        searchQuery,
-        isLoading,
-        recentSearches,
-        handleSelectSuggestion,
-        handleRemoveSearch,
-        handleClearSearches,
-        selectedCategory,
-        cidade,
-        estados,
-        precoMin,
-        precoMax,
-        comMidia,
-        tipoPessoa,
-        isSortMenuVisible,
-        sortBy,
-        total,
-        isSearchFocused,
-        isRefreshing,
-    ]);
+        </View>
+    ), [precoMin, precoMax, selectedCategory, cidade, estados, comMidia, tipoPessoa, isSortMenuVisible, sortBy, total]);
 
     // Chips aplicados como cabeçalho fixo (sticky)
     const renderAppliedChips = useCallback(() => (
@@ -983,6 +886,80 @@ const BuscarOfertasScreen: React.FC = () => {
             />
             </Portal>
 
+            <View style={styles.searchContainer}>
+                <Searchbar
+                    placeholder="Buscar serviços (ex.: encanador, elétrica, pintura)"
+                    onChangeText={setSearchQuery}
+                    value={searchQuery}
+                    style={styles.searchbar}
+                    testID="search-input"
+                    icon="magnify"
+                    loading={isLoading || isRefreshing}
+                    clearIcon="close"
+                    onClearIconPress={() => setSearchQuery("")}
+                    onFocus={() => { setIsSearchFocused(true); }}
+                    onBlur={() => {
+                        // pequeno atraso para permitir o toque em itens recentes
+                        setTimeout(() => setIsSearchFocused(false), 150);
+                    }}
+                    returnKeyType="search"
+                    onSubmitEditing={() => {
+                        // Sincroniza o debounce e busca imediatamente
+                        setDebouncedQuery(searchQuery);
+                        void loadOfertas(1, true);
+                    }}
+                    accessibilityLabel="Buscar serviços"
+                    accessibilityHint="Digite um termo para buscar e pressione 'buscar' no teclado para resultados imediatos"
+                />
+
+                {isSearchFocused && (
+                    <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold' }}>Buscas Recentes</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                {recentSearches.length > 0 && historyEnabled && (
+                                    <Button mode="text" onPress={handleClearSearches} compact accessibilityLabel="Limpar histórico de buscas">
+                                        Limpar
+                                    </Button>
+                                )}
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={{ marginRight: spacing.xs }}>Histórico</Text>
+                                    <RNSwitch
+                                        value={historyEnabled}
+                                        onValueChange={toggleHistoryEnabled}
+                                        accessibilityLabel={historyEnabled ? 'Desativar histórico de buscas' : 'Ativar histórico de buscas'}
+                                    />
+                                </View>
+                            </View>
+                        </View>
+                        {recentSearches.length > 0 ? (
+                            historyEnabled ? recentSearches.slice(0, 5).map((term) => (
+                                <List.Item
+                                    key={term}
+                                    title={term}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Buscar novamente por: ${term}`}
+                                    onPress={() => handleSelectSuggestion(term)}
+                                    left={(props) => <List.Icon {...props} icon="history" />}
+                                    right={(props) => (
+                                        <IconButton
+                                            {...props}
+                                            icon="close"
+                                            accessibilityLabel={`Remover termo ${term} do histórico`}
+                                            onPress={() => void handleRemoveSearch(term)}
+                                        />
+                                    )}
+                                />
+                            )) : (
+                                <List.Item title="Histórico desativado" disabled />
+                            )
+                        ) : (
+                            <List.Item title="Nenhuma busca recente" disabled />
+                        )}
+                    </View>
+                )}
+            </View>
+
             <FlatList
                 testID="ofertas-list"
                 keyboardShouldPersistTaps="always"
@@ -1001,15 +978,11 @@ const BuscarOfertasScreen: React.FC = () => {
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.4}
                 contentContainerStyle={styles.list}
-                ListHeaderComponent={renderListHeader}
+                ListHeaderComponent={!isSearchFocused ? renderFiltersHeader : undefined}
                 stickyHeaderIndices={isSearchFocused ? [] : (hasAppliedFilters ? [1] : [])}
                 initialNumToRender={8}
                 maxToRenderPerBatch={8}
                 windowSize={5}
-                // Observação: em Android, combinar stickyHeaderIndices com removeClippedSubviews
-                // pode causar erros nativos como "addViewAt: failed to insert view ..." quando
-                // a quantidade/ordem de itens muda dinamicamente (ex.: ao aplicar/remover chips
-                // de filtros). Para evitar isso, desativamos o clipping.
                 removeClippedSubviews={false}
                 ListFooterComponent={
                     isSearchFocused
@@ -1074,6 +1047,9 @@ const styles = StyleSheet.create({
     searchbar: {
         margin: spacing.md,
         marginBottom: spacing.sm,
+    },
+    searchContainer: {
+        backgroundColor: colors.background,
     },
     suggestionsCard: {
         marginHorizontal: spacing.md,
@@ -1291,3 +1267,4 @@ const styles = StyleSheet.create({
 });
 
 export default BuscarOfertasScreen;
+
