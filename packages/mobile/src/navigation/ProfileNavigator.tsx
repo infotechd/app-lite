@@ -5,6 +5,7 @@ import ProfileHome from '@/screens/profile/ProfileHome';
 import Settings from '@/screens/profile/Settings';
 import Notifications from '@/screens/profile/Notifications';
 import EditProfile from '@/screens/profile/EditProfileScreen';
+import ChangePasswordScreen from '@/screens/profile/ChangePasswordScreen';
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
@@ -15,6 +16,7 @@ const ProfileNavigator: React.FC = () => {
             <Stack.Screen name="Settings" component={Settings} options={{ title: 'Configurações' }} />
             <Stack.Screen name="Notifications" component={Notifications} options={{ title: 'Notificações' }} />
             <Stack.Screen name="EditProfile" component={EditProfile} options={{ title: 'Editar Perfil' }} />
+            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ title: 'Alterar senha' }} />
         </Stack.Navigator>
     );
 };

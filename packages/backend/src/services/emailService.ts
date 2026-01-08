@@ -150,6 +150,31 @@ class EmailService {
     /**
      * @public
      * @async
+     * @method sendResetPasswordEmail
+     * @description Envia um e-mail de redefinição de senha com um token único.
+     * @param {string} to - E-mail de destino do usuário.
+     * @param {string} token - Token de redefinição de senha.
+     * @returns {Promise<void>}
+     */
+    public async sendResetPasswordEmail(to: string, token: string): Promise<void> {
+        const htmlContent = `
+          <div style="font-family: sans-serif; color: #333; padding: 20px;">
+            <h2>Redefinição de senha</h2>
+            <p>Use o token abaixo para redefinir sua senha (válido por 1 hora):</p>
+            <p><strong>${token}</strong></p>
+          </div>
+        `;
+
+        await this.send({
+            to,
+            subject: 'Redefinição de senha - App Lite',
+            html: htmlContent,
+        });
+    }
+
+    /**
+     * @public
+     * @async
      * @method send
      * @description Método público que permite o envio de e-mails personalizados (ex: token de confirmação).
      * @param {SendMailOptions} options - Objeto contendo remetente, destinatário, assunto e conteúdo.

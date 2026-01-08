@@ -147,7 +147,7 @@ export const userController = {
         // Verifica se a senha confere
         const passwordOk = await bcrypt.compare(currentPassword, user.senha);
         if (!passwordOk) {
-          return res.status(401).json({ success: false, message: 'Senha atual incorreta.' });
+          return res.status(400).json({ success: false, message: 'Senha atual incorreta.' });
         }
 
         // Verifica se o e-mail é o mesmo do atual
@@ -212,7 +212,7 @@ export const userController = {
       }
 
       if (user.emailChangeToken !== token) {
-        return res.status(401).json({ success: false, message: 'Token inválido.' });
+        return res.status(400).json({ success: false, message: 'Token inválido.' });
       }
 
       if (user.emailChangeExpires.getTime() < Date.now()) {
@@ -368,5 +368,56 @@ export const userController = {
       // Delegação para o middleware de erro
       next(error);
     }
-  }
+  },
+
+  /**
+   * Altera a senha do usuário autenticado.
+   *
+   * Este método realiza as seguintes etapas:
+   * 1. Valida os dados da requisição (senha atual e nova).
+   * 2. Recupera o ID do usuário através do token de autenticação.
+   * 3. Verifica se a senha atual está correta.
+   * 4. Atualiza a senha do usuário no banco de dados.
+   * 5. Retorna uma confirmação da atualização.
+   *
+   * @param {AuthRequest} req - Objeto de requisição do Express, contendo os dados do usuário autenticado.
+   * @param {Response} res - Objeto de resposta do Express usado para retornar o status da operação.
+   * @param {NextFunction} next - Função do Express para passar o controle/erro para o próximo middleware de tratamento.
+   * @returns {Promise<void>} - Retorna uma resposta JSON com o sucesso da operação.
+   */
+  changePassword: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.id;
+      const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ success: false, message: 'Senha atual e nova são obrigatórias.' });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ success: false, message: 'Nova senha deve ter no mínimo 6 caracteres.' });
+      }
+
+      const user = await User.findById(userId).select('+senha');
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+      }
+
+      const passwordOk = await bcrypt.compare(currentPassword, user.senha);
+      if (!passwordOk) {
+        return res.status(400).json({ success: false, message: 'Senha atual incorreta.' });
+      }
+
+      user.senha = newPassword;
+      // Invalida tokens de reset existentes
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+
+      return res.status(200).json({ success: true, message: 'Senha alterada com sucesso.' });
+    } catch (error: any) {
+      logger.error('userController.changePassword.error', { error: error.message, userId: req.user?.id });
+      next(error);
+    }
+  },
 };

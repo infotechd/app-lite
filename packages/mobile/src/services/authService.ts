@@ -4,14 +4,26 @@ import { API_CONFIG } from '@/constants/config';
 import type { RegisterData, User, LoginData } from '@/types';
 
 // Tipos de apoio
+/**
+ * Interface que define a estrutura de resposta de sucesso após autenticação.
+ */
 export interface AuthResponse {
+    /** Token JWT para autorização das próximas requisições */
     token: string;
+    /** Objeto do usuário autenticado */
     user: User;
 }
 
+/** Objeto genérico para manipulação de dados dinâmicos da API */
 type AnyObject = Record<string, any>;
 
-// Converte o tipo do backend para o app (aceita pt-BR e en-US)
+/**
+ * Converte a string de tipo de usuário vinda do backend para o formato enumerado do app.
+ * Aceita variações em Português e Inglês para maior compatibilidade.
+ * 
+ * @param {string} t - String do tipo/role recebida da API.
+ * @returns {User['tipo']} - O tipo mapeado ('buyer', 'provider' ou 'advertiser').
+ */
 const toAppTipo = (t: string): User['tipo'] => {
     const v = t.toLowerCase();
     switch (v) {
@@ -29,10 +41,15 @@ const toAppTipo = (t: string): User['tipo'] => {
     }
 };
 
-// Normaliza o usuário retornado pelo backend para o tipo do app
-// ✅ CORREÇÃO: Atualizado para incluir os novos campos de PF/PJ
+/**
+ * Normaliza o objeto de usuário retornado pelo backend, tratando diferenças de nomes de campos
+ * (como _id vs id) e campos opcionais para usuários PF (Pessoa Física) e PJ (Pessoa Jurídica).
+ * 
+ * @param {AnyObject} u - Objeto bruto retornado pela API.
+ * @returns {User} - Objeto de usuário formatado segundo o contrato do App.
+ */
 const normalizeUser = (u: AnyObject): User => ({
-    id: String(u._id ?? u.id ?? ''), // Garante 'id'
+    id: String(u._id ?? u.id ?? ''), // Garante que teremos um ID como string
     nome: String(u.nome ?? u.name ?? ''),
     email: String(u.email ?? ''),
     tipo: toAppTipo(u.tipo ?? u.role ?? ''),
@@ -43,7 +60,7 @@ const normalizeUser = (u: AnyObject): User => ({
     createdAt: String(u.createdAt ?? new Date().toISOString()),
     updatedAt: String(u.updatedAt ?? new Date().toISOString()),
 
-    // ✅ NOVO: Campos de PF/PJ
+    // Mapeamento de campos específicos de PF/PJ adicionados recentemente
     tipoPessoa: (u.tipoPessoa === 'PJ') ? 'PJ' : 'PF',
     cpf: u.cpf ?? undefined,
     cnpj: u.cnpj ?? undefined,
@@ -52,13 +69,16 @@ const normalizeUser = (u: AnyObject): User => ({
     ativo: u.ativo ?? false,
 });
 
-// Extrai { token, user } de respostas variadas do backend
+/**
+ * Extrai os dados de autenticação (token e usuário) de diferentes formatos possíveis de resposta.
+ * O backend pode variar o formato dependendo da versão ou endpoint.
+ * 
+ * @param {AnyObject} data - Resposta bruta recebida do Axios.
+ * @returns {AuthResponse} - Objeto contendo token e usuário normalizado.
+ * @throws {Error} - Caso a resposta seja considerada inválida.
+ */
 const extractAuthResponse = (data: AnyObject): AuthResponse => {
-    // Formatos suportados:
-    // 1) { token, user }
-    // 2) { success, data: { token, user } }
-    // 3) { data: { token, user } }
-    // 4) { token, data: user }
+    // Tenta encontrar o objeto interno que contém os dados reais
     const inner = ((): AnyObject => {
         if (data?.token && data?.user) return data;
         if (data?.data?.token && data?.data?.user) return data.data;
@@ -69,24 +89,30 @@ const extractAuthResponse = (data: AnyObject): AuthResponse => {
     const token: string = String(inner.token ?? inner.accessToken ?? inner.jwt ?? '');
     const rawUser: AnyObject = inner.user ?? inner.data ?? {};
 
-    if (!token || !rawUser.id) { // Checa se o 'id' existe no usuário normalizado
-        // Se não houver 'id', tenta normalizar
+    // Validação mínima para garantir que a autenticação foi bem sucedida
+    if (!token || !rawUser.id) { 
         const normalizedUser = normalizeUser(rawUser);
         if (token && normalizedUser.id) {
             return { token, user: normalizedUser };
         }
-        // Se ainda falhar, lança o erro
         throw new Error('Resposta de autenticação inválida.');
     }
 
     return { token, user: normalizeUser(rawUser) };
 };
 
+/**
+ * Serviço central de autenticação que encapsula as chamadas de API para o módulo de Auth.
+ */
 export const AuthService = {
-    // ✅ CORREÇÃO: Login agora envia 'password', como o backend (authValidation.ts) espera
+    /**
+     * Realiza o login do usuário.
+     * @param {LoginData} payload - E-mail e senha do usuário.
+     * @returns {Promise<AuthResponse>} - Dados de autenticação em caso de sucesso.
+     */
     async login(payload: LoginData): Promise<AuthResponse> {
         try {
-            // O backend authValidation.ts espera 'password' e o transforma em 'senha'
+            // O backend espera 'password' no corpo da requisição
             const { data } = await api.post(`${API_CONFIG.endpoints.auth}/login`, payload);
             return extractAuthResponse(data);
         } catch (err: any) {
@@ -95,19 +121,24 @@ export const AuthService = {
         }
     },
 
-    // ✅ CORREÇÃO: Registro agora envia o 'payload' COMPLETO
+    /**
+     * Registra um novo usuário (PF ou PJ).
+     * @param {RegisterData} payload - Dados completos de cadastro.
+     * @returns {Promise<AuthResponse>} - Dados de autenticação após o registro bem sucedido.
+     */
     async register(payload: RegisterData): Promise<AuthResponse> {
         try {
-            // Normaliza documentos (CPF/CNPJ) e envia apenas o relevante
+            // Remove caracteres não numéricos de documentos antes de enviar
             const onlyDigits = (s?: string) => (s ?? '').replace(/\D/g, '');
             const body: Record<string, any> = { ...payload };
 
+            // Trata condicionalmente CPF ou CNPJ baseado no tipo de pessoa
             if (payload.tipoPessoa === 'PJ') {
                 body.cnpj = onlyDigits(payload.cnpj);
-                delete body.cpf; // evita enviar CPF quando PJ
+                delete body.cpf;
             } else {
                 body.cpf = onlyDigits(payload.cpf);
-                delete body.cnpj; // evita enviar CNPJ quando PF
+                delete body.cnpj;
             }
 
             const { data } = await api.post(`${API_CONFIG.endpoints.auth}/register`, body);
@@ -118,8 +149,41 @@ export const AuthService = {
         }
     },
 
+    /**
+     * Solicita um e-mail de recuperação de senha.
+     * @param {string} email - O e-mail do usuário.
+     * @returns {Promise<{ message: string }>} - Mensagem de confirmação da API.
+     */
+    async forgotPassword(email: string): Promise<{ message: string }> {
+        try {
+            const { data } = await api.post(`${API_CONFIG.endpoints.auth}/forgot-password`, { email });
+            return { message: data?.message ?? 'Se este e-mail existir, enviaremos instruções em breve.' };
+        } catch (err: any) {
+            const message = err?.response?.data?.message || err?.message || 'Erro ao enviar recuperação.';
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Redefine a senha do usuário utilizando o token enviado por e-mail.
+     * @param {string} token - Token de validação de recuperação.
+     * @param {string} password - A nova senha.
+     * @returns {Promise<AuthResponse>} - Faz login automático após redefinir.
+     */
+    async resetPassword(token: string, password: string): Promise<AuthResponse> {
+        try {
+            const { data } = await api.post(`${API_CONFIG.endpoints.auth}/reset-password`, { token, password });
+            return extractAuthResponse(data);
+        } catch (err: any) {
+            const message = err?.response?.data?.message || err?.message || 'Erro ao redefinir senha.';
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Finaliza a sessão do usuário. Atualmente apenas resolve localmente.
+     */
     async logout(): Promise<void> {
-        // Caso haja endpoint no backend, poderíamos chamar aqui.
         return Promise.resolve();
     },
 };

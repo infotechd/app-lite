@@ -7,6 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
 
 // Tipagem para as rotas deste stack (garante segurança de tipos nas navegações)
 import { AuthStackParamList } from '@/types';
@@ -14,27 +15,34 @@ import { AuthStackParamList } from '@/types';
 // Cria uma instância do stack navigator já tipada com as rotas do fluxo de auth
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
-// Componente responsável por declarar as rotas e opções do stack de autenticação
+/**
+ * Navigator de Autenticação.
+ * Define as telas e a lógica de navegação para o fluxo de entrada do usuário (Login, Cadastro, Recuperação de Senha).
+ * Utiliza o Native Stack Navigator para transições performáticas entre telas.
+ * 
+ * @returns {JSX.Element} Elemento JSX contendo a configuração da pilha de navegação de autenticação.
+ */
 const AuthNavigator: React.FC = () => {
     return (
-        // Configura o Stack Navigator
         <Stack.Navigator
-            // Define a primeira tela exibida ao entrar neste fluxo
+            // Define 'Login' como a tela inicial do fluxo
             initialRouteName="Login"
-            // Opções padrão aplicadas a todas as telas do stack
             screenOptions={{
-                // Oculta o cabeçalho padrão do stack (usaremos headers customizados se necessário)
+                // Oculta o cabeçalho padrão para permitir designs personalizados em cada tela
                 headerShown: false,
             }}
         >
-            {/* Tela de Login (padrão/initialRoute) */}
+            {/* Tela para autenticação de usuários existentes */}
             <Stack.Screen name="Login" component={LoginScreen} />
 
-            {/* Tela de Cadastro de novo usuário */}
+            {/* Tela para criação de novas contas (suporta fluxos PF e PJ) */}
             <Stack.Screen name="Register" component={RegisterScreen} />
 
-            {/* Tela de recuperação de senha */}
+            {/* Fluxo de recuperação: tela para solicitar o token via e-mail */}
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            
+            {/* Fluxo de recuperação: tela para definir a nova senha usando o token recebido */}
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
         </Stack.Navigator>
     );
 };

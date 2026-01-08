@@ -115,6 +115,7 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user, profileId }) => {
           profileUrl={profileUrl}
           anchor={
             <IconButton
+              testID="profile-menu-button"
               icon="dots-horizontal"
               onPress={() => {
                 setMenuVisible(true);
@@ -123,9 +124,8 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user, profileId }) => {
               style={{ marginLeft: spacing.sm }}
             />
           }
-          onNavigatePrivacySettings={() => {
-            // TODO: Implementar navegação para configurações de privacidade
-            console.log('Ir para tela de Configurações de Privacidade');
+          onNavigateSettings={() => {
+            navigation.navigate('Settings' as never);
           }}
         />
       </View>
