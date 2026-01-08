@@ -1,10 +1,13 @@
 import { Response, NextFunction } from 'express';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { uploadService } from '../services/uploadService';
 import { logger } from '../utils/logger';
 import User from '../models/User';
 import type { AuthRequest } from '../middleware/auth';
-import { updateNameSchema, updatePhoneSchema, updateLocationSchema } from '../validation/userValidation';
+import { updateNameSchema, updatePhoneSchema, updateLocationSchema, updateEmailSchema } from '../validation/userValidation';
 import { validate } from '../middleware/validation';
+import { emailService } from '../services/emailService';
 
 /**
  * Controller responsável por gerenciar as operações relacionadas ao perfil do usuário.
@@ -127,6 +130,124 @@ export const userController = {
       }
     }
   ],
+
+  // Inicia fluxo de atualização de e-mail (solicitação)
+  updateEmailRequest: [
+    validate(updateEmailSchema),
+    async (req: AuthRequest, res: Response, next: NextFunction) => {
+      try {
+        const userId = req.user!.id;
+        const { email, currentPassword } = req.body as { email: string; currentPassword: string };
+
+        const user = await User.findById(userId).select('+senha');
+        if (!user) {
+          return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+        }
+
+        // Verifica se a senha confere
+        const passwordOk = await bcrypt.compare(currentPassword, user.senha);
+        if (!passwordOk) {
+          return res.status(401).json({ success: false, message: 'Senha atual incorreta.' });
+        }
+
+        // Verifica se o e-mail é o mesmo do atual
+        if (user.email === email) {
+          return res.status(400).json({ success: false, message: 'O e-mail informado já é o atual.' });
+        }
+
+        // Verifica se e-mail já está em uso por outro usuário
+        const emailInUse = await User.findOne({ email });
+        if (emailInUse) {
+          return res.status(409).json({ success: false, message: 'Este e-mail já está em uso.' });
+        }
+
+        const token = crypto.randomBytes(24).toString('hex');
+        const expires = new Date(Date.now() + 60 * 60 * 1000); // 1h
+
+        user.pendingEmail = email;
+        user.emailChangeToken = token;
+        user.emailChangeExpires = expires;
+        await user.save();
+
+        // Dispara e-mail de confirmação com link/token
+        try {
+          await emailService.send({
+            to: email,
+            subject: 'Confirme a alteração de e-mail',
+            html: `
+              <p>Você solicitou alterar o e-mail da sua conta App Lite.</p>
+              <p>Use o token abaixo para confirmar a alteração (válido por 1 hora):</p>
+              <p><strong>${token}</strong></p>
+            `,
+          });
+        } catch (mailErr: any) {
+          logger.error('userController.updateEmailRequest.emailError', { error: mailErr.message, userId });
+          return res.status(500).json({ success: false, message: 'Não foi possível enviar o e-mail de confirmação. Tente novamente.' });
+        }
+
+        return res.status(200).json({
+          success: true,
+          message: 'Solicitação registrada. Verifique o novo e-mail para confirmar.',
+        });
+      } catch (error: any) {
+        logger.error('userController.updateEmailRequest.error', { error: error.message, userId: req.user?.id });
+        next(error);
+      }
+    }
+  ],
+
+  // Confirma a alteração de e-mail com token enviado
+  confirmEmailUpdate: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.id;
+      const { token } = req.body as { token?: string };
+
+      if (!token) {
+        return res.status(400).json({ success: false, message: 'Token é obrigatório.' });
+      }
+
+      const user = await User.findById(userId).select('+senha');
+      if (!user || !user.emailChangeToken || !user.pendingEmail || !user.emailChangeExpires) {
+        return res.status(400).json({ success: false, message: 'Nenhuma solicitação de alteração de e-mail encontrada.' });
+      }
+
+      if (user.emailChangeToken !== token) {
+        return res.status(401).json({ success: false, message: 'Token inválido.' });
+      }
+
+      if (user.emailChangeExpires.getTime() < Date.now()) {
+        user.emailChangeToken = undefined;
+        user.pendingEmail = undefined;
+        user.emailChangeExpires = undefined;
+        await user.save();
+        return res.status(400).json({ success: false, message: 'Token expirado. Solicite novamente.' });
+      }
+
+      // Verifica novamente unicidade antes de confirmar
+      const emailInUse = await User.findOne({ email: user.pendingEmail });
+      if (emailInUse) {
+        return res.status(409).json({ success: false, message: 'Este e-mail já está em uso.' });
+      }
+
+      user.email = user.pendingEmail;
+      user.pendingEmail = undefined;
+      user.emailChangeToken = undefined;
+      user.emailChangeExpires = undefined;
+      await user.save();
+
+      const sanitized = user.toObject();
+      delete (sanitized as any).senha;
+
+      return res.status(200).json({
+        success: true,
+        message: 'E-mail atualizado com sucesso.',
+        data: sanitized,
+      });
+    } catch (error: any) {
+      logger.error('userController.confirmEmailUpdate.error', { error: error.message, userId: req.user?.id });
+      next(error);
+    }
+  },
 
   /**
    * Atualiza ou adiciona a foto de perfil (avatar) do usuário autenticado.

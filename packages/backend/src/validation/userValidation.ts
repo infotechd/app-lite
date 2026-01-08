@@ -46,6 +46,22 @@ export const updateLocationSchema = z.object({
   }),
 });
 
+/**
+ * Validação para atualização de e-mail do usuário autenticado.
+ * - Garante trim, formato de e-mail válido e senha atual.
+ */
+export const updateEmailSchema = z.object({
+  body: z.object({
+    email: z.string()
+      .trim()
+      .toLowerCase()
+      .email('E-mail inválido'),
+    currentPassword: z.string()
+      .min(6, 'Senha atual é obrigatória e deve ter no mínimo 6 caracteres'),
+  }),
+});
+
 export type UpdateNameInput = z.infer<typeof updateNameSchema>['body'];
 export type UpdatePhoneInput = z.infer<typeof updatePhoneSchema>['body'];
 export type UpdateLocationInput = z.infer<typeof updateLocationSchema>['body'];
+export type UpdateEmailInput = z.infer<typeof updateEmailSchema>['body'];

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
-import { Text, TextInput, Button, Appbar, ActivityIndicator } from 'react-native-paper';
+import { Text, TextInput, Button, Appbar, ActivityIndicator, Dialog, Portal } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '@/context/AuthContext';
 import AvatarEditor from '@/components/profile/AvatarEditor';
@@ -8,7 +8,9 @@ import { colors, spacing } from '@/styles/theme';
 import { 
   updateName as updateNameService,
   updatePhone as updatePhoneService,
-  updateLocation as updateLocationService 
+  updateLocation as updateLocationService,
+  updateEmail as updateEmailService,
+  confirmEmailChange as confirmEmailChangeService,
 } from '@/services/profileService';
 import { formatPhoneNumber, isValidPhoneNumber } from '@/utils/phoneFormatter';
 
@@ -26,6 +28,12 @@ const EditProfileScreen: React.FC = () => {
   const [cidade, setCidade] = useState(user?.localizacao?.cidade ?? '');
   const [estado, setEstado] = useState(user?.localizacao?.estado ?? '');
   const [isSaving, setIsSaving] = useState(false);
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [isEmailChanged, setIsEmailChanged] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [confirmingToken, setConfirmingToken] = useState(false);
+  const [token, setToken] = useState('');
 
   // Lógica de validação do Nome
   const trimmedName = useMemo(() => nome.replace(/\s+/g, ' ').trim(), [nome]);
@@ -43,9 +51,13 @@ const EditProfileScreen: React.FC = () => {
   const isEstadoValid = !estado || estado.trim().length === 2;
   const isLocationChanged = cidade !== (user?.localizacao?.cidade ?? '') || estado !== (user?.localizacao?.estado ?? '');
 
+  // Lógica de validação do e-mail
+  const trimmedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
+  const isEmailValid = useMemo(() => /[^@\s]+@[^@\s]+\.[^@\s]+/.test(trimmedEmail), [trimmedEmail]);
+
   // O botão salvar é habilitado se houver mudanças E tudo for válido
   const canSave = (isNameValid && isPhoneValid && isCidadeValid && isEstadoValid) && 
-                 (isNameChanged || isPhoneChanged || isLocationChanged);
+                 (isNameChanged || isPhoneChanged || isLocationChanged || isEmailChanged);
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -68,6 +80,13 @@ const EditProfileScreen: React.FC = () => {
         updatedUser = await updateLocationService(cidade.trim(), estado.trim().toUpperCase());
       }
 
+      // Se o e-mail mudou, pede confirmação de senha e envia solicitação
+      if (isEmailChanged) {
+        setPasswordModalVisible(true);
+        setIsSaving(false);
+        return;
+      }
+
       await setUser(updatedUser);
       Alert.alert('Sucesso', 'Perfil atualizado com sucesso.');
       navigation.goBack();
@@ -75,6 +94,37 @@ const EditProfileScreen: React.FC = () => {
       Alert.alert('Erro', error?.message || 'Não foi possível atualizar o perfil.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleConfirmPassword = async () => {
+    try {
+      setIsSaving(true);
+      const { message } = await updateEmailService(trimmedEmail, currentPassword);
+      Alert.alert('Solicitação enviada', message);
+      setPasswordModalVisible(false);
+      setCurrentPassword('');
+    } catch (error: any) {
+      Alert.alert('Erro', error?.message || 'Não foi possível solicitar a alteração de e-mail.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConfirmToken = async () => {
+    try {
+      setConfirmingToken(true);
+      const updatedUser = await confirmEmailChangeService(token.trim());
+      await setUser(updatedUser);
+      setEmail(updatedUser.email);
+      setIsEmailChanged(false);
+      setToken('');
+      Alert.alert('Sucesso', 'E-mail atualizado com sucesso.');
+      navigation.goBack();
+    } catch (error: any) {
+      Alert.alert('Erro', error?.message || 'Token inválido ou expirado.');
+    } finally {
+      setConfirmingToken(false);
     }
   };
 
@@ -158,11 +208,17 @@ const EditProfileScreen: React.FC = () => {
 
           <TextInput
             label="E-mail"
-            value={user?.email}
+            value={email}
             mode="outlined"
-            disabled
+            onChangeText={(text) => {
+              setEmail(text);
+              setIsEmailChanged(text.trim().toLowerCase() !== (user?.email ?? '').toLowerCase());
+            }}
             style={styles.input}
-            right={<TextInput.Icon icon="lock" color={colors.textSecondary} />}
+            error={!!email && !isEmailValid}
+            right={isEmailChanged ? <TextInput.Icon icon="email-edit" /> : undefined}
+            autoCapitalize="none"
+            keyboardType="email-address"
           />
 
           <Button 
@@ -174,10 +230,56 @@ const EditProfileScreen: React.FC = () => {
           >
             Salvar
           </Button>
+
+          {isEmailChanged && (
+            <View style={{ marginTop: spacing.sm }}>
+              <Text variant="bodySmall" style={styles.helperText}>
+                Para confirmar a troca de e-mail enviaremos um token para o novo endereço.
+              </Text>
+              <TextInput
+                label="Token de confirmação"
+                value={token}
+                mode="outlined"
+                onChangeText={setToken}
+                style={styles.input}
+                right={confirmingToken ? <ActivityIndicator size="small" /> : undefined}
+                placeholder="Cole o token recebido"
+                autoCapitalize="none"
+              />
+              <Button
+                mode="outlined"
+                onPress={handleConfirmToken}
+                disabled={!token || confirmingToken}
+                loading={confirmingToken}
+              >
+                Confirmar e-mail
+              </Button>
+            </View>
+          )}
         </View>
       </ScrollView>
     </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
+
+    <Portal>
+      <Dialog visible={passwordModalVisible} onDismiss={() => setPasswordModalVisible(false)}>
+        <Dialog.Title>Confirme sua senha</Dialog.Title>
+        <Dialog.Content>
+          <TextInput
+            label="Senha atual"
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            secureTextEntry
+            mode="outlined"
+            autoCapitalize="none"
+          />
+        </Dialog.Content>
+        <Dialog.Actions>
+          <Button onPress={() => setPasswordModalVisible(false)}>Cancelar</Button>
+          <Button onPress={handleConfirmPassword} disabled={!currentPassword || isSaving} loading={isSaving}>Confirmar</Button>
+        </Dialog.Actions>
+      </Dialog>
+    </Portal>
   </View>
 );
 };

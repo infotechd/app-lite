@@ -43,4 +43,10 @@ router.patch('/me/telefone', authMiddleware, ...userController.updatePhone);
 // Atualiza a localização do usuário autenticado
 router.patch('/me/localizacao', authMiddleware, ...userController.updateLocation);
 
+// Solicita alteração de e-mail (gera token e envia e-mail)
+router.patch('/me/email', authMiddleware, ...userController.updateEmailRequest);
+
+// Confirma alteração de e-mail com token
+router.post('/me/email/confirm', authMiddleware, userController.confirmEmailUpdate);
+
 export default router;

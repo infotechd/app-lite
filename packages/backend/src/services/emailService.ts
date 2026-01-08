@@ -89,13 +89,13 @@ class EmailService {
     /**
      * @private
      * @async
-     * @method send
-     * @description Método interno genérico que executa o envio do e-mail via nodemailer.
+     * @method sendInternal
+     * @description Método interno que executa o envio do e-mail via nodemailer.
      * @param {SendMailOptions} options - Objeto contendo remetente, destinatário, assunto e conteúdo.
      * @throws {Error} Lança erro caso o envio falhe para tratamento no nível superior.
      * @returns {Promise<void>}
      */
-    private async send(options: SendMailOptions): Promise<void> {
+    private async sendInternal(options: SendMailOptions): Promise<void> {
         // Tenta inicializar caso o transportador ainda não exista
         if (!this.transporter) await this.initializeTransporter();
         if (!this.transporter) {
@@ -141,10 +141,24 @@ class EmailService {
 
         // Executa o envio
         await this.send({
-            from: `"App Lite" <${env.EMAIL_FROM}>`, // O EMAIL_FROM deve estar validado no seu provedor (ex: Resend)
             to,
             subject: 'Bem-vindo ao App Lite!',
             html: htmlContent,
+        });
+    }
+
+    /**
+     * @public
+     * @async
+     * @method send
+     * @description Método público que permite o envio de e-mails personalizados (ex: token de confirmação).
+     * @param {SendMailOptions} options - Objeto contendo remetente, destinatário, assunto e conteúdo.
+     * @returns {Promise<void>}
+     */
+    public async send(options: SendMailOptions): Promise<void> {
+        return this.sendInternal({
+            from: `"App Lite" <${env.EMAIL_FROM}>`,
+            ...options,
         });
     }
 }
