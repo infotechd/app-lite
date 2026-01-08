@@ -39,26 +39,31 @@ type AvatarFile = {
  * @returns {Promise<any>} Dados do usuário atualizados.
  */
 export async function uploadAvatar(file: AvatarFile): Promise<User> {
-  /** Criação de um formulário multipart para suportar envio de binários via HTTP */
-  const form = new FormData();
-  
-  // Anexa o arquivo ao formulário sob a chave 'avatar'
-  form.append('avatar', {
-    uri: file.uri,
-    type: file.type,
-    name: file.name || 'avatar.jpg',
-  } as any);
+  try {
+    /** Criação de um formulário multipart para suportar envio de binários via HTTP */
+    const form = new FormData();
+    
+    // Anexa o arquivo ao formulário sob a chave 'avatar'
+    form.append('avatar', {
+      uri: file.uri,
+      type: file.type,
+      name: file.name || 'avatar.jpg',
+    } as any);
 
-  /** 
-   * Execução da chamada de API.
-   * Rota atualizada para /v1/users/me/avatar conforme Versão 2.0
-   */
-  const { data } = await api.patch('/v1/users/me/avatar', form, {
-     headers: { 'Content-Type': 'multipart/form-data' },
-     timeout: 45000,
-   });
+    /** 
+     * Execução da chamada de API.
+     * Rota atualizada para /v1/users/me/avatar conforme Versão 2.0
+     */
+    const { data } = await api.patch('/v1/users/me/avatar', form, {
+       headers: { 'Content-Type': 'multipart/form-data' },
+       timeout: 45000,
+     });
 
-   return normalizeUser(data?.data ?? data);
+     return normalizeUser(data?.data ?? data);
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao carregar avatar.';
+    throw new Error(message);
+  }
 }
 
 /**
@@ -69,8 +74,13 @@ export async function uploadAvatar(file: AvatarFile): Promise<User> {
  * @returns {Promise<any>} Dados do usuário atualizados.
  */
 export async function removeAvatar(): Promise<User> {
-  const { data } = await api.delete('/v1/users/me/avatar');
-  return normalizeUser(data?.data ?? data);
+  try {
+    const { data } = await api.delete('/v1/users/me/avatar');
+    return normalizeUser(data?.data ?? data);
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao remover avatar.';
+    throw new Error(message);
+  }
 }
 
 /**
@@ -79,8 +89,13 @@ export async function removeAvatar(): Promise<User> {
  * @returns Dados do usuário atualizados.
  */
 export async function updateName(nome: string): Promise<User> {
-  const { data } = await api.patch('/v1/users/me/nome', { nome });
-  return normalizeUser(data?.data ?? data);
+  try {
+    const { data } = await api.patch('/v1/users/me/nome', { nome });
+    return normalizeUser(data?.data ?? data);
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar nome.';
+    throw new Error(message);
+  }
 }
 
 /**
@@ -89,8 +104,13 @@ export async function updateName(nome: string): Promise<User> {
  * @returns Dados do usuário atualizados.
  */
 export async function updatePhone(telefone: string): Promise<User> {
-  const { data } = await api.patch('/v1/users/me/telefone', { telefone });
-  return normalizeUser(data?.data ?? data);
+  try {
+    const { data } = await api.patch('/v1/users/me/telefone', { telefone });
+    return normalizeUser(data?.data ?? data);
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar telefone.';
+    throw new Error(message);
+  }
 }
 
 /**
@@ -100,24 +120,55 @@ export async function updatePhone(telefone: string): Promise<User> {
  * @returns Dados do usuário atualizados.
  */
 export async function updateLocation(cidade: string, estado: string): Promise<User> {
-  const { data } = await api.patch('/v1/users/me/localizacao', { cidade, estado });
-  return normalizeUser(data?.data ?? data);
+  try {
+    const { data } = await api.patch('/v1/users/me/localizacao', { cidade, estado });
+    return normalizeUser(data?.data ?? data);
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar localização.';
+    throw new Error(message);
+  }
 }
 
 /**
  * Inicia fluxo de atualização de e-mail (solicita token)
  */
 export async function updateEmail(email: string, currentPassword: string): Promise<{ message: string }> {
-  const { data } = await api.patch('/v1/users/me/email', { email, currentPassword });
-  return { message: data?.message ?? 'Solicitação registrada. Verifique o novo e-mail.' };
+  try {
+    const { data } = await api.patch('/v1/users/me/email', { email, currentPassword });
+    return { message: data?.message ?? 'Solicitação registrada. Verifique o novo e-mail.' };
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao solicitar alteração de e-mail.';
+    throw new Error(message);
+  }
 }
 
 /**
  * Confirma alteração de e-mail com token recebido
  */
 export async function confirmEmailChange(token: string): Promise<User> {
-  const { data } = await api.post('/v1/users/me/email/confirm', { token });
-  return normalizeUser(data?.data ?? data);
+  try {
+    const { data } = await api.post('/v1/users/me/email/confirm', { token });
+    return normalizeUser(data?.data ?? data);
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao confirmar alteração de e-mail.';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Altera a senha do usuário autenticado.
+ * @param currentPassword Senha atual do usuário
+ * @param newPassword Nova senha a ser definida
+ * @returns Mensagem de sucesso ou erro
+ */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  try {
+    const { data } = await api.post('/v1/users/me/password', { currentPassword, newPassword });
+    return { message: data?.message ?? 'Senha alterada com sucesso.' };
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao alterar senha.';
+    throw new Error(message);
+  }
 }
 
 /**
@@ -163,4 +214,7 @@ const normalizeUser = (u: any): User => ({
   ativo: u?.ativo ?? false,
 });
 
-export default { uploadAvatar, removeAvatar, updateName, updatePhone, updateLocation, updateEmail, confirmEmailChange };
+const profileService = { uploadAvatar, removeAvatar, updateName, updatePhone, updateLocation, updateEmail, confirmEmailChange, changePassword };
+
+export default profileService;
+export { profileService };

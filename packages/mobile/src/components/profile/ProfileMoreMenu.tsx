@@ -11,7 +11,7 @@ export interface ProfileMoreMenuProps {
   profileUrl: string;
   // Opcional: âncora para o Menu do Paper
   anchor: React.ReactNode;
-  onNavigatePrivacySettings?: () => void; // opcional
+  onNavigateSettings?: () => void; // opcional
 }
 
 const ProfileMoreMenu: React.FC<ProfileMoreMenuProps> = ({
@@ -20,7 +20,7 @@ const ProfileMoreMenu: React.FC<ProfileMoreMenuProps> = ({
   profileId,
   profileUrl,
   anchor,
-  onNavigatePrivacySettings,
+  onNavigateSettings,
 }) => {
   const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
   const { isAuthenticated, logout } = useAuth();
@@ -97,14 +97,14 @@ const ProfileMoreMenu: React.FC<ProfileMoreMenuProps> = ({
     );
   }, [onDismiss, profileId, showToast]);
 
-  const onPrivacySettings = useCallback(() => {
+  const onSettings = useCallback(() => {
     onDismiss();
-    if (onNavigatePrivacySettings) {
-      onNavigatePrivacySettings();
+    if (onNavigateSettings) {
+      onNavigateSettings();
     } else {
       console.log('Abrir configurações de privacidade (placeholder) para:', { profileId });
     }
-  }, [onDismiss, onNavigatePrivacySettings, profileId]);
+  }, [onDismiss, onNavigateSettings, profileId]);
 
   return (
     <>
@@ -132,9 +132,9 @@ const ProfileMoreMenu: React.FC<ProfileMoreMenuProps> = ({
         />
         {/* Opcional */}
         <List.Item
-          title="Configurações de privacidade"
-          left={(props) => <List.Icon {...props} icon="shield-lock-outline" />}
-          onPress={onPrivacySettings}
+          title="Configurações"
+          left={(props) => <List.Icon {...props} icon="cog-outline" />}
+          onPress={onSettings}
         />
 
         {isAuthenticated && (

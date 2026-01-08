@@ -1,8 +1,9 @@
 import { Response } from 'express';
+import crypto from 'crypto';
 import User from '../models'; // O seu User.ts (Model) já está correto e pronto
 import logger, { loggerUtils, signAccessToken } from '../utils';
 import { AuthRequest } from '../middleware/auth';
-import { RegisterInput, LoginInput } from '../validation/authValidation';
+import { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from '../validation/authValidation';
 import { emailService } from '../services/emailService';
 
 interface AuthenticatedRequest extends AuthRequest {
@@ -380,6 +381,111 @@ export const updatePreferences = async (req: AuthRequest, res: Response): Promis
         });
     } catch (error) {
         logger.error('Erro ao atualizar preferências:', error);
+        res.status(500).json({ success: false, message: 'Erro interno do servidor' });
+    }
+};
+
+/**
+ * @async
+ * @function forgotPassword
+ * @description Inicia o processo de recuperação de senha, gerando um token e enviando por e-mail.
+ *
+ * @param {AuthRequest} req - Requisição contendo o e-mail do usuário.
+ * @param {Response} res - Resposta confirmando o envio do e-mail.
+ * @returns {Promise<void>}
+ */
+export const forgotPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const { email } = req.body as ForgotPasswordInput;
+        const user = await User.findOne({ email });
+
+        // Sempre respondemos sucesso para evitar enumeração, mas só processa se existir
+        if (!user) {
+            res.json({ success: true, message: 'Se este e-mail existir, enviaremos instruções em breve.' });
+            return;
+        }
+
+        const token = crypto.randomBytes(32).toString('hex');
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const expires = new Date(Date.now() + 60 * 60 * 1000); // 1h
+
+        user.resetPasswordToken = tokenHash;
+        user.resetPasswordExpires = expires;
+        await user.save();
+
+        try {
+            await emailService.sendResetPasswordEmail(user.email, token);
+        } catch (mailErr) {
+            logger.error('forgotPassword.emailError', mailErr);
+        }
+
+        res.json({ success: true, message: 'Se este e-mail existir, enviaremos instruções em breve.' });
+    } catch (error) {
+        logger.error('Erro no forgotPassword:', error);
+        res.status(500).json({ success: false, message: 'Erro interno do servidor' });
+    }
+};
+
+/**
+ * @async
+ * @function resetPassword
+ * @description Redefine a senha do usuário utilizando um token válido.
+ *
+ * @param {AuthRequest} req - Requisição contendo o token e a nova senha.
+ * @param {Response} res - Resposta confirmando a redefinição da senha.
+ * @returns {Promise<void>}
+ */
+export const resetPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const body = req.body as any;
+        const token = body.token;
+        const senha = body.senha || body.password; // Aceita 'senha' (do transform) ou 'password' (fallback)
+
+        if (!token || !senha) {
+            res.status(400).json({ success: false, message: 'Token e nova senha são obrigatórios.' });
+            return;
+        }
+
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const user = await User.findOne({
+            resetPasswordToken: tokenHash,
+            resetPasswordExpires: { $gt: new Date() },
+        }).select('+senha');
+
+        if (!user) {
+            res.status(400).json({ success: false, message: 'Token inválido ou expirado.' });
+            return;
+        }
+
+        // Atualiza a senha. O hook pre('save') no model User fará o hash automaticamente.
+        user.senha = senha;
+        
+        // Limpa explicitamente os campos de recuperação para invalidar o token atual
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        
+        // Salva as alterações no banco de dados
+        await user.save();
+        
+        logger.info('Senha redefinida com sucesso', { userId: user._id, email: user.email });
+
+        const accessToken = signAccessToken({ userId: user._id });
+
+        res.json({
+            success: true,
+            message: 'Senha redefinida com sucesso.',
+            data: {
+                token: accessToken,
+                user: {
+                    id: user._id,
+                    nome: user.nome,
+                    email: user.email,
+                    tipo: mapTipoToApi((user as any).tipo),
+                },
+            },
+        });
+    } catch (error) {
+        logger.error('Erro no resetPassword:', error);
         res.status(500).json({ success: false, message: 'Erro interno do servidor' });
     }
 };

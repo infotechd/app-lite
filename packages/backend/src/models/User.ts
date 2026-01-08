@@ -36,6 +36,9 @@ export interface IUser extends Document {
     pendingEmail?: string;
     emailChangeToken?: string;
     emailChangeExpires?: Date;
+    // Campos temporários para reset de senha
+    resetPasswordToken?: string;
+    resetPasswordExpires?: Date;
 }
 
 const UserSchema = new Schema<IUser>({
@@ -189,6 +192,15 @@ const UserSchema = new Schema<IUser>({
     },
     emailChangeExpires: {
         type: Date,
+    },
+    resetPasswordToken: {
+        type: String,
+        trim: true,
+        select: false,
+    },
+    resetPasswordExpires: {
+        type: Date,
+        select: false,
     }
 }, {
     timestamps: true
@@ -204,6 +216,8 @@ UserSchema.index({ cnpj: 1 }, { unique: true, sparse: true });
 // Índices auxiliares para troca de e-mail
 UserSchema.index({ pendingEmail: 1 }, { sparse: true });
 UserSchema.index({ emailChangeToken: 1 }, { sparse: true });
+UserSchema.index({ resetPasswordToken: 1 }, { sparse: true });
+UserSchema.index({ resetPasswordExpires: 1 }, { sparse: true });
 
 // Hash da senha antes de salvar
 UserSchema.pre('save', async function(this: any, next) {

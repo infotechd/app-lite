@@ -43,6 +43,9 @@ router.patch('/me/telefone', authMiddleware, ...userController.updatePhone);
 // Atualiza a localização do usuário autenticado
 router.patch('/me/localizacao', authMiddleware, ...userController.updateLocation);
 
+// Atualiza a senha do usuário autenticado
+router.post('/me/password', authMiddleware, userController.changePassword);
+
 // Solicita alteração de e-mail (gera token e envia e-mail)
 router.patch('/me/email', authMiddleware, ...userController.updateEmailRequest);
 
