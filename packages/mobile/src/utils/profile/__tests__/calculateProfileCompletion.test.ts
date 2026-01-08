@@ -59,4 +59,34 @@ describe('calculateProfileCompletion', () => {
     // Todos incompletos (avatar/telefone/cidade inválidos; CPF tem 11 dígitos mas resto incompleto)
     expect(pct).toBe(0);
   });
+
+  it('não deve quebrar quando localizacao existe mas cidade/estado são undefined', () => {
+    const user: User = {
+      ...baseUser,
+      tipoPessoa: 'PJ',
+      localizacao: {
+        // @ts-ignore
+        cidade: undefined,
+        // @ts-ignore
+        estado: undefined,
+      },
+    } as any;
+
+    expect(() => {
+      calculateProfileCompletion(user);
+    }).not.toThrow();
+  });
+
+  it('não deve quebrar quando localizacao é um objeto vazio', () => {
+    const user: User = {
+      ...baseUser,
+      tipoPessoa: 'PJ',
+      // @ts-ignore
+      localizacao: {},
+    } as any;
+
+    expect(() => {
+      calculateProfileCompletion(user);
+    }).not.toThrow();
+  });
 });

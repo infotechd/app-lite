@@ -46,7 +46,9 @@ export function getProfileChecklistItems(user: User, navigate?: (route: string) 
   // Validação de localização: requer presença do objeto localizacao e preenchimento de cidade/estado
   const hasLocation = Boolean(
     user.localizacao &&
+      typeof user.localizacao.cidade === 'string' &&
       user.localizacao.cidade.trim().length > 0 &&
+      typeof user.localizacao.estado === 'string' &&
       user.localizacao.estado.trim().length > 0,
   );
 
