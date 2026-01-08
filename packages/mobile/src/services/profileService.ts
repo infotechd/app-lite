@@ -105,6 +105,22 @@ export async function updateLocation(cidade: string, estado: string): Promise<Us
 }
 
 /**
+ * Inicia fluxo de atualização de e-mail (solicita token)
+ */
+export async function updateEmail(email: string, currentPassword: string): Promise<{ message: string }> {
+  const { data } = await api.patch('/v1/users/me/email', { email, currentPassword });
+  return { message: data?.message ?? 'Solicitação registrada. Verifique o novo e-mail.' };
+}
+
+/**
+ * Confirma alteração de e-mail com token recebido
+ */
+export async function confirmEmailChange(token: string): Promise<User> {
+  const { data } = await api.post('/v1/users/me/email/confirm', { token });
+  return normalizeUser(data?.data ?? data);
+}
+
+/**
  * Mapeia o tipo do backend (pt/en) para o tipo usado no app
  */
 const toAppTipo = (t: string): User['tipo'] => {
@@ -147,4 +163,4 @@ const normalizeUser = (u: any): User => ({
   ativo: u?.ativo ?? false,
 });
 
-export default { uploadAvatar, removeAvatar, updateName, updatePhone, updateLocation };
+export default { uploadAvatar, removeAvatar, updateName, updatePhone, updateLocation, updateEmail, confirmEmailChange };

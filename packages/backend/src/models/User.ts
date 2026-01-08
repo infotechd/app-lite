@@ -31,6 +31,11 @@ export interface IUser extends Document {
     createdAt: Date;
     updatedAt: Date;
     comparePassword(password: string): Promise<boolean>;
+
+    // Campos temporários para troca de e-mail
+    pendingEmail?: string;
+    emailChangeToken?: string;
+    emailChangeExpires?: Date;
 }
 
 const UserSchema = new Schema<IUser>({
@@ -170,6 +175,20 @@ const UserSchema = new Schema<IUser>({
     preferencias: {
         type: Object,
         default: {}
+    },
+
+    pendingEmail: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        match: [/^\S+@\S+\.\S+$/, 'Email inválido'],
+    },
+    emailChangeToken: {
+        type: String,
+        trim: true,
+    },
+    emailChangeExpires: {
+        type: Date,
     }
 }, {
     timestamps: true
@@ -182,6 +201,9 @@ UserSchema.index({ ativo: 1 });
 UserSchema.index({ tipoPessoa: 1 });
 UserSchema.index({ cpf: 1 }, { unique: true, sparse: true });
 UserSchema.index({ cnpj: 1 }, { unique: true, sparse: true });
+// Índices auxiliares para troca de e-mail
+UserSchema.index({ pendingEmail: 1 }, { sparse: true });
+UserSchema.index({ emailChangeToken: 1 }, { sparse: true });
 
 // Hash da senha antes de salvar
 UserSchema.pre('save', async function(this: any, next) {
