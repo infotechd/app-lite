@@ -63,7 +63,7 @@ export const ProfileCompletionChecklist: React.FC<ProfileCompletionChecklistProp
   const completion = useMemo(() => calculateProfileCompletion(user), [user]);
 
   // Regra de negócio: Se o perfil já estiver totalmente completo (100%), o componente não deve ser exibido na tela
-  if (completion >= 100) return null;
+  if (completion > 100) return null;
 
   // Garante que o valor da porcentagem de progresso esteja dentro do intervalo seguro de 0 a 100
   const progressPct = Math.max(0, Math.min(100, completion));
