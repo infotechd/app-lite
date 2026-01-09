@@ -3,8 +3,15 @@ import renderer, { act } from 'react-test-renderer';
 import { ProfileCompletionChecklist } from '../ProfileCompletionChecklist';
 import { User } from '@/types';
 import AnalyticsService from '@/services/AnalyticsService';
-import * as completionUtils from '@/utils/profile/calculateProfileCompletion';
-import * as checklistUtils from '@/utils/profile/getProfileChecklistItems';
+import { calculateProfileCompletion } from '../../../utils/profile/calculateProfileCompletion';
+import { getProfileChecklistItems } from '../../../utils/profile/getProfileChecklistItems';
+
+(global as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+const mockNavigateTo = jest.fn();
+jest.mock('../../../hooks/useChecklistNavigation', () => ({
+  useChecklistNavigation: () => ({ navigateTo: mockNavigateTo })
+}));
 
 // Mock do React Native seguindo o padrão do projeto
 jest.mock('react-native', () => {
@@ -36,13 +43,8 @@ jest.mock('@/services/AnalyticsService', () => ({
   track: jest.fn(),
 }));
 
-// Mock dos utilitários de perfil
-jest.mock('@/utils/profile/calculateProfileCompletion');
-jest.mock('@/utils/profile/getProfileChecklistItems');
-
 describe('ProfileCompletionChecklist', () => {
   const mockOnDismiss = jest.fn();
-  const mockNavigate = jest.fn();
 
   const getBaseUser = (): User => ({
     id: '1',
@@ -55,47 +57,59 @@ describe('ProfileCompletionChecklist', () => {
     updatedAt: new Date().toISOString(),
   });
 
+  const getCompleteUser = (): User => ({
+    ...getBaseUser(),
+    avatar: 'http://image.com',
+    telefone: '(11) 99999-9999',
+    localizacao: { cidade: 'SP', estado: 'SP' },
+    cpf: '52998224725', // CPF válido
+  });
+
+  const hasText = (tree: any, text: string) => {
+    return tree.root.findAllByType('text').some((t: any) => {
+      const children = t.props.children;
+      const content = Array.isArray(children) ? children.join('') : String(children);
+      return content.includes(text);
+    });
+  };
+
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('não deve renderizar nada se o perfil estiver 100% completo', () => {
-    (completionUtils.calculateProfileCompletion as jest.Mock).mockReturnValue(100);
-    (checklistUtils.getProfileChecklistItems as jest.Mock).mockReturnValue([]);
-
-    const tree = renderer.create(
-      <ProfileCompletionChecklist user={getBaseUser()} onDismiss={mockOnDismiss} />
-    );
+    let tree: any;
+    act(() => {
+      tree = renderer.create(
+        <ProfileCompletionChecklist user={getCompleteUser()} onDismiss={mockOnDismiss} />
+      );
+    });
     expect(tree.toJSON()).toBeNull();
   });
 
   it('deve renderizar a porcentagem de conclusão e os itens para um perfil parcial', () => {
-    console.log('Is mock?', (completionUtils.calculateProfileCompletion as any)._isMockFunction);
-    (completionUtils.calculateProfileCompletion as jest.Mock).mockReturnValue(0);
-    (checklistUtils.getProfileChecklistItems as jest.Mock).mockReturnValue([
-        { id: 'avatar', title: 'Adicionar foto', isComplete: false, onPress: jest.fn() },
-        { id: 'cpf', title: 'Adicionar CPF', isComplete: false, onPress: jest.fn() }
-    ]);
-
-    const tree = renderer.create(
-      <ProfileCompletionChecklist user={getBaseUser()} onDismiss={mockOnDismiss} navigate={mockNavigate} />
-    );
+    // getBaseUser() tem 0% pois faltam todos os itens obrigatórios (avatar, phone, location, cpf)
+    let tree: any;
+    act(() => {
+      tree = renderer.create(
+        <ProfileCompletionChecklist user={getBaseUser()} onDismiss={mockOnDismiss} />
+      );
+    });
     
     expect(tree.toJSON()).not.toBeNull();
 
-    const texts = tree.root.findAllByType('text');
-    expect(texts.some(t => t.props.children?.toString().includes('0%'))).toBe(true);
-    expect(texts.some(t => t.props.children === 'Adicionar foto')).toBe(true);
-    expect(texts.some(t => t.props.children === 'Adicionar CPF')).toBe(true);
+    expect(hasText(tree, '0%')).toBe(true);
+    expect(hasText(tree, 'Adicionar foto de perfil')).toBe(true);
+    expect(hasText(tree, 'Adicionar CPF')).toBe(true);
   });
 
   it('deve chamar onDismiss quando o botão de fechar é clicado', () => {
-    (completionUtils.calculateProfileCompletion as jest.Mock).mockReturnValue(50);
-    (checklistUtils.getProfileChecklistItems as jest.Mock).mockReturnValue([]);
-
-    const tree = renderer.create(
-      <ProfileCompletionChecklist user={getBaseUser()} onDismiss={mockOnDismiss} />
-    );
+    let tree: any;
+    act(() => {
+      tree = renderer.create(
+        <ProfileCompletionChecklist user={getBaseUser()} onDismiss={mockOnDismiss} />
+      );
+    });
     
     const pressables = tree.root.findAllByType('pressable');
     const closeButton = pressables.find(p => p.props.accessibilityLabel === 'Dispensar checklist');
@@ -109,22 +123,20 @@ describe('ProfileCompletionChecklist', () => {
     expect(AnalyticsService.track).toHaveBeenCalledWith('profile_checklist_dismiss', expect.any(Object));
   });
 
-  it('deve chamar navigate quando um item do checklist é clicado', () => {
-    const mockItemPress = jest.fn();
-    (completionUtils.calculateProfileCompletion as jest.Mock).mockReturnValue(0);
-    // Nota: O componente chama item.onPress(), mas getProfileChecklistItems real gera o onPress que usa o navigate passado por prop.
-    // No nosso mock, vamos simular que o item tem o título correto.
-    (checklistUtils.getProfileChecklistItems as jest.Mock).mockImplementation((user, navigate) => [
-        { id: 'avatar', title: 'Adicionar foto', isComplete: false, onPress: () => navigate('EditProfile') }
-    ]);
-
-    const tree = renderer.create(
-      <ProfileCompletionChecklist user={getBaseUser()} onDismiss={mockOnDismiss} navigate={mockNavigate} />
-    );
+  it('deve chamar navigateTo do hook quando um item do checklist é clicado', () => {
+    let tree: any;
+    act(() => {
+      tree = renderer.create(
+        <ProfileCompletionChecklist user={getBaseUser()} onDismiss={mockOnDismiss} />
+      );
+    });
 
     const pressables = tree.root.findAllByType('pressable');
     const item = pressables.find(p => {
-        try { return p.findByType('text').props.children === 'Adicionar foto'; } catch { return false; }
+        try {
+          const textComponent = p.findByType('text');
+          return textComponent.props.children === 'Adicionar';
+        } catch { return false; }
     });
 
     expect(item).toBeTruthy();
@@ -132,28 +144,30 @@ describe('ProfileCompletionChecklist', () => {
         item!.props.onPress();
     });
 
-    expect(mockNavigate).toHaveBeenCalledWith('EditProfile');
+    expect(mockNavigateTo).toHaveBeenCalledWith('avatar');
   });
 
   it('deve mostrar itens como concluídos quando isComplete é true', () => {
-    (completionUtils.calculateProfileCompletion as jest.Mock).mockReturnValue(50);
-    (checklistUtils.getProfileChecklistItems as jest.Mock).mockReturnValue([
-        { id: 'avatar', title: 'Adicionar foto', isComplete: true, onPress: jest.fn() },
-        { id: 'cpf', title: 'Adicionar CPF', isComplete: false, onPress: jest.fn() }
-    ]);
+    const halfUser = {
+        ...getBaseUser(),
+        avatar: 'http://image.com',
+        telefone: '(11) 99999-9999'
+    };
 
-    const tree = renderer.create(
-      <ProfileCompletionChecklist user={getBaseUser()} onDismiss={mockOnDismiss} />
-    );
+    let tree: any;
+    act(() => {
+      tree = renderer.create(
+        <ProfileCompletionChecklist user={halfUser} onDismiss={mockOnDismiss} />
+      );
+    });
 
-    const texts = tree.root.findAllByType('text');
-    expect(texts.some(t => t.props.children?.toString().includes('50%'))).toBe(true);
+    expect(hasText(tree, '50%')).toBe(true);
     
     const views = tree.root.findAllByType('view');
     const completedIcons = views.filter(v => v.props.accessibilityLabel === 'Concluído');
     const pendingIcons = views.filter(v => v.props.accessibilityLabel === 'Pendente');
 
-    expect(completedIcons.length).toBe(1);
-    expect(pendingIcons.length).toBe(1);
+    expect(completedIcons.length).toBe(2);
+    expect(pendingIcons.length).toBe(2);
   });
 });

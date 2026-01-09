@@ -79,4 +79,8 @@ export type ProfileStackParamList = {
     EditProfile: undefined;
     /** Tela para alteração de senha (dentro da área logada) */
     ChangePassword: undefined;
+    /** Tela para edição de documentos (CPF/CNPJ) */
+    EditProfileDocument: { type: 'CPF' | 'CNPJ' };
+    /** Tela para edição de dados de empresa (PJ) */
+    EditProfileCompany: undefined;
 };

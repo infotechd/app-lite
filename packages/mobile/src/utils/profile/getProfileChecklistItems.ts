@@ -5,15 +5,19 @@ import { validateCPF } from '../cpf';
  * Representa um item individual no checklist de conclusão de perfil.
  */
 export type ChecklistItem = {
-  /** Identificador único do item (ex: 'avatar', 'phone') */
-  id: string;
-  /** Título descritivo da ação necessária exibido para o usuário */
+  id: ChecklistTarget;
   title: string;
-  /** Indica se o requisito já foi preenchido pelo usuário com dados válidos */
   isComplete: boolean;
-  /** Função disparada ao interagir com o item para realizar a ação necessária */
-  onPress: () => void;
 };
+
+export type ChecklistTarget =
+  | 'avatar'
+  | 'phone'
+  | 'location'
+  | 'cpf'
+  | 'cnpj'
+  | 'razaoSocial'
+  | 'nomeFantasia';
 
 /**
  * Gera dinamicamente a lista de itens do checklist de completar perfil com base nos dados atuais do usuário.
@@ -22,23 +26,9 @@ export type ChecklistItem = {
  * preencher, adaptando os requisitos conforme o tipo de conta (Pessoa Física ou Jurídica).
  * 
  * @param {User} user - O objeto de usuário contendo os dados atuais do perfil.
- * @param {Function} [navigate] - Função opcional de navegação para redirecionar o usuário às telas de edição.
  * @returns {ChecklistItem[]} Uma lista de objetos `ChecklistItem` representando os passos pendentes ou concluídos.
  */
-export function getProfileChecklistItems(user: User, navigate?: (route: string) => void): ChecklistItem[] {
-  /**
-   * Helper interno para encapsular a lógica de navegação.
-   * Caso a função navigate não seja provida, realiza um log para propósitos de depuração.
-   */
-  const go = (route: string) => () => {
-    // Só executa a navegação real se a rota não for um placeholder
-    if (typeof navigate === 'function' && !route.includes('Placeholder')) {
-      navigate(route);
-    } else {
-      console.log('Ação de navegação (simulada ou placeholder):', route);
-    }
-  };
-
+export function getProfileChecklistItems(user: User): ChecklistItem[] {
   // Verificações de preenchimento para campos básicos de contato e identificação visual
   const hasAvatar = typeof user.avatar === 'string' && user.avatar.trim().length > 0;
   const hasPhone = typeof user.telefone === 'string' && user.telefone.trim().length > 0;
@@ -68,24 +58,9 @@ export function getProfileChecklistItems(user: User, navigate?: (route: string) 
    * Lista base de itens comum a todos os tipos de usuários.
    */
   const items: ChecklistItem[] = [
-    {
-      id: 'avatar',
-      title: 'Adicionar foto de perfil',
-      isComplete: hasAvatar,
-      onPress: go('EditProfile'),
-    },
-    {
-      id: 'phone',
-      title: 'Adicionar telefone',
-      isComplete: hasPhone,
-      onPress: go('EditProfile'),
-    },
-    {
-      id: 'location',
-      title: 'Adicionar localização',
-      isComplete: hasLocation,
-      onPress: go('EditProfile'),
-    },
+    { id: 'avatar', title: 'Adicionar foto de perfil', isComplete: hasAvatar },
+    { id: 'phone', title: 'Adicionar telefone', isComplete: hasPhone },
+    { id: 'location', title: 'Adicionar localização', isComplete: hasLocation },
   ];
 
   /**
@@ -94,31 +69,11 @@ export function getProfileChecklistItems(user: User, navigate?: (route: string) 
    * Usuários PJ precisam preencher CNPJ, Razão Social e Nome Fantasia.
    */
   if (isPF) {
-    items.push({
-      id: 'cpf',
-      title: 'Adicionar CPF',
-      isComplete: hasCPF,
-      onPress: go('ProfileEditCpfPlaceholder'),
-    });
+    items.push({ id: 'cpf', title: 'Adicionar CPF', isComplete: hasCPF });
   } else if (isPJ) {
-    items.push({
-      id: 'cnpj',
-      title: 'Adicionar CNPJ',
-      isComplete: hasCNPJ,
-      onPress: go('ProfileEditCnpjPlaceholder'),
-    });
-    items.push({
-      id: 'razaoSocial',
-      title: 'Adicionar Razão Social',
-      isComplete: hasRazaoSocial,
-      onPress: go('ProfileEditRazaoSocialPlaceholder'),
-    });
-    items.push({
-      id: 'nomeFantasia',
-      title: 'Adicionar Nome Fantasia',
-      isComplete: hasNomeFantasia,
-      onPress: go('ProfileEditNomeFantasiaPlaceholder'),
-    });
+    items.push({ id: 'cnpj', title: 'Adicionar CNPJ', isComplete: hasCNPJ });
+    items.push({ id: 'razaoSocial', title: 'Adicionar Razão Social', isComplete: hasRazaoSocial });
+    items.push({ id: 'nomeFantasia', title: 'Adicionar Nome Fantasia', isComplete: hasNomeFantasia });
   }
 
   return items;

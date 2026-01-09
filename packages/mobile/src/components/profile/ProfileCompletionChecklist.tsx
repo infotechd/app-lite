@@ -7,6 +7,7 @@ import { getProfileChecklistItems } from '@/utils/profile/getProfileChecklistIte
 import { calculateProfileCompletion } from '@/utils/profile/calculateProfileCompletion';
 import { THEME_CONFIG } from '@/constants/config';
 import AnalyticsService from '@/services/AnalyticsService';
+import { useChecklistNavigation } from '@/hooks/useChecklistNavigation';
 
 /**
  * Propriedades para o componente ProfileCompletionChecklist.
@@ -14,12 +15,10 @@ import AnalyticsService from '@/services/AnalyticsService';
  * @interface ProfileCompletionChecklistProps
  * @property {User} user - Objeto contendo os dados do usuário para verificar o progresso do perfil.
  * @property {() => void} onDismiss - Função chamada quando o usuário fecha o checklist.
- * @property {(route: string) => void} [navigate] - Função opcional para navegação entre telas do aplicativo.
  */
 export interface ProfileCompletionChecklistProps {
   user: User;
   onDismiss: () => void;
-  navigate?: (route: string) => void;
 }
 
 /**
@@ -55,15 +54,13 @@ const StatusIcon: React.FC<{ done: boolean }> = ({ done }) => {
  * @param {ProfileCompletionChecklistProps} props - Propriedades do componente.
  * @returns {JSX.Element | null} Retorna o card de checklist ou null se o perfil já estiver 100% completo.
  */
-export const ProfileCompletionChecklist: React.FC<ProfileCompletionChecklistProps> = ({ user, onDismiss, navigate }) => {
-  // Memoiza a lista de itens do checklist para evitar recálculos caros e renderizações desnecessárias
-  const items = useMemo(() => getProfileChecklistItems(user, navigate), [user, navigate]);
-  
-  // Calcula a porcentagem atual de conclusão do perfil com base nos dados fornecidos do usuário
+export const ProfileCompletionChecklist: React.FC<ProfileCompletionChecklistProps> = ({ user, onDismiss }) => {
+  const { navigateTo } = useChecklistNavigation();
+  const items = useMemo(() => getProfileChecklistItems(user), [user]);
   const completion = useMemo(() => calculateProfileCompletion(user), [user]);
 
   // Regra de negócio: Se o perfil já estiver totalmente completo (100%), o componente não deve ser exibido na tela
-  if (completion > 100) return null;
+  if (completion >= 100) return null;
 
   // Garante que o valor da porcentagem de progresso esteja dentro do intervalo seguro de 0 a 100
   const progressPct = Math.max(0, Math.min(100, completion));
@@ -109,15 +106,11 @@ export const ProfileCompletionChecklist: React.FC<ProfileCompletionChecklistProp
                 {item.title}
               </Text>
             </View>
-            
-            {/* Renderização condicional do botão de ação ou indicador de conclusão */}
             {!item.isComplete ? (
               <Pressable
                 onPress={() => {
-                  // Registra o clique no item de checklist para análise de comportamento
                   AnalyticsService.track('profile_checklist_item_click', { item_id: item.id });
-                  // Executa a ação associada ao item (geralmente uma navegação)
-                  item.onPress();
+                  navigateTo(item.id as any);
                 }}
                 accessibilityRole="button"
                 accessibilityLabel={`Ação: ${item.title}`}

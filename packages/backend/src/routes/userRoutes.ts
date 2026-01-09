@@ -52,4 +52,10 @@ router.patch('/me/email', authMiddleware, ...userController.updateEmailRequest);
 // Confirma alteração de e-mail com token
 router.post('/me/email/confirm', authMiddleware, userController.confirmEmailUpdate);
 
+// Atualiza os documentos do usuário autenticado
+router.patch('/me/documents', authMiddleware, ...userController.updateDocuments);
+
+// Atualiza os dados da empresa do usuário autenticado
+router.patch('/me/company-data', authMiddleware, ...userController.updateCompanyData);
+
 export default router;

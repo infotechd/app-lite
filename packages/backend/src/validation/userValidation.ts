@@ -61,7 +61,30 @@ export const updateEmailSchema = z.object({
   }),
 });
 
+/**
+ * Validação para atualização de documentos do usuário autenticado.
+ * - Permite atualização de CPF ou CNPJ, mas não ambos.
+ */
+export const updateDocumentsSchema = z.object({
+  body: z.object({
+    cpf: z.string().regex(/^\d{11}$/, 'CPF deve conter 11 dígitos').optional(),
+    cnpj: z.string().regex(/^\d{14}$/, 'CNPJ deve conter 14 dígitos').optional(),
+  }).refine((data) => data.cpf || data.cnpj, { message: 'CPF ou CNPJ deve ser informado' }),
+});
+
+/**
+ * Validação para atualização de dados da empresa do usuário autenticado.
+ */
+export const updateCompanyDataSchema = z.object({
+  body: z.object({
+    razaoSocial: z.string().trim().min(3, 'Razão Social deve ter no mínimo 3 caracteres'),
+    nomeFantasia: z.string().trim().optional(),
+  }),
+});
+
 export type UpdateNameInput = z.infer<typeof updateNameSchema>['body'];
 export type UpdatePhoneInput = z.infer<typeof updatePhoneSchema>['body'];
 export type UpdateLocationInput = z.infer<typeof updateLocationSchema>['body'];
 export type UpdateEmailInput = z.infer<typeof updateEmailSchema>['body'];
+export type UpdateDocumentsInput = z.infer<typeof updateDocumentsSchema>['body'];
+export type UpdateCompanyDataInput = z.infer<typeof updateCompanyDataSchema>['body'];

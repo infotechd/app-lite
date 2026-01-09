@@ -5,7 +5,7 @@ import { uploadService } from '../services/uploadService';
 import { logger } from '../utils/logger';
 import User from '../models/User';
 import type { AuthRequest } from '../middleware/auth';
-import { updateNameSchema, updatePhoneSchema, updateLocationSchema, updateEmailSchema } from '../validation/userValidation';
+import { updateNameSchema, updatePhoneSchema, updateLocationSchema, updateEmailSchema, updateDocumentsSchema, updateCompanyDataSchema } from '../validation/userValidation';
 import { validate } from '../middleware/validation';
 import { emailService } from '../services/emailService';
 
@@ -420,4 +420,80 @@ export const userController = {
       next(error);
     }
   },
+
+  /**
+   * Atualiza os documentos (CPF, CNPJ) do usuário autenticado.
+   *
+   * Este método realiza as seguintes etapas:
+   * 1. Valida os dados da requisição com base no schema definido.
+   * 2. Recupera o ID do usuário através do token de autenticação.
+   * 3. Atualiza os documentos do usuário no banco de dados.
+   * 4. Retorna os dados atualizados do usuário.
+   *
+   * @param {AuthRequest} req - Objeto de requisição do Express, contendo os dados do usuário autenticado.
+   * @param {Response} res - Objeto de resposta do Express usado para retornar o status e dados do usuário atualizado.
+   * @param {NextFunction} next - Função do Express para passar o controle/erro para o próximo middleware de tratamento.
+   * @returns {Promise<void>} - Retorna uma resposta JSON com o sucesso da operação e os dados do usuário.
+   */
+  updateDocuments: [
+    validate(updateDocumentsSchema),
+    async (req: AuthRequest, res: Response, next: NextFunction) => {
+      try {
+        const userId = req.user!.id;
+        const { cpf, cnpj } = req.body as { cpf?: string; cnpj?: string };
+        const updateData: any = {};
+        if (cpf) updateData.cpf = cpf.replace(/\D/g, '');
+        if (cnpj) updateData.cnpj = cnpj.replace(/\D/g, '');
+
+        const updatedUser = await User.findByIdAndUpdate(userId, updateData, { new: true }).select('-senha -password');
+        if (!updatedUser) {
+          return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+        }
+
+        res.status(200).json({ success: true, message: 'Documentos atualizados com sucesso.', data: updatedUser });
+      } catch (error: any) {
+        logger.error('userController.updateDocuments.error', { error: error.message, userId: req.user?.id });
+        next(error);
+      }
+    }
+  ],
+
+  /**
+   * Atualiza os dados da empresa (razão social, nome fantasia) do usuário autenticado.
+   *
+   * Este método realiza as seguintes etapas:
+   * 1. Valida os dados da requisição com base no schema definido.
+   * 2. Recupera o ID do usuário através do token de autenticação.
+   * 3. Atualiza os dados da empresa do usuário no banco de dados.
+   * 4. Retorna os dados atualizados do usuário.
+   *
+   * @param {AuthRequest} req - Objeto de requisição do Express, contendo os dados do usuário autenticado.
+   * @param {Response} res - Objeto de resposta do Express usado para retornar o status e dados do usuário atualizado.
+   * @param {NextFunction} next - Função do Express para passar o controle/erro para o próximo middleware de tratamento.
+   * @returns {Promise<void>} - Retorna uma resposta JSON com o sucesso da operação e os dados do usuário.
+   */
+  updateCompanyData: [
+    validate(updateCompanyDataSchema),
+    async (req: AuthRequest, res: Response, next: NextFunction) => {
+      try {
+        const userId = req.user!.id;
+        const { razaoSocial, nomeFantasia } = req.body as { razaoSocial: string; nomeFantasia?: string };
+
+        const updatedUser = await User.findByIdAndUpdate(
+          userId,
+          { razaoSocial, nomeFantasia },
+          { new: true }
+        ).select('-senha -password');
+
+        if (!updatedUser) {
+          return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+        }
+
+        res.status(200).json({ success: true, message: 'Dados da empresa atualizados com sucesso.', data: updatedUser });
+      } catch (error: any) {
+        logger.error('userController.updateCompanyData.error', { error: error.message, userId: req.user?.id });
+        next(error);
+      }
+    }
+  ],
 };

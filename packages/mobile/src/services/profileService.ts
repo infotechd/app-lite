@@ -172,6 +172,36 @@ export async function changePassword(currentPassword: string, newPassword: strin
 }
 
 /**
+ * Atualiza os dados da empresa do usuário autenticado.
+ * @param data Objeto contendo os dados da empresa (razaoSocial, nomeFantasia)
+ * @returns Dados do usuário atualizados.
+ */
+export async function updateCompanyData(data: { razaoSocial: string; nomeFantasia?: string }): Promise<User> {
+  try {
+    const { data: res } = await api.patch('/v1/users/me/company-data', data);
+    return normalizeUser(res?.data ?? res);
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar dados da empresa.';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Atualiza os documentos do usuário autenticado (CPF e/ou CNPJ).
+ * @param data Objeto contendo CPF e/ou CNPJ a serem atualizados
+ * @returns Dados do usuário atualizados.
+ */
+export async function updateDocuments(data: { cpf?: string; cnpj?: string }): Promise<User> {
+  try {
+    const { data: res } = await api.patch('/v1/users/me/documents', data);
+    return normalizeUser(res?.data ?? res);
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar documentos.';
+    throw new Error(message);
+  }
+}
+
+/**
  * Mapeia o tipo do backend (pt/en) para o tipo usado no app
  */
 const toAppTipo = (t: string): User['tipo'] => {
@@ -207,14 +237,14 @@ const normalizeUser = (u: any): User => ({
   createdAt: String(u?.createdAt ?? new Date().toISOString()),
   updatedAt: String(u?.updatedAt ?? new Date().toISOString()),
   tipoPessoa: u?.tipoPessoa === 'PJ' ? 'PJ' : 'PF',
-  cpf: u?.cpf ?? undefined,
-  cnpj: u?.cnpj ?? undefined,
+  cpf: typeof u?.cpf === 'string' ? u.cpf.replace(/\D/g, '') : undefined,
+  cnpj: typeof u?.cnpj === 'string' ? u.cnpj.replace(/\D/g, '') : undefined,
   razaoSocial: u?.razaoSocial ?? undefined,
   nomeFantasia: u?.nomeFantasia ?? undefined,
   ativo: u?.ativo ?? false,
 });
 
-const profileService = { uploadAvatar, removeAvatar, updateName, updatePhone, updateLocation, updateEmail, confirmEmailChange, changePassword };
+const profileService = { uploadAvatar, removeAvatar, updateName, updatePhone, updateLocation, updateEmail, confirmEmailChange, changePassword, updateCompanyData, updateDocuments };
 
 export default profileService;
 export { profileService };

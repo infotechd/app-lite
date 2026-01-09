@@ -89,7 +89,6 @@ const UserProfileView: React.FC<Props> = ({ isLoading, showSkeleton }) => {
           <View style={{ marginTop: spacing.md }}>
             <ProfileCompletionChecklist
               user={user as any}
-              navigate={(route) => (navigation as any).navigate(route)}
               onDismiss={() => {
                 sessionStore.dismissProfileChecklist();
                 setChecklistDismissed(true);
