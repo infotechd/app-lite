@@ -62,8 +62,8 @@ const normalizeUser = (u: AnyObject): User => ({
 
     // Mapeamento de campos específicos de PF/PJ adicionados recentemente
     tipoPessoa: (u.tipoPessoa === 'PJ') ? 'PJ' : 'PF',
-    cpf: u.cpf ?? undefined,
-    cnpj: u.cnpj ?? undefined,
+    cpf: typeof u.cpf === 'string' ? u.cpf.replace(/\D/g, '') : undefined,
+    cnpj: typeof u.cnpj === 'string' ? u.cnpj.replace(/\D/g, '') : undefined,
     razaoSocial: u.razaoSocial ?? undefined,
     nomeFantasia: u.nomeFantasia ?? undefined,
     ativo: u.ativo ?? false,

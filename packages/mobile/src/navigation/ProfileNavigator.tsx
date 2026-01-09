@@ -6,6 +6,8 @@ import Settings from '@/screens/profile/Settings';
 import Notifications from '@/screens/profile/Notifications';
 import EditProfile from '@/screens/profile/EditProfileScreen';
 import ChangePasswordScreen from '@/screens/profile/ChangePasswordScreen';
+import EditProfileDocumentScreen from '@/screens/profile/EditProfileDocumentScreen';
+import EditProfileCompanyScreen from '@/screens/profile/EditProfileCompanyScreen';
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
@@ -17,6 +19,8 @@ const ProfileNavigator: React.FC = () => {
             <Stack.Screen name="Notifications" component={Notifications} options={{ title: 'Notificações' }} />
             <Stack.Screen name="EditProfile" component={EditProfile} options={{ title: 'Editar Perfil' }} />
             <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ title: 'Alterar senha' }} />
+            <Stack.Screen name="EditProfileDocument" component={EditProfileDocumentScreen} options={{ title: 'Editar documento' }} />
+            <Stack.Screen name="EditProfileCompany" component={EditProfileCompanyScreen} options={{ title: 'Dados da empresa' }} />
         </Stack.Navigator>
     );
 };
