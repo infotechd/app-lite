@@ -32,8 +32,8 @@ export const ofertaFiltersSchema = z.object({
         comMidia: z.coerce.boolean().optional(),
         tipoPessoa: z.enum(TIPO_PESSOA_OPTIONS).optional(),
         // Coordenadas para ordenação por distância
-        lat: z.coerce.number().optional(),
-        lng: z.coerce.number().optional(),
+        lat: z.coerce.number().min(-90, 'Latitude inválida').max(90, 'Latitude inválida').optional(),
+        lng: z.coerce.number().min(-180, 'Longitude inválida').max(180, 'Longitude inválida').optional(),
     }).superRefine((q, ctx) => {
         // Validação: precoMin não pode ser maior que precoMax
         if (typeof q.precoMin === 'number' && typeof q.precoMax === 'number' && q.precoMin > q.precoMax) {

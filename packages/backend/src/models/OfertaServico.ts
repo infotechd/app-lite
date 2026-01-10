@@ -268,7 +268,8 @@ OfertaServicoSchema.index({
         titulo: 10,
         descricao: 5,
         tags: 1
-    }
+    },
+    default_language: 'portuguese'
 });
 
 // Virtual para URL completa das imagens (robustez para dados legados)
@@ -316,9 +317,14 @@ OfertaServicoSchema.pre('save', function(next) {
                 ...(loc || {}),
                 location: { type: 'Point', coordinates: [lng, lat] }
             };
-        } else if (loc && loc.location) {
-            const { location, ...rest } = loc;
-            (this as any).localizacao = { ...rest };
+        } else if (loc?.location?.coordinates?.length === 2) {
+            // Se coordenadas não existem mas location existe, preenche as coordenadas
+            const [lon, lati] = loc.location.coordinates;
+            if (typeof lon === 'number' && typeof lati === 'number') {
+                if (!this.localizacao.coordenadas) {
+                    this.localizacao.coordenadas = { latitude: lati, longitude: lon };
+                }
+            }
         }
         next();
     } catch (e) {
@@ -342,14 +348,19 @@ OfertaServicoSchema.pre('findOneAndUpdate', function(next) {
                 update['localizacao'] = newLoc;
             }
             this.setUpdate(update);
-        } else if (loc && loc.location && (!coords || typeof coords.latitude !== 'number' || typeof coords.longitude !== 'number')) {
-            const { location, ...rest } = loc;
-            if (update.$set && update.$set['localizacao']) {
-                update.$set['localizacao'] = rest;
-            } else {
-                update['localizacao'] = rest;
+        } else if (loc?.location?.coordinates?.length === 2) {
+            // Se tem location mas não coordenadas, sincroniza coordenadas
+            const [lon, lati] = loc.location.coordinates;
+            if (typeof lon === 'number' && typeof lati === 'number') {
+                loc.coordenadas = { latitude: lati, longitude: lon };
+                // Garantir que a alteração seja refletida no update
+                if (update.$set && update.$set['localizacao']) {
+                    update.$set['localizacao'] = loc;
+                } else {
+                    update['localizacao'] = loc;
+                }
+                this.setUpdate(update);
             }
-            this.setUpdate(update);
         }
         next();
     } catch (e) {
