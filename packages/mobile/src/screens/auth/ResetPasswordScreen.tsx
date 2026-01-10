@@ -46,7 +46,7 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation, route }) => {
             setLoading(true);
             
             // Chama a API de redefinição de senha passando o token e a nova senha limpos.
-            const res = await authService.resetPassword(token.trim(), password.trim());
+            await authService.resetPassword(token.trim(), password.trim());
             
             // Exibe mensagem de sucesso caso a API retorne sem erros.
             Alert.alert('Sucesso', 'Senha redefinida com sucesso.');
