@@ -35,9 +35,7 @@ export function getProfileChecklistItems(user: User): ChecklistItem[] {
   
   // Validação de localização: requer presença do objeto localizacao e preenchimento de cidade/estado
   const hasLocation = Boolean(
-    user.localizacao &&
-      user.localizacao.cidade.trim().length > 0 &&
-      user.localizacao.estado.trim().length > 0,
+    user.localizacao?.cidade?.trim() && user.localizacao?.estado?.trim(),
   );
 
   // Identificação do tipo de conta para definição de regras de negócio específicas

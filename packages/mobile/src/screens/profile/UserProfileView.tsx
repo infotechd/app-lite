@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, ScrollView } from 'react-native';
 import { Divider } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
 import { colors, spacing } from '@/styles/theme';
 import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileHeaderSkeleton from '@/components/profile/skeletons/ProfileHeaderSkeleton';
@@ -38,7 +37,6 @@ interface Props {
  * @returns {JSX.Element} O elemento JSX que representa a tela de perfil do usuário.
  */
 const UserProfileView: React.FC<Props> = ({ isLoading, showSkeleton }) => {
-  const navigation = useNavigation();
   const { user } = useAuth();
   
   // Estado para controlar se o checklist de conclusão de perfil foi descartado pelo usuário

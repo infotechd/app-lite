@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import User from '../models'; // O seu User.ts (Model) já está correto e pronto
 import logger, { loggerUtils, signAccessToken } from '../utils';
 import { AuthRequest } from '../middleware/auth';
-import { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from '../validation/authValidation';
+import { RegisterInput, LoginInput, ForgotPasswordInput } from '../validation/authValidation';
 import { emailService } from '../services/emailService';
 
 interface AuthenticatedRequest extends AuthRequest {

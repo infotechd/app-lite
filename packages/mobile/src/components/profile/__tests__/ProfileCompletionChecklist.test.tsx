@@ -3,8 +3,7 @@ import renderer, { act } from 'react-test-renderer';
 import { ProfileCompletionChecklist } from '../ProfileCompletionChecklist';
 import { User } from '@/types';
 import AnalyticsService from '@/services/AnalyticsService';
-import { calculateProfileCompletion } from '../../../utils/profile/calculateProfileCompletion';
-import { getProfileChecklistItems } from '../../../utils/profile/getProfileChecklistItems';
+
 
 (global as any).IS_REACT_ACT_ENVIRONMENT = true;
 
