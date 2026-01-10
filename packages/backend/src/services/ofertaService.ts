@@ -1,7 +1,19 @@
-import mongoose from 'mongoose';
+import mongoose, { FilterQuery, PipelineStage } from 'mongoose';
 import { OfertaServico, IOfertaServico } from '../models/OfertaServico';
 import User from '../models/User';
 import { logger } from '../utils/logger';
+
+type OfertaFilterQuery = FilterQuery<IOfertaServico>;
+
+let indexesReady: Promise<void> | null = null;
+const ensureIndexes = async (): Promise<void> => {
+    if (!indexesReady) {
+        indexesReady = OfertaServico.syncIndexes().then(() => {}).catch((err) => {
+            logger.warn('ofertas.indexes.sync.error', { message: err?.message });
+        });
+    }
+    await indexesReady;
+};
 
 type SortOption = 'relevancia' | 'preco_menor' | 'preco_maior' | 'avaliacao' | 'recente' | 'distancia';
 
@@ -32,200 +44,125 @@ export interface PagedOfertas {
 export const ofertaService = {
     async list(filters: ListFilters = {}): Promise<PagedOfertas> {
         const {
-            categoria,
-            subcategoria,
-            tipoPessoa,
-            precoMin,
-            precoMax,
-            cidade,
-            estado,
-            busca,
-            sort = 'relevancia',
-            comMidia,
-            lat,
-            lng,
-            page = 1,
-            limit = 10,
+            categoria, subcategoria, tipoPessoa, precoMin, precoMax, cidade, estado,
+            busca, sort = 'relevancia', comMidia, lat, lng, page = 1, limit = 10,
         } = filters;
 
-        const query: any = { status: { $ne: 'inativo' } };
+        const query: OfertaFilterQuery = { status: { $ne: 'inativo' } };
+        const hasBusca = Boolean(busca && busca.trim().length > 0);
 
+        // 1. Filtros básicos
         if (categoria) query.categoria = categoria;
         if (subcategoria) query.subcategoria = subcategoria;
         if (tipoPessoa) query['prestador.tipoPessoa'] = tipoPessoa;
         if (typeof precoMin === 'number') query.preco = { ...(query.preco || {}), $gte: precoMin };
         if (typeof precoMax === 'number') query.preco = { ...(query.preco || {}), $lte: precoMax };
         if (cidade) query['localizacao.cidade'] = cidade;
-        if (estado) {
-            if (Array.isArray(estado)) {
-                query['localizacao.estado'] = { $in: estado };
-            } else {
-                query['localizacao.estado'] = estado;
-            }
+        if (Array.isArray(estado) && estado.length > 0) {
+            query['localizacao.estado'] = { $in: estado };
+        } else if (typeof estado === 'string') {
+            query['localizacao.estado'] = estado;
+        }
+        if (comMidia) {
+            query.$and = [...(query.$and || []), { $or: [{ imagens: { $exists: true, $ne: [] } }, { videos: { $exists: true, $ne: [] } }] }];
         }
 
-        if (comMidia === true) {
-            const mediaOr = [
-                { imagens: { $exists: true, $ne: [] } },
-                { videos: { $exists: true, $ne: [] } },
-            ];
-            query.$and = [...(query.$and || []), { $or: mediaOr }];
-        }
-
-        const hasBusca = Boolean(busca && busca.trim().length > 0);
-        if (hasBusca && sort !== 'relevancia') {
-            const regex = new RegExp((busca || '').trim(), 'i');
-            query.$or = [
-                { titulo: regex },
-                { descricao: regex },
-                { tags: regex },
-            ];
+        // 2. Lógica de busca unificada com $text
+        if (hasBusca) {
+            await ensureIndexes();
+            query.$text = { $search: busca.trim(), $language: 'portuguese' };
         }
 
         const skip = (page - 1) * limit;
 
-        if (sort === 'distancia' && typeof lat === 'number' && typeof lng === 'number') {
-            const matchWithoutText = { ...query };
-            const textMatch = hasBusca ? { $text: { $search: (busca || ''), $language: 'portuguese' } } : undefined;
+        // Pipeline de população de dados do prestador (reutilizável)
+        const prestadorPopulationPipeline: PipelineStage[] = [
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'prestador._id',
+                    foreignField: '_id',
+                    as: 'prestadorInfo',
+                },
+            },
+            {
+                $addFields: {
+                    prestador: {
+                        $mergeObjects: ['$prestador', { $arrayElemAt: ['$prestadorInfo', 0] }],
+                    },
+                },
+            },
+            { $project: { prestadorInfo: 0, 'prestador.password': 0, 'prestador.email': 0 } },
+        ];
 
-            const pipeline: any[] = [
+        // 3. Execução dos diferentes tipos de busca
+        if (sort === 'distancia' && typeof lat === 'number' && typeof lng === 'number') {
+            let geoQuery = { ...query };
+
+            // O MongoDB não permite $text dentro de $geoNear.
+            // Para manter a consistência e usar o motor $text, fazemos uma pré-busca dos IDs.
+            if (hasBusca) {
+                const searchResults = await OfertaServico.find(query).select('_id').lean();
+                const ids = searchResults.map(doc => doc._id);
+                delete geoQuery.$text;
+                geoQuery._id = { $in: ids };
+            }
+
+            const pipeline: PipelineStage[] = [
                 {
                     $geoNear: {
                         near: { type: 'Point', coordinates: [lng, lat] },
                         distanceField: 'distancia',
                         spherical: true,
-                        query: matchWithoutText,
-                    }
-                }
-            ];
-
-            if (textMatch) {
-                pipeline.push({ $match: textMatch });
-            }
-
-            pipeline.push(
-                { $sort: { distancia: 1 } },
+                        query: geoQuery,
+                    },
+                },
+                ...prestadorPopulationPipeline,
                 { $skip: skip },
                 { $limit: limit },
-            );
-
-            logger.info('ofertas.list.geoNear', { lat, lng, skip, limit });
-
-            const [ofertas, total] = await Promise.all([
-                OfertaServico.aggregate(pipeline),
-                OfertaServico.countDocuments({ ...(matchWithoutText as any), ...(textMatch || {}) }),
+            ];
+            const [ofertas, totalResult] = await Promise.all([
+                OfertaServico.aggregate<IOfertaServico>(pipeline),
+                OfertaServico.aggregate<{ count: number }>([
+                    { $geoNear: { near: { type: 'Point', coordinates: [lng, lat] }, distanceField: 'distancia', spherical: true, query: geoQuery } },
+                    { $count: 'count' }
+                ]),
             ]);
-
-            const totalPages = Math.ceil(total / limit);
-            logger.info('ofertas.list.result', { total, totalPages });
-            return { ofertas: ofertas as any, total, page, totalPages };
+            const total = totalResult[0]?.count ?? 0;
+            return { ofertas, total, page, totalPages: Math.ceil(total / limit) };
         }
 
-        if (sort === 'relevancia') {
-            const match: any = { ...query };
-            if (hasBusca) {
-                delete match.$or;
-                match.$text = { $search: (busca || ''), $language: 'portuguese' };
-            }
-
-            const now = new Date();
-            const pipeline: any[] = [
-                { $match: match },
-                {
-                    $addFields: {
-                        text_score: hasBusca ? { $meta: 'textScore' } : 0,
-                        has_media: {
-                            $cond: [
-                                { $gt: [ { $size: { $ifNull: ['$imagens', []] } }, 0 ] },
-                                1,
-                                0
-                            ]
-                        },
-                        rating_boost: {
-                            $min: [
-                                { $max: [ { $ifNull: ['$prestador.avaliacao', 0] }, 0 ] },
-                                5
-                            ]
-                        },
-                        recency_boost: {
-                            $divide: [
-                                0.5,
-                                {
-                                    $max: [
-                                        1,
-                                        {
-                                            $divide: [
-                                                { $subtract: [ now, { $ifNull: ['$updatedAt', '$createdAt'] } ] },
-                                                1000 * 60 * 60 * 24
-                                            ]
-                                        }
-                                    ]
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
-                    $addFields: {
-                        score: {
-                            $add: [
-                                '$text_score',
-                                { $multiply: ['$has_media', 0.2] },
-                                { $multiply: ['$rating_boost', 0.1] },
-                                '$recency_boost'
-                            ]
-                        }
-                    }
-                },
+        if (sort === 'relevancia' && hasBusca) {
+            const pipeline: PipelineStage[] = [
+                { $match: query },
+                { $addFields: { score: { $meta: 'textScore' } } },
                 { $sort: { score: -1 } },
                 { $skip: skip },
-                { $limit: limit }
+                { $limit: limit },
+                ...prestadorPopulationPipeline,
             ];
-
-            logger.info('ofertas.list.relevancia', { hasBusca, skip, limit });
-
             const [ofertas, total] = await Promise.all([
-                OfertaServico.aggregate(pipeline),
-                OfertaServico.countDocuments(match),
+                OfertaServico.aggregate<IOfertaServico>(pipeline),
+                OfertaServico.countDocuments(query),
             ]);
-
-            const totalPages = Math.ceil(total / limit);
-            logger.info('ofertas.list.result', { total, totalPages });
-            return { ofertas: ofertas as any, total, page, totalPages };
+            return { ofertas, total, page, totalPages: Math.ceil(total / limit) };
         }
 
-        let sortOptions: any = {};
+        // 4. Busca padrão (sem relevância ou distância)
+        let sortOptions: Record<string, 1 | -1> = { createdAt: -1 };
         switch (sort) {
-            case 'preco_menor':
-                sortOptions = { preco: 1 };
-                break;
-            case 'preco_maior':
-                sortOptions = { preco: -1 };
-                break;
-            case 'avaliacao':
-                sortOptions = { 'prestador.avaliacao': -1 };
-                break;
-            case 'recente':
-                sortOptions = { createdAt: -1 };
-                break;
-            default:
-                sortOptions = { createdAt: -1 };
+            case 'preco_menor': sortOptions = { preco: 1 }; break;
+            case 'preco_maior': sortOptions = { preco: -1 }; break;
+            case 'avaliacao': sortOptions = { 'prestador.avaliacao': -1 }; break;
+            case 'recente': sortOptions = { createdAt: -1 }; break;
         }
-
-        logger.info('ofertas.list.simple', { filters, page, limit, skip, sortOptions });
 
         const [ofertas, total] = await Promise.all([
-            OfertaServico.find(query)
-                .sort(sortOptions)
-                .skip(skip)
-                .limit(limit)
-                .lean(),
+            OfertaServico.find(query).sort(sortOptions).skip(skip).limit(limit).lean(),
             OfertaServico.countDocuments(query),
         ]);
 
-        const totalPages = Math.ceil(total / limit);
-        logger.info('ofertas.list.result', { total, totalPages });
-        return { ofertas, total, page, totalPages };
+        return { ofertas, total, page, totalPages: Math.ceil(total / limit) };
     },
 
     async getById(id: string): Promise<IOfertaServico | null> {
@@ -249,7 +186,6 @@ export const ofertaService = {
             throw Object.assign(new Error('Usuário não encontrado'), { status: 404 });
         }
 
-        // ⚠️ SEM TRANSFORMAÇÃO: O schema agora aceita strings diretamente
         const doc = await OfertaServico.create({
             ...payload,
             prestador: {
@@ -262,7 +198,7 @@ export const ofertaService = {
             status: payload.status ?? 'ativo',
         });
 
-        logger.info('ofertas.create.success', { ofertaId: (doc as any)._id, userId });
+        logger.info('ofertas.create.success', { ofertaId: doc._id, userId });
 
         return doc.toObject();
     },
@@ -274,19 +210,15 @@ export const ofertaService = {
             return null;
         }
 
-        const prestadorRaw: any = (oferta as any).prestador?._id;
-        const prestadorId = prestadorRaw && typeof prestadorRaw === 'object' && ('_id' in prestadorRaw)
-            ? prestadorRaw._id
-            : prestadorRaw;
+        const prestadorId = oferta.prestador._id;
 
         if (String(prestadorId) !== String(userId)) {
             logger.warn('ofertas.update.forbidden', { id, userId, owner: String(prestadorId) });
-            const err: any = new Error('Sem permissão para atualizar esta oferta');
+            const err = new Error('Sem permissão para atualizar esta oferta') as Error & { status: number };
             err.status = 403;
             throw err;
         }
 
-        // ⚠️ SEM TRANSFORMAÇÃO: Apenas atribui diretamente
         Object.assign(oferta, payload);
         await oferta.save();
         logger.info('ofertas.update.success', { id, userId });
@@ -300,14 +232,11 @@ export const ofertaService = {
             return false;
         }
 
-        const prestadorRaw: any = (oferta as any).prestador?._id;
-        const prestadorId = prestadorRaw && typeof prestadorRaw === 'object' && ('_id' in prestadorRaw)
-            ? prestadorRaw._id
-            : prestadorRaw;
+        const prestadorId = oferta.prestador._id;
 
         if (String(prestadorId) !== String(userId)) {
             logger.warn('ofertas.remove.forbidden', { id, userId, owner: String(prestadorId) });
-            const err: any = new Error('Sem permissão para deletar esta oferta');
+            const err = new Error('Sem permissão para deletar esta oferta') as Error & { status: number };
             err.status = 403;
             throw err;
         }
