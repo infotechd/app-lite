@@ -1,0 +1,32 @@
+[Unit]
+Description=App Lite Backend API
+Documentation=https://github.com/infotechd/app-lite
+After=network.target mongodb.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/app-lite/packages/backend
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/app-lite/packages/backend/.env.production
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=app-lite-backend
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/app-lite/packages/backend/logs
+
+# Resource limits
+LimitNOFILE=65535
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

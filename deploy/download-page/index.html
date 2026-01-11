@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Lite - Download</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 24px;
+            padding: 48px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            text-align: center;
+        }
+        
+        .logo {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 24px;
+            margin: 0 auto 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            color: white;
+        }
+        
+        h1 {
+            color: #1a1a2e;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        
+        .version {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        
+        .description {
+            color: #4b5563;
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }
+        
+        .download-section {
+            margin-bottom: 32px;
+        }
+        
+        .download-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 12px;
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        .download-btn.android {
+            background: #3DDC84;
+            color: white;
+        }
+        
+        .download-btn.ios {
+            background: #000;
+            color: white;
+        }
+        
+        .download-btn.web {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .download-btn svg {
+            width: 24px;
+            height: 24px;
+        }
+        
+        .instructions {
+            background: #f3f4f6;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: left;
+        }
+        
+        .instructions h3 {
+            color: #1a1a2e;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .instructions ol {
+            color: #4b5563;
+            padding-left: 20px;
+            line-height: 1.8;
+        }
+        
+        .instructions li {
+            margin-bottom: 4px;
+        }
+        
+        .qr-section {
+            margin-top: 32px;
+            padding-top: 32px;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .qr-section h3 {
+            color: #1a1a2e;
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .qr-code {
+            width: 150px;
+            height: 150px;
+            background: #f3f4f6;
+            margin: 0 auto;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+            font-size: 12px;
+        }
+        
+        footer {
+            margin-top: 32px;
+            color: #9ca3af;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📱</div>
+        <h1>App Lite</h1>
+        <p class="version">Versão 1.0.0</p>
+        
+        <p class="description">
+            Plataforma completa para conectar prestadores de serviço, 
+            compradores e anunciantes. Baixe agora e comece a usar!
+        </p>
+        
+        <div class="download-section">
+            <a href="/downloads/app-lite.apk" class="download-btn android">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.523 15.341c-.5 0-.91.41-.91.91s.41.91.91.91.91-.41.91-.91-.41-.91-.91-.91zm-11.046 0c-.5 0-.91.41-.91.91s.41.91.91.91.91-.41.91-.91-.41-.91-.91-.91zm11.405-6.02l1.9-3.29c.11-.18.05-.42-.13-.53-.18-.11-.42-.05-.53.13l-1.93 3.34c-1.47-.67-3.12-1.05-4.88-1.05s-3.41.38-4.88 1.05l-1.93-3.34c-.11-.18-.35-.24-.53-.13-.18.11-.24.35-.13.53l1.9 3.29C3.83 10.69 2 13.75 2 17.24h20c0-3.49-1.83-6.55-4.12-7.92zM5.5 14.24c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm13 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
+                </svg>
+                Download para Android (APK)
+            </a>
+            
+            <a href="#ios-instructions" class="download-btn ios">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                </svg>
+                Instruções para iOS
+            </a>
+            
+            <a href="/" class="download-btn web">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                Usar versão Web
+            </a>
+        </div>
+        
+        <div class="instructions" id="ios-instructions">
+            <h3>📱 Instalação no iOS (TestFlight)</h3>
+            <ol>
+                <li>Instale o app TestFlight na App Store</li>
+                <li>Solicite acesso ao administrador</li>
+                <li>Você receberá um convite por email</li>
+                <li>Abra o convite e clique em "Aceitar"</li>
+                <li>O app será instalado automaticamente</li>
+            </ol>
+        </div>
+        
+        <div class="instructions" style="margin-top: 16px;">
+            <h3>🤖 Instalação no Android</h3>
+            <ol>
+                <li>Clique no botão "Download para Android"</li>
+                <li>Permita a instalação de fontes desconhecidas</li>
+                <li>Abra o arquivo APK baixado</li>
+                <li>Siga as instruções de instalação</li>
+            </ol>
+        </div>
+        
+        <footer>
+            <p>© 2024 App Lite - Info Tech Digital</p>
+            <p>Versão de teste interno - Não distribua</p>
+        </footer>
+    </div>
+</body>
+</html>

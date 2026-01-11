@@ -8,7 +8,6 @@ const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
 
 // Observa o diretório raiz do monorepo (para hot reload)
-// Mescla com watchFolders padrão do Expo (se houver)
 config.watchFolders = [
     ...(config.watchFolders || []),
     workspaceRoot
@@ -20,11 +19,6 @@ config.resolver.nodeModulesPaths = [
     path.resolve(workspaceRoot, 'node_modules'),
 ];
 
-// Habilita resolução via symlinks (necessário para pnpm/monorepo)
-config.resolver.unstable_enableSymlinks = true;
-// Habilita suporte a package.json "exports" (necessário para alguns pacotes modernos)
-config.resolver.unstable_enablePackageExports = true;
-
 // Aliases explícitos para fixar a origem dos módulos nativos críticos
 try {
     const expoModulesCorePath = path.dirname(require.resolve('expo-modules-core/package.json'));
@@ -33,7 +27,6 @@ try {
     config.resolver.extraNodeModules = {
         ...(config.resolver.extraNodeModules || {}),
         'expo-modules-core': expoModulesCorePath,
-        // Garante uma única instância do react-native (a do app)
         'react-native': reactNativePath,
     };
 } catch (e) {

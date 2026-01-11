@@ -70,7 +70,7 @@ export const ofertaService = {
         // 2. Lógica de busca unificada com $text
         if (hasBusca) {
             await ensureIndexes();
-            query.$text = { $search: busca.trim(), $language: 'portuguese' };
+            query.$text = { $search: busca!.trim(), $language: 'portuguese' };
         }
 
         const skip = (page - 1) * limit;

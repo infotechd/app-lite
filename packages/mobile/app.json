@@ -3,6 +3,15 @@
     "name": "App Lite",
     "slug": "app-lite",
     "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -11,8 +20,22 @@
       "android",
       "web"
     ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.infotechd.applite",
+      "buildNumber": "1"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.infotechd.applite",
+      "versionCode": 1
+    },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
     },
     "extra": {
       "eas": {
@@ -23,7 +46,21 @@
     "plugins": [
       "expo-asset",
       "expo-font",
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O app precisa de acesso às suas fotos para upload de mídia.",
+          "cameraPermission": "O app precisa de acesso à câmera para capturar fotos e vídeos."
+        }
+      ]
+    ],
+    "updates": {
+      "url": "https://u.expo.dev/5b7d17d9-d793-4c25-ade2-e4ff466121d4"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }

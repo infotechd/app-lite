@@ -62,7 +62,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@react-native-async-storage/async-storage": "2.1.2",
+      "@react-native-async-storage/async-storage": "2.2.0",
       "metro": "^0.82.0",
       "metro-config": "^0.82.0",
       "metro-resolver": "^0.82.0",
