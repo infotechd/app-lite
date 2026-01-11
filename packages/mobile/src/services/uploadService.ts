@@ -5,7 +5,7 @@
 // Objetivos:
 // - Oferecer funções simples para a UI enviar e gerenciar arquivos
 // - Normalizar respostas do backend/Cloudinary para um formato único
-// - Tratar particularidades de plataforma (ex.: Android) ao montar o FormData
+// - Tratar particularidades de plataforma (ex.: Android, Web) ao montar o FormData
 //
 // Ideias de melhorias futuras (TODO):
 // - TODO: Implementar relatório de progresso (onUploadProgress) para mostrar barra de progresso ao usuário
@@ -49,14 +49,48 @@ export interface UploadFilesResponse {
 }
 
 /**
+ * Converte uma URI (blob:, data:, ou URL) para um objeto Blob.
+ * Necessário para upload na web, onde FormData espera Blob/File.
+ * 
+ * @param uri URI do arquivo (pode ser blob:, data:, ou URL http/https)
+ * @returns Promise com o Blob do arquivo
+ */
+async function uriToBlob(uri: string): Promise<Blob> {
+    // Se for uma URL blob: ou http/https, usa fetch
+    if (uri.startsWith('blob:') || uri.startsWith('http://') || uri.startsWith('https://')) {
+        const response = await fetch(uri);
+        return await response.blob();
+    }
+    
+    // Se for data: URI (base64), converte manualmente
+    if (uri.startsWith('data:')) {
+        const [header, base64Data] = uri.split(',');
+        const mimeMatch = header.match(/data:([^;]+)/);
+        const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+        
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        return new Blob([byteArray], { type: mime });
+    }
+    
+    // Fallback: tenta fetch mesmo assim
+    const response = await fetch(uri);
+    return await response.blob();
+}
+
+/**
  * Realiza o upload de um ou mais arquivos para o backend, que por sua vez envia para o Cloudinary.
  *
- * O método cuida de detalhes de plataforma (como normalização de URIs no Android),
+ * O método cuida de detalhes de plataforma (como normalização de URIs no Android e conversão para Blob na Web),
  * prepara um FormData com os arquivos e devolve uma resposta normalizada
  * contendo URLs úteis para exibição na UI e metadados completos de cada item.
  *
  * @param mediaFiles Lista de arquivos selecionados pelo usuário (MediaFile[]). Cada item deve conter:
- * - uri: string (obrigatório). Pode ser content://, file:// ou caminho absoluto; em Android será normalizado.
+ * - uri: string (obrigatório). Pode ser content://, file://, blob:, data: ou caminho absoluto.
  * - type: string (recomendado). MIME type, ex.: image/jpeg, video/mp4.
  * - name?: string (opcional). Caso ausente, um nome padrão é inferido pelo tipo (image.jpg ou video.mp4).
  * @returns Promise com objeto contendo:
@@ -77,27 +111,13 @@ export async function uploadFiles(mediaFiles: AnyMediaFile[]): Promise<UploadFil
 
     // FormData que será enviado ao endpoint /upload/files
     const form = new FormData();
+    
+    // Detectar plataforma
+    const isWeb = Platform.OS === 'web';
 
     // Montagem do payload: um campo 'files' por item
     for (const f of mediaFiles) {
         let uri = f.uri;
-
-        // Normalização de URI para Android
-        // Em Android, URIs podem vir como content://, file:// ou caminhos absolutos.
-        // O fetch/FormData geralmente espera file:// ou content://.
-        if ((Platform as any)?.OS === 'android') {
-            if (uri.startsWith('content://')) {
-                // Mantém content:// como está (permitido pelo RN/Android)
-            } else if (uri.startsWith('file://')) {
-                // Já está OK (nada a fazer)
-            } else if (uri.startsWith('/')) {
-                // Caminho absoluto -> prefixa com file:// para compatibilidade
-                uri = `file://${uri}`;
-            } else {
-                // Qualquer outro caso: força file:// como fallback seguro
-                uri = `file://${uri}`;
-            }
-        }
 
         // Resolver MIME type a partir do objeto recebido.
         // Nosso MediaFile usa type: 'image'|'video'. Porém, se vier um MIME completo, preservamos.
@@ -112,25 +132,66 @@ export async function uploadFiles(mediaFiles: AnyMediaFile[]): Promise<UploadFil
 
         // Nome default com base no tipo resolvido
         const defaultName = mime.startsWith('video/') ? 'video.mp4' : 'image.jpg';
+        const fileName = (f as any)?.name || defaultName;
 
-        // Objeto compatível com FormData para React Native
-        const fileObject = {
-            uri, // caminho/uri do arquivo no dispositivo
-            type: mime, // MIME type resolvido
-            name: (f as any)?.name || defaultName, // fallback caso não haja nome
-        } as any;
+        if (isWeb) {
+            // ===== TRATAMENTO PARA WEB =====
+            // Na web, FormData.append() espera um Blob ou File real
+            try {
+                console.log('[Upload Web] Convertendo URI para Blob:', uri.substring(0, 50) + '...');
+                const blob = await uriToBlob(uri);
+                
+                // Criar um File a partir do Blob (File é uma subclasse de Blob com nome)
+                const file = new File([blob], fileName, { type: mime });
+                
+                console.log('[Upload Web] Arquivo preparado:', fileName, 'tipo:', mime, 'tamanho:', file.size);
+                form.append('files', file);
+            } catch (error) {
+                console.error('[Upload Web] Erro ao converter URI para Blob:', error);
+                throw new Error(`Erro ao processar arquivo ${fileName} para upload`);
+            }
+        } else {
+            // ===== TRATAMENTO PARA MOBILE (Android/iOS) =====
+            // Normalização de URI para Android
+            // Em Android, URIs podem vir como content://, file:// ou caminhos absolutos.
+            // O fetch/FormData geralmente espera file:// ou content://.
+            if (Platform.OS === 'android') {
+                if (uri.startsWith('content://')) {
+                    // Mantém content:// como está (permitido pelo RN/Android)
+                } else if (uri.startsWith('file://')) {
+                    // Já está OK (nada a fazer)
+                } else if (uri.startsWith('/')) {
+                    // Caminho absoluto -> prefixa com file:// para compatibilidade
+                    uri = `file://${uri}`;
+                } else {
+                    // Qualquer outro caso: força file:// como fallback seguro
+                    uri = `file://${uri}`;
+                }
+            }
 
-        // Adiciona o arquivo no campo 'files' (o backend deve aceitar múltiplos)
-        form.append('files', fileObject);
+            // Objeto compatível com FormData para React Native
+            const fileObject = {
+                uri, // caminho/uri do arquivo no dispositivo
+                type: mime, // MIME type resolvido
+                name: fileName, // fallback caso não haja nome
+            } as any;
+
+            // Adiciona o arquivo no campo 'files' (o backend deve aceitar múltiplos)
+            form.append('files', fileObject);
+        }
     }
 
     try {
+        console.log('[Upload] Enviando FormData para /upload/files');
+        
         // Envia o FormData ao backend; o backend cuidará do upload no Cloudinary
         const response = await api.post('/upload/files', form, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 60000, // 60 segundos para upload (TODO: torná-lo configurável)
             // TODO: adicionar onUploadProgress quando suportado pela stack atual
         });
+
+        console.log('[Upload] Resposta recebida:', response.status);
 
         // A API pode retornar em diferentes formatos (data.data.files ou data.files)
         const data = response.data;
@@ -236,4 +297,3 @@ export default {
     deleteFile,
     getUserFiles
 };
-
