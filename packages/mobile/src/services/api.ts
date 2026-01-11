@@ -121,7 +121,7 @@ async function pickReachableBaseURL(): Promise<string> {
 // MELHORIA: Pegar a URL de produção de uma variável de ambiente segura.
 const API_BASE_URL = (typeof __DEV__ !== 'undefined' && __DEV__)
     ? CANDIDATE_BASE_URLS[0] // Casa — inicial até detectar melhor opção
-    : 'https://your-production-api.com/api';
+    : 'https://api.app-super.digital/api';
 
 // Instância principal do Axios que será usada em todo o app.
 export const api = axios.create({

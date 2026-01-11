@@ -13,7 +13,7 @@ const ENV = {
         debug: false,
     },
     prod: {
-        apiUrl: 'https://api.superapp.com/api',
+        apiUrl: 'https://api.app-super.digital/api',
         amplitudeApiKey: 'your-prod-key',
         debug: false,
     },
