@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import api from './api';
 import type { User } from '@/types';
 
@@ -28,6 +29,28 @@ type AvatarFile = {
 };
 
 /**
+ * Converte uma URI (blob:, data:, http:) para um Blob.
+ * Necessário para upload de arquivos na versão web.
+ */
+async function uriToBlob(uri: string): Promise<Blob> {
+  // Se for data URI, converter diretamente
+  if (uri.startsWith('data:')) {
+    const response = await fetch(uri);
+    return await response.blob();
+  }
+  
+  // Se for blob URI ou http/https, fazer fetch
+  if (uri.startsWith('blob:') || uri.startsWith('http')) {
+    const response = await fetch(uri);
+    return await response.blob();
+  }
+  
+  // Fallback: tentar fetch direto
+  const response = await fetch(uri);
+  return await response.blob();
+}
+
+/**
  * Realiza o envio de uma imagem de avatar para o backend.
  * 
  * Constrói um objeto FormData com o arquivo selecionado e executa uma requisição PATCH
@@ -43,12 +66,36 @@ export async function uploadAvatar(file: AvatarFile): Promise<User> {
     /** Criação de um formulário multipart para suportar envio de binários via HTTP */
     const form = new FormData();
     
-    // Anexa o arquivo ao formulário sob a chave 'avatar'
-    form.append('avatar', {
-      uri: file.uri,
-      type: file.type,
-      name: file.name || 'avatar.jpg',
-    } as any);
+    const fileName = file.name || 'avatar.jpg';
+    const mimeType = file.type || 'image/jpeg';
+    
+    // Verificar se estamos na web
+    const isWeb = Platform.OS === 'web';
+    
+    if (isWeb) {
+      // Na web, precisamos converter a URI para Blob e criar um File
+      console.log('[ProfileService] Web detected, converting URI to Blob...');
+      console.log('[ProfileService] URI:', file.uri?.substring(0, 50) + '...');
+      
+      try {
+        const blob = await uriToBlob(file.uri);
+        const webFile = new File([blob], fileName, { type: mimeType });
+        form.append('avatar', webFile);
+        console.log('[ProfileService] File created:', webFile.name, webFile.size, 'bytes');
+      } catch (blobError) {
+        console.error('[ProfileService] Error converting to blob:', blobError);
+        throw new Error('Erro ao processar imagem para upload');
+      }
+    } else {
+      // No React Native (Android/iOS), usar o formato de objeto
+      form.append('avatar', {
+        uri: file.uri,
+        type: mimeType,
+        name: fileName,
+      } as any);
+    }
+
+    console.log('[ProfileService] Uploading avatar...');
 
     /** 
      * Execução da chamada de API.
@@ -59,8 +106,10 @@ export async function uploadAvatar(file: AvatarFile): Promise<User> {
        timeout: 45000,
      });
 
-     return normalizeUser(data?.data ?? data);
+    console.log('[ProfileService] Avatar uploaded successfully');
+    return normalizeUser(data?.data ?? data);
   } catch (err: any) {
+    console.error('[ProfileService] Upload error:', err);
     const message = err?.response?.data?.message || err?.message || 'Erro ao carregar avatar.';
     throw new Error(message);
   }
