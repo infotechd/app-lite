@@ -142,7 +142,7 @@ describe('BuscarOfertasScreen - comportamento da lista', () => {
       (listEl as any).props.onEndReached?.();
     });
 
-    await findByText('P2');
+    await utils.findByText('P2');
   });
 
   it('refresh substitui itens e reseta para página 1', async () => {
@@ -191,7 +191,15 @@ describe('BuscarOfertasScreen - comportamento da lista', () => {
     fireEvent.changeText(search, 'x');
     advanceDebounce();
 
-    await findByText('Última');
+    await utils3.findByText('Última');
     expect(firstSignal?.aborted).toBe(true);
+  });
+
+  it('exibe o botão FAB "Criar Oferta" para todos os usuários', async () => {
+    mockGet.mockResolvedValueOnce({ ofertas: [], totalPages: 1, total: 0 });
+    const utils = renderWithProviders(<BuscarOfertasScreen />);
+    
+    const fab = await utils.findByTestId('fab-criar-oferta');
+    expect(fab).toBeTruthy();
   });
 });

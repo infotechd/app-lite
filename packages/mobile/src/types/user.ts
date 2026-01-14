@@ -9,7 +9,6 @@ export interface User {
     id: string; // O backend envia 'id', não '_id'
     nome: string;
     email: string;
-    tipo: 'buyer' | 'provider' | 'advertiser';
     avatar?: string;
     avatarBlurhash?: string;
     telefone?: string;
@@ -45,7 +44,6 @@ export interface RegisterData {
     nome: string; // 'nome' (para PF) ou 'razaoSocial' (para PJ, via transform)
     email: string;
     password: string;
-    tipo: 'buyer' | 'provider' | 'advertiser';
     telefone?: string;
 
     // ✅ NOVO: Campos obrigatórios para a validação

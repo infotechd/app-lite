@@ -6,7 +6,6 @@ declare module 'express-serve-static-core' {
             id: string;
             email?: string;
             nome?: string;
-            tipo?: 'buyer' | 'provider' | 'advertiser';
         };
     }
 }

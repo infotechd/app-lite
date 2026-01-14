@@ -13,7 +13,6 @@ export interface IUser extends Document {
     avatar?: string;
     avatarPublicId?: string;
     avatarBlurhash?: string;
-    tipo: 'comprador' | 'prestador' | 'anunciante';
 
     // Novos campos PF/PJ
     tipoPessoa: 'PF' | 'PJ';
@@ -89,14 +88,7 @@ const UserSchema = new Schema<IUser>({
         trim: true
     },
 
-    tipo: {
-        type: String,
-        enum: {
-            values: ['comprador', 'prestador', 'anunciante'],
-            message: 'Tipo deve ser: comprador, prestador ou anunciante'
-        },
-        default: 'comprador'
-    },
+    // Campo 'tipo' removido (perfil unificado)
 
     // Novo campo: Tipo de Pessoa (PF/PJ)
     tipoPessoa: {
@@ -208,7 +200,6 @@ const UserSchema = new Schema<IUser>({
 
 // Índices atualizados
 UserSchema.index({ email: 1 }, { unique: true });
-UserSchema.index({ tipo: 1 });
 UserSchema.index({ ativo: 1 });
 UserSchema.index({ tipoPessoa: 1 });
 UserSchema.index({ cpf: 1 }, { unique: true, sparse: true });

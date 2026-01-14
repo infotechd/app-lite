@@ -108,7 +108,6 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             email: '',
             password: '',
             telefone: '',
-            tipo: 'buyer',
             tipoPessoa: 'PF',
             cpf: '',
             cnpj: '',
@@ -440,28 +439,6 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                     )}
                 />
 
-                {/* Seleção da finalidade do usuário no sistema */}
-                <Controller
-                    control={control}
-                    name="tipo"
-                    render={({ field: { onChange, value } }) => (
-                        <View style={styles.section}>
-                            <Text variant="labelLarge" style={styles.sectionLabel}>
-                                Tipo de Usuário *
-                            </Text>
-                            <SegmentedButtons
-                                value={value}
-                                onValueChange={onChange}
-                                buttons={[
-                                    { value: 'buyer', label: 'Comprador', testID: 'seg-buyer' },
-                                    { value: 'provider', label: 'Prestador', testID: 'seg-provider' },
-                                    { value: 'advertiser', label: 'Anunciante', testID: 'seg-advertiser' },
-                                ]}
-                            />
-                        </View>
-                    )}
-                />
-
                 {/* Botão de envio do formulário */}
                 <Button
                     testID="btn-registrar"
@@ -531,3 +508,4 @@ const styles = StyleSheet.create({
 });
 
 export default RegisterScreen;
+

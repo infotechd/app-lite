@@ -11,7 +11,6 @@ async function seedUser(nome: string, tipoPessoa: 'PF' | 'PJ' = 'PF') {
     nome,
     email: `${nome.toLowerCase().replace(/\s+/g, '')}@test.com`,
     senha: 'hashed',
-    tipo: 'prestador',
     tipoPessoa,
   } as any);
   return user.toObject();

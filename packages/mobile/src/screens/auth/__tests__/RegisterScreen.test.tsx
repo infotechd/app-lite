@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, screen } from '@testing-library/react-native';
 import RegisterScreen from '../RegisterScreen';
 import { MESSAGES } from '@/constants/messages';
 import { AuthService } from '@/services/authService';
@@ -123,5 +123,35 @@ describe('RegisterScreen', () => {
       fireEvent.press(getByTestId('btn-ja-tenho-conta'));
       expect(navigation.navigate).toHaveBeenCalledWith('Login');
     });
+  });
+});
+
+describe('RegisterScreen - Unificação de Perfis', () => {
+  it('não deve renderizar seletor de tipo de usuário', () => {
+    render(<RegisterScreen navigation={{ replace: jest.fn(), navigate: jest.fn() } as any} />);
+
+    expect(screen.queryByText('Comprador')).toBeNull();
+    expect(screen.queryByText('Prestador')).toBeNull();
+    expect(screen.queryByText('Anunciante')).toBeNull();
+    expect(screen.queryByTestId('tipo-selector')).toBeNull();
+  });
+
+  it('deve renderizar campos obrigatórios', () => {
+    render(<RegisterScreen navigation={{ replace: jest.fn(), navigate: jest.fn() } as any} />);
+
+    expect(screen.getByTestId('input-nome')).toBeTruthy();
+    expect(screen.getByTestId('input-email')).toBeTruthy();
+    expect(screen.getByTestId('input-password')).toBeTruthy();
+  });
+
+  it('deve submeter formulário sem campo tipo', async () => {
+    render(<RegisterScreen navigation={{ replace: jest.fn(), navigate: jest.fn() } as any} />);
+
+    fireEvent.changeText(screen.getByTestId('input-nome'), 'Teste');
+    fireEvent.changeText(screen.getByTestId('input-email'), 'teste@test.com');
+    fireEvent.changeText(screen.getByTestId('input-password'), 'senha123');
+    fireEvent.press(screen.getByTestId('btn-registrar'));
+
+    expect(mockRegister).toHaveBeenCalledWith(expect.not.objectContaining({ tipo: expect.anything() }));
   });
 });

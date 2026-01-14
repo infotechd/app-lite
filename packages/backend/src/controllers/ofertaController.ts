@@ -110,10 +110,6 @@ export const ofertaController = {
                 res.status(401).json({ success: false, message: 'Não autenticado' });
                 return;
             }
-            if (user.tipo !== 'provider') {
-                res.status(403).json({ success: false, message: 'Apenas prestadores podem criar ofertas' });
-                return;
-            }
 
             const body = req.body as CreateOfertaInput;
 
