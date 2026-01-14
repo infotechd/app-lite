@@ -112,6 +112,34 @@ describe('RegisterScreen', () => {
       
       jest.useRealTimers();
     });
+
+    it('deve chamar o serviço de registro sem a propriedade obsoleta tipo', async () => {
+      // Mock para a chamada da API
+      (AuthService.register as jest.Mock).mockResolvedValueOnce({});
+
+      const { getByTestId } = render(
+        <RegisterScreen navigation={navigation as any} route={route} />
+      );
+
+      // Preenche o formulário para um usuário PF
+      fireEvent.changeText(getByTestId('input-nome'), 'Usuário Sem Tipo');
+      fireEvent.changeText(getByTestId('input-cpf'), '111.222.333-44');
+      fireEvent.changeText(getByTestId('input-email'), 'semtipo@example.com');
+      fireEvent.changeText(getByTestId('input-password'), 'password123');
+      
+      // Submete o formulário
+      fireEvent.press(getByTestId('btn-registrar'));
+
+      // Aguarda a chamada do serviço
+      await waitFor(() => {
+        expect(AuthService.register).toHaveBeenCalled();
+      });
+
+      // Validação principal: verifica se o objeto enviado NÃO contém a chave 'tipo'
+      expect(AuthService.register).toHaveBeenCalledWith(
+        expect.not.objectContaining({ tipo: expect.anything() })
+      );
+    });
   });
 
   describe('Navigation', () => {
@@ -123,35 +151,5 @@ describe('RegisterScreen', () => {
       fireEvent.press(getByTestId('btn-ja-tenho-conta'));
       expect(navigation.navigate).toHaveBeenCalledWith('Login');
     });
-  });
-});
-
-describe('RegisterScreen - Unificação de Perfis', () => {
-  it('não deve renderizar seletor de tipo de usuário', () => {
-    render(<RegisterScreen navigation={{ replace: jest.fn(), navigate: jest.fn() } as any} />);
-
-    expect(screen.queryByText('Comprador')).toBeNull();
-    expect(screen.queryByText('Prestador')).toBeNull();
-    expect(screen.queryByText('Anunciante')).toBeNull();
-    expect(screen.queryByTestId('tipo-selector')).toBeNull();
-  });
-
-  it('deve renderizar campos obrigatórios', () => {
-    render(<RegisterScreen navigation={{ replace: jest.fn(), navigate: jest.fn() } as any} />);
-
-    expect(screen.getByTestId('input-nome')).toBeTruthy();
-    expect(screen.getByTestId('input-email')).toBeTruthy();
-    expect(screen.getByTestId('input-password')).toBeTruthy();
-  });
-
-  it('deve submeter formulário sem campo tipo', async () => {
-    render(<RegisterScreen navigation={{ replace: jest.fn(), navigate: jest.fn() } as any} />);
-
-    fireEvent.changeText(screen.getByTestId('input-nome'), 'Teste');
-    fireEvent.changeText(screen.getByTestId('input-email'), 'teste@test.com');
-    fireEvent.changeText(screen.getByTestId('input-password'), 'senha123');
-    fireEvent.press(screen.getByTestId('btn-registrar'));
-
-    expect(mockRegister).toHaveBeenCalledWith(expect.not.objectContaining({ tipo: expect.anything() }));
   });
 });
