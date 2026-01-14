@@ -8,7 +8,6 @@ export interface AuthRequest extends Request {
         id: string;
         email?: string;
         nome?: string;
-        tipo?: 'buyer' | 'provider' | 'advertiser';
     };
 }
 
@@ -54,30 +53,12 @@ export const authMiddleware = async (
             return;
         }
 
-        // Mapear tipo de 'usuário' do modelo (pt) para o padrão da API (en)
-        const mapTipoToApi = (tipo: any): 'buyer' | 'provider' | 'advertiser' => {
-            switch (tipo) {
-                case 'comprador':
-                case 'buyer':
-                    return 'buyer';
-                case 'prestador':
-                case 'provider':
-                    return 'provider';
-                case 'anunciante':
-                case 'advertiser':
-                    return 'advertiser';
-                default:
-                    return 'buyer';
-            }
-        };
-
         const userIdStr = (user as any)?.id ?? (user as any)?._id?.toString?.() ?? String((user as any)?._id);
 
         req.user = {
             id: String(userIdStr),
             email: (user as any).email,
             nome: (user as any).nome,
-            tipo: mapTipoToApi((user as any).tipo)
         };
         next();
     } catch (error) {

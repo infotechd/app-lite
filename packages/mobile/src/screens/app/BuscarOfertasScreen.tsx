@@ -123,8 +123,8 @@ const BuscarOfertasScreen: React.FC = () => {
             .toLowerCase()
             .trim()
     ), []);
-    // Mostrar CTA de criar oferta para convidados; se autenticado, somente para provider
-    const canCreateOffer = isAuthenticated ? user?.tipo === 'provider' : true;
+    // Mostrar CTA de criar oferta para todos os usuários (unificação de perfis)
+    const canCreateOffer = true;
     const navigation = useNavigation<NativeStackNavigationProp<OfertasStackParamList>>();
     const hasInitialLoadedRef = useRef(false);
     // Robustness: track latest request to avoid stale updates overriding newer ones
@@ -1024,15 +1024,11 @@ const BuscarOfertasScreen: React.FC = () => {
 
             {canCreateOffer && (
                 <FAB
-                    mode="elevated"
-                    size="large"
-                    style={[styles.fab, { backgroundColor: colors.primary }]}
+                    testID="fab-criar-oferta"
                     icon="plus"
                     label="Criar Oferta"
-                    color="#FFFFFF"
-                    accessibilityLabel="Criar nova oferta"
-                    accessibilityHint="Abre a tela para criar uma nova oferta de serviço"
                     onPress={onPressCriarOferta}
+                    style={styles.fab}
                 />
             )}
         </View>

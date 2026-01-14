@@ -26,7 +26,6 @@ describe('Auth Controller - Avatar fields', () => {
     nome: 'Test User',
     email: 'test@example.com',
     password: 'password123',
-    tipo: 'comprador',
     tipoPessoa: 'PF',
     cpf: '12345678901'
   };

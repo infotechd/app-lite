@@ -82,7 +82,6 @@ describe('Teste de Upload de Foto de Perfil (Avatar)', () => {
       nome: 'Usuário de Teste',
       email: `test_${Date.now()}@example.com`,
       senha: 'password123',
-      tipo: 'comprador',
       tipoPessoa: 'PF',
       cpf: '12345678901'
     });

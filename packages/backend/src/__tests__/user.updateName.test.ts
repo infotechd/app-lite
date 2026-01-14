@@ -25,7 +25,6 @@ describe('User - update name', () => {
       nome: 'Nome Original',
       email: 'user@example.com',
       senha: 'password123',
-      tipo: 'comprador',
       tipoPessoa: 'PF',
       cpf: '12345678901'
     });

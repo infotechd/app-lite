@@ -27,8 +27,6 @@ const commonSchema = z.object({
         .regex(phoneRegex, 'Telefone inválido. Use formato: (11) 99999-9999')
         .optional()
         .or(z.literal('')), // Permite que o campo seja uma string vazia caso não informado
-    // Tipos de perfil aceitos, suportando tanto termos em português quanto em inglês
-    tipo: z.enum(['comprador', 'prestador', 'anunciante', 'buyer', 'provider', 'advertiser']),
 });
 
 /**
@@ -81,30 +79,22 @@ const registerBodySchema = z.discriminatedUnion("tipoPessoa", [
  */
 export const registerSchema = z.object({
     body: registerBodySchema.transform((data) => {
-        const { password, tipo, ...rest } = data;
+        const { password, ...rest } = data;
 
         // 1. Mapeia 'password' do frontend para 'senha' do backend
-        const transformedData: any = { ...rest, senha: password };
+        const transformedData: Record<string, unknown> = { ...rest, senha: password };
 
-        // 2. Normaliza o 'tipo' para o padrão em português salvo no banco
-        switch (tipo) {
-            case 'buyer': transformedData.tipo = 'comprador'; break;
-            case 'provider': transformedData.tipo = 'prestador'; break;
-            case 'advertiser': transformedData.tipo = 'anunciante'; break;
-            default: transformedData.tipo = tipo;
-        }
-
-        // 3. Em caso de PJ, utiliza a 'razaoSocial' como o campo 'nome' principal do usuário
+        // 2. Em caso de PJ, utiliza a 'razaoSocial' como o campo 'nome' principal do usuário
         if (data.tipoPessoa === 'PJ') {
             transformedData.nome = data.razaoSocial;
         }
 
-        // 4. Remove formatação (pontos, traços) de CPF e CNPJ
+        // 3. Remove formatação (pontos, traços) de CPF e CNPJ
         if (transformedData.cpf) {
-            transformedData.cpf = transformedData.cpf.replace(/\D/g, '');
+            transformedData.cpf = String(transformedData.cpf).replace(/\D/g, '');
         }
         if (transformedData.cnpj) {
-            transformedData.cnpj = transformedData.cnpj.replace(/\D/g, '');
+            transformedData.cnpj = String(transformedData.cnpj).replace(/\D/g, '');
         }
 
         return transformedData;

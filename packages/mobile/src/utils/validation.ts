@@ -166,7 +166,6 @@ export const registerSchema = z.object({
         .min(1, MESSAGES.VALIDATION.REQUIRED)
         .min(6, MESSAGES.VALIDATION.PASSWORD_MIN),
     telefone: z.string().optional(),
-    tipo: z.enum(['buyer', 'provider', 'advertiser']),
     tipoPessoa: z.enum(['PF', 'PJ']),
 
     // Campos que variam por tipoPessoa

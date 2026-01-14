@@ -28,7 +28,6 @@ describe('User - update email', () => {
       nome: 'User Test',
       email: 'original@example.com',
       senha: 'password123',
-      tipo: 'comprador',
       tipoPessoa: 'PF',
       cpf: '12345678901'
     });
@@ -81,7 +80,6 @@ describe('User - update email', () => {
       nome: 'Another User',
       email: 'taken@example.com',
       senha: 'password123',
-      tipo: 'comprador',
       tipoPessoa: 'PF',
       cpf: '98765432100'
     });
