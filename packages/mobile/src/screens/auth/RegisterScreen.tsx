@@ -139,7 +139,6 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             email: currentValues.email,
             password: currentValues.password,
             telefone: currentValues.telefone,
-            tipo: currentValues.tipo,
 
             // Atualiza o discriminador de tipo de pessoa no formulário
             tipoPessoa: tipoPessoa,

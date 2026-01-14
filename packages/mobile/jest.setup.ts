@@ -57,13 +57,24 @@ if (typeof (globalThis as any).fetch === 'undefined' || (globalThis as any).__FO
 // React Native test environment polyfills
 try {
     const RN = require('react-native');
-    // Some environments may miss StyleSheet.flatten; provide a noop fallback
-    Object.defineProperty(RN.StyleSheet, 'flatten', {
-        value: (s: any) => s,
-        writable: true,
-        configurable: true,
-    });
-} catch {}
+    
+    // Ensure StyleSheet exists
+    if (!RN.StyleSheet) {
+        RN.StyleSheet = {};
+    }
+
+    // Define flatten on StyleSheet if it doesn't exist
+    if (typeof RN.StyleSheet.flatten !== 'function') {
+        RN.StyleSheet.flatten = (style: any) => {
+            if (Array.isArray(style)) {
+                return Object.assign({}, ...style);
+            }
+            return style;
+        };
+    }
+} catch (e) {
+    // Silently fail to avoid breaking test suites that don't need RN
+}
 
 // requestAnimationFrame polyfill for components or libraries relying on it
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
