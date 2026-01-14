@@ -12,30 +12,6 @@ interface AuthenticatedRequest extends AuthRequest {
 }
 
 /**
- * @function mapTipoToApi
- * @description Mapeia a nomenclatura interna de tipos de usuário (em português ou inglês) 
- * para o padrão esperado pela API e pelo Aplicativo Móvel (buyer, provider, advertiser).
- * 
- * @param {any} tipo - O valor bruto do tipo vindo do banco de dados ou input.
- * @returns {'buyer' | 'provider' | 'advertiser'} O tipo normalizado para a API.
- */
-const mapTipoToApi = (tipo: any): 'buyer' | 'provider' | 'advertiser' => {
-    switch (tipo) {
-        case 'comprador':
-        case 'buyer':
-            return 'buyer';
-        case 'prestador':
-        case 'provider':
-            return 'provider';
-        case 'anunciante':
-        case 'advertiser':
-            return 'advertiser';
-        default:
-            return 'buyer';
-    }
-};
-
-/**
  * @async
  * @function register
  * @description Realiza o cadastro de um novo usuário no sistema. 
