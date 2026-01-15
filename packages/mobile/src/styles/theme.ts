@@ -1,3 +1,4 @@
+// import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import { Appearance } from 'react-native';
 
@@ -16,7 +17,8 @@ export const lightTheme = {
     },
 };
 
-// Tema escuro (Paper)
+/* 
+// Tema escuro (Paper) - Desativado conforme solicitação do usuário
 export const darkTheme = {
     ...MD3DarkTheme,
     colors: {
@@ -30,6 +32,7 @@ export const darkTheme = {
         onBackground: '#FFFFFF',
     },
 };
+*/
 
 // Alias de compatibilidade: mantém "theme" apontando para o tema claro por padrão
 export const theme = lightTheme;
@@ -65,6 +68,7 @@ const lightTokens: ColorTokens = {
     textDisabled: '#D1D1D1',
 };
 
+/*
 const darkTokens: ColorTokens = {
     primary: '#BB86FC',
     secondary: '#03DAC6',
@@ -79,14 +83,17 @@ const darkTokens: ColorTokens = {
     backdrop: '#1F1F1F',
     textDisabled: '#4A4A4A',
 };
+*/
 
-// Exporta um proxy que resolve as cores com base no esquema atual do SO.
-// Mantém API existente: colors.<token>
+// Exporta um proxy que resolve as cores.
+// Desativado Dark Theme: Mantém sempre lightTokens para garantir consistência visual.
+// Caso precise ativar futuramente, descomente o darkTokens acima e a lógica de scheme.
 export const colors: ColorTokens = new Proxy({} as ColorTokens, {
     get(_target, prop: keyof ColorTokens) {
-        // Garantir compatibilidade em ambiente de teste (Jest/Node)
-        const scheme = (Appearance as any)?.getColorScheme?.() ?? 'light';
-        const source = scheme === 'dark' ? darkTokens : lightTokens;
+        // Forçado para 'light' para evitar o Dark Theme do sistema
+        // const scheme = (Appearance as any)?.getColorScheme?.() ?? 'light';
+        // const source = scheme === 'dark' ? darkTokens : lightTokens;
+        const source = lightTokens;
 
         return (source as any)[prop];
     },
