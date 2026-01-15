@@ -210,7 +210,7 @@ export const ofertaService = {
             return null;
         }
 
-        const prestadorId = oferta.prestador._id;
+        const prestadorId = (oferta.prestador as any)?._id?._id || (oferta.prestador as any)?._id;
 
         if (String(prestadorId) !== String(userId)) {
             logger.warn('ofertas.update.forbidden', { id, userId, owner: String(prestadorId) });
@@ -232,7 +232,7 @@ export const ofertaService = {
             return false;
         }
 
-        const prestadorId = oferta.prestador._id;
+        const prestadorId = (oferta.prestador as any)?._id?._id || (oferta.prestador as any)?._id;
 
         if (String(prestadorId) !== String(userId)) {
             logger.warn('ofertas.remove.forbidden', { id, userId, owner: String(prestadorId) });
