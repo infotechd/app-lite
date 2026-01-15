@@ -297,14 +297,6 @@ OfertaServicoSchema.virtual('imagensCompletas').get(function(this: any) {
         .filter(Boolean);
 });
 
-// Middleware para popular dados do prestador
-OfertaServicoSchema.pre('find', function() {
-    this.populate('prestador._id', 'nome avatar');
-});
-
-OfertaServicoSchema.pre('findOne', function() {
-    this.populate('prestador._id', 'nome avatar');
-});
 
 // Middleware para manter o campo GeoJSON em sincronia
 OfertaServicoSchema.pre('save', function(next) {
