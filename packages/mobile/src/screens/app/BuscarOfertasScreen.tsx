@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, FlatList, StyleSheet, RefreshControl, Alert, Text as RNText, Switch as RNSwitch } from 'react-native';
-import { Searchbar, Card, Text, FAB, Chip, Button, Portal, Menu, Snackbar, List, IconButton } from 'react-native-paper';
+import { Searchbar, Text, FAB, Chip, Button, Portal, Menu, Snackbar, List, IconButton } from 'react-native-paper';
 // Removido o componente SuggestionsCard em favor de sugestões inline no header (Parte 6)
 import { OfertaServico, OfertaFilters, SortOption } from '@/types/oferta';
+import { OfferCard } from '@/components/offers/OfferCard';
 import { ofertaService } from '@/services/ofertaService';
 // Telemetria e tracing
 import { captureException, startSpan } from '@/utils/sentry';
-import { trackApplyFilters, trackCardClick, trackChangeSort } from '@/utils/analytics';
+import { trackApplyFilters, trackChangeSort } from '@/utils/analytics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing, radius, elevation } from '@/styles/theme';
@@ -15,7 +16,6 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OfertasStackParamList } from '@/types';
 import { openAuthModal } from '@/navigation/RootNavigation';
-import { formatCurrencyBRL } from '@/utils/currency';
 import FiltersModal, { FiltersDraft } from '@/components/FiltersModal';
 import { CATEGORIES_NAMES as CATEGORY_NAMES } from '@/constants/categories';
 import { parseNumber, validatePriceRange } from '@/utils/filtersValidation';
@@ -53,18 +53,6 @@ const getAppliedChipA11y = (label: string) => ({
 
 // getChoiceChipA11y removido: lógica de A11y agora vive dentro do componente FiltersModal
 
-const buildOfferCardA11y = (
-    item: OfertaServico,
-    precoFmt: string,
-    avaliacao: number,
-    cidade: string,
-    estado: string,
-    distancia?: string,
-) => ({
-    accessibilityRole: 'button' as const,
-    accessibilityLabel: `Oferta: ${item.titulo}. Preço ${precoFmt}. Prestador ${item?.prestador?.nome ?? 'Prestador'}. Avaliação ${avaliacao.toFixed(1)}. Localização ${cidade}, ${estado}${distancia ? ' • ' + distancia : ''}.`,
-    accessibilityHint: 'Abre os detalhes da oferta',
-});
 
 const BuscarOfertasScreen: React.FC = () => {
     const [ofertas, setOfertas] = useState<OfertaServico[]>([]);
@@ -460,106 +448,6 @@ const BuscarOfertasScreen: React.FC = () => {
         // Carregamento será disparado pelo useEffect que depende de loadOfertas
     };
 
-    // Card de oferta memoizado para evitar re-renders desnecessários
-    const OfferCard = React.memo(({ item }: { item: OfertaServico }) => {
-        // Defensive formatting to avoid runtime crashes from unexpected/null fields
-        const preco = typeof item?.preco === 'number' ? item.preco : Number(item?.preco ?? 0);
-        const prestadorNome = item?.prestador?.nome ?? 'Prestador';
-        const avaliacaoNum = typeof item?.prestador?.avaliacao === 'number' ? item.prestador.avaliacao : Number(item?.prestador?.avaliacao ?? 0);
-        const avaliacoesCount = typeof (item as any)?.prestador?.avaliacoesCount === 'number'
-            ? (item as any).prestador.avaliacoesCount
-            : (typeof (item as any)?.prestador?.reviewsCount === 'number'
-                ? (item as any).prestador.reviewsCount
-                : (typeof (item as any)?.prestador?.qtdAvaliacoes === 'number'
-                    ? (item as any).prestador.qtdAvaliacoes
-                    : 0));
-        const cidade = item?.localizacao?.cidade ?? 'Cidade';
-        const estado = item?.localizacao?.estado ?? 'UF';
-        const handlePress = useCallback(() => {
-            // Analytics de clique no card
-            try {
-                const ofertaId = (item as any)?._id ?? (item as any)?.id;
-                trackCardClick(ofertaId, {
-                    titulo: item?.titulo,
-                    preco: preco,
-                    categoria: item?.categoria,
-                    prestadorId: (item as any)?.prestador?.id,
-                });
-            } catch {}
-            navigation.navigate('OfferDetail', { oferta: item });
-        }, [item, preco]);
-
-        // Distância formatada (quando disponível)
-        const distanciaM = typeof item?.distancia === 'number' ? item.distancia : undefined;
-        const distanciaStr = typeof distanciaM === 'number' ? (distanciaM >= 1000 ? `${(distanciaM/1000).toFixed(1)} km` : `${Math.round(distanciaM)} m`) : undefined;
-        const unidadeMap: Record<NonNullable<OfertaServico['unidadePreco']>, string> = {
-            hora: '/hora',
-            diaria: '/diária',
-            mes: '/mês',
-            aula: '/aula',
-            pacote: ' (pacote)',
-        } as const;
-        const unidadeLabel = item.unidadePreco ? unidadeMap[item.unidadePreco] : '';
-        const precoFmtWithUnit = `${formatCurrencyBRL(preco)}${unidadeLabel}`;
-
-        return (
-            <Card
-                style={styles.card}
-                onPress={handlePress}
-                {...buildOfferCardA11y(item, precoFmtWithUnit, avaliacaoNum, cidade, estado, distanciaStr)}
-            >
-                <Card.Content>
-                    <View style={styles.cardHeader}>
-                        <Text
-                            variant="titleMedium"
-                            numberOfLines={2}
-                            ellipsizeMode="tail"
-                            style={styles.cardTitle}
-                        >
-                            {item.titulo}
-                        </Text>
-                        <Text style={styles.price} numberOfLines={1} accessibilityLabel={`Preço ${precoFmtWithUnit}`}>
-                            {precoFmtWithUnit}
-                        </Text>
-                    </View>
-
-                    {/* Chips: categoria e distância logo abaixo do título/preço */}
-                    <View style={styles.chipsRow}>
-                        {item.categoria ? (
-                            <Chip mode="outlined" style={styles.categoryChip}>
-                                {item.categoria}
-                            </Chip>
-                        ) : null}
-                        {distanciaStr ? (
-                            <Chip mode="outlined" style={styles.distanceChip} icon="map-marker-distance">
-                                {distanciaStr}
-                            </Chip>
-                        ) : null}
-                    </View>
-
-                    <Text numberOfLines={2} style={styles.description}>
-                        {item.descricao}
-                    </Text>
-
-                    {/* Rodapé em linha única: prestador • rating (com contagem) • localização */}
-                    <View style={styles.cardFooter}>
-                        <Icon name="account" size={16} color={colors.textSecondary} />
-                        <Text style={styles.footerText}>{prestadorNome}</Text>
-                        <RNText style={styles.separator}> • </RNText>
-                        <Icon name="star" size={16} color={colors.warning} />
-                        <Text style={styles.footerText}>
-                            {avaliacaoNum.toFixed(1)}{avaliacoesCount > 0 ? ` (${avaliacoesCount})` : ''}
-                        </Text>
-                        <RNText style={styles.separator}> • </RNText>
-                        <Icon name="map-marker" size={16} color={colors.textSecondary} />
-                        <Text style={[styles.footerText, styles.location]}>
-                            {cidade}, {estado}
-                        </Text>
-                    </View>
-                </Card.Content>
-            </Card>
-        );
-    });
 
     const keyExtractor = useCallback((item: OfertaServico) => item._id, []);
 
@@ -965,7 +853,7 @@ const BuscarOfertasScreen: React.FC = () => {
                 keyboardShouldPersistTaps="always"
                 keyboardDismissMode="none"
                 data={dataWithChips as any}
-                renderItem={({ item }: any) => {
+                renderItem={({ item }: { item: any }) => {
                     if (item === CHIPS_SENTINEL) {
                         return renderAppliedChips();
                     }
@@ -1140,76 +1028,6 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: spacing.sm,
-    },
-    cardTitle: {
-        flex: 1,
-        flexShrink: 1,
-        marginRight: spacing.sm,
-    },
-    price: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: colors.primary,
-        flexShrink: 0,
-        textAlign: 'right',
-    },
-    description: {
-        marginBottom: spacing.sm,
-        color: colors.textSecondary,
-    },
-    cardFooter: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flexWrap: 'nowrap',
-        marginTop: spacing.xs,
-    },
-    footerText: {
-        marginLeft: spacing.xs,
-        color: colors.text,
-        fontSize: 12,
-        flexShrink: 1,
-    },
-    separator: {
-        color: colors.textSecondary,
-        marginHorizontal: spacing.xs,
-        fontSize: 12,
-    },
-    providerInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: spacing.xs,
-    },
-    providerName: {
-        marginLeft: spacing.xs,
-        marginRight: spacing.sm,
-        color: colors.text,
-    },
-    rating: {
-        marginLeft: spacing.xs,
-        color: colors.text,
-    },
-    locationInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    location: {
-        marginLeft: spacing.xs,
-        color: colors.textSecondary,
-        fontSize: 12,
-    },
-    categoryChip: {
-        alignSelf: 'flex-start',
-        marginRight: spacing.xs,
-        minHeight: 44,
-    },
-    distanceChip: {
-        alignSelf: 'flex-start',
-        minHeight: 44,
-    },
-    chipsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: spacing.xs,
     },
     fab: {
         position: 'absolute',
