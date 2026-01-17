@@ -1,6 +1,6 @@
 // import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
-import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
-import { Appearance } from 'react-native';
+import { MD3LightTheme } from 'react-native-paper';
+
 
 // Tema claro (Paper)
 export const lightTheme = {
@@ -33,9 +33,6 @@ export const darkTheme = {
     },
 };
 */
-
-// Alias de compatibilidade: mantém "theme" apontando para o tema claro por padrão
-export const theme = lightTheme;
 
 // Tokens de cor (dinâmicos conforme esquema do SO)
 type ColorTokens = {
@@ -93,9 +90,8 @@ export const colors: ColorTokens = new Proxy({} as ColorTokens, {
         // Forçado para 'light' para evitar o Dark Theme do sistema
         // const scheme = (Appearance as any)?.getColorScheme?.() ?? 'light';
         // const source = scheme === 'dark' ? darkTokens : lightTokens;
-        const source = lightTokens;
 
-        return (source as any)[prop];
+        return (lightTokens as any)[prop];
     },
 });
 
