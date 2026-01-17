@@ -95,6 +95,15 @@ jest.mock('expo-video', () => ({
     useVideoPlayer: jest.fn(() => ({})),
 }));
 
+// Mock expo-image
+jest.mock('expo-image', () => {
+    const React = require('react');
+    const { View } = require('react-native');
+    return {
+        Image: (props: any) => React.createElement(View, props),
+    };
+});
+
 // Mock react-native-safe-area-context
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: any) => children,
