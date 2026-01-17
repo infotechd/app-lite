@@ -30,7 +30,7 @@ export const register = async (req: AuthenticatedRequest, res: Response): Promis
         const existingUser = await User.findOne({ email: registerData.email });
         if (existingUser) {
             // Auditoria de tentativa falha
-            loggerUtils.logAuth('register', undefined, registerData.email, false);
+            loggerUtils.logAuth('register', undefined, registerData.email as string, false);
             res.status(409).json({
                 success: false,
                 message: 'Email já cadastrado'
