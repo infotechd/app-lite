@@ -5,7 +5,6 @@ const baseUser: User = {
   id: 'u1',
   nome: 'Teste',
   email: 't@example.com',
-  tipo: 'buyer',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   tipoPessoa: 'PF',

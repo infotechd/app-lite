@@ -12,7 +12,6 @@ describe('profileService - updateName', () => {
       _id: 'user123',
       nome: 'João Silva',
       email: 'joao@example.com',
-      tipo: 'comprador',
       createdAt: '2023-01-01T00:00:00.000Z',
       updatedAt: '2023-01-01T00:00:00.000Z'
     };
@@ -31,7 +30,6 @@ describe('profileService - updateName', () => {
       id: 'user123',
       nome: 'João Silva',
       email: 'joao@example.com',
-      tipo: 'buyer',
       avatar: undefined,
       avatarBlurhash: undefined,
       telefone: undefined,
@@ -61,7 +59,6 @@ describe('profileService - avatar operations', () => {
     _id: 'user123',
     nome: 'João Silva',
     email: 'joao@example.com',
-    tipo: 'comprador',
     avatar: 'https://cloudinary.com/avatar.jpg'
   };
 

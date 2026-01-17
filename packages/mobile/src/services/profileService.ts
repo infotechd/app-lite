@@ -251,33 +251,12 @@ export async function updateDocuments(data: { cpf?: string; cnpj?: string }): Pr
 }
 
 /**
- * Mapeia o tipo do backend (pt/en) para o tipo usado no app
- */
-const toAppTipo = (t: string): User['tipo'] => {
-  const v = (t || '').toLowerCase();
-  switch (v) {
-    case 'comprador':
-    case 'buyer':
-      return 'buyer';
-    case 'prestador':
-    case 'provider':
-      return 'provider';
-    case 'anunciante':
-    case 'advertiser':
-      return 'advertiser';
-    default:
-      return 'buyer';
-  }
-};
-
-/**
  * Normaliza a resposta de usuário do backend para o formato esperado pelo app
  */
 const normalizeUser = (u: any): User => ({
   id: String(u?.id ?? u?._id ?? ''),
   nome: String(u?.nome ?? ''),
   email: String(u?.email ?? ''),
-  tipo: toAppTipo(u?.tipo ?? ''),
   avatar: u?.avatar ?? undefined,
   avatarBlurhash: u?.avatarBlurhash ?? undefined,
   telefone: u?.telefone ?? undefined,
