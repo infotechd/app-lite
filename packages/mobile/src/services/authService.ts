@@ -18,30 +18,6 @@ export interface AuthResponse {
 type AnyObject = Record<string, any>;
 
 /**
- * Converte a string de tipo de usuário vinda do backend para o formato enumerado do app.
- * Aceita variações em Português e Inglês para maior compatibilidade.
- * 
- * @param {string} t - String do tipo/role recebida da API.
- * @returns {User['tipo']} - O tipo mapeado ('buyer', 'provider' ou 'advertiser').
- */
-const toAppTipo = (t: string): User['tipo'] => {
-    const v = t.toLowerCase();
-    switch (v) {
-        case 'comprador':
-        case 'buyer':
-            return 'buyer';
-        case 'prestador':
-        case 'provider':
-            return 'provider';
-        case 'anunciante':
-        case 'advertiser':
-            return 'advertiser';
-        default:
-            return 'buyer';
-    }
-};
-
-/**
  * Normaliza o objeto de usuário retornado pelo backend, tratando diferenças de nomes de campos
  * (como _id vs id) e campos opcionais para usuários PF (Pessoa Física) e PJ (Pessoa Jurídica).
  * 
@@ -52,7 +28,6 @@ const normalizeUser = (u: AnyObject): User => ({
     id: String(u._id ?? u.id ?? ''), // Garante que teremos um ID como string
     nome: String(u.nome ?? u.name ?? ''),
     email: String(u.email ?? ''),
-    tipo: toAppTipo(u.tipo ?? u.role ?? ''),
     avatar: u.avatar ?? undefined,
     telefone: u.telefone ?? u.phone ?? undefined,
     localizacao: u.localizacao ?? u.location ?? undefined,
@@ -190,3 +165,4 @@ export const AuthService = {
 
 // Alias de compatibilidade com imports existentes
 export const authService = AuthService;
+

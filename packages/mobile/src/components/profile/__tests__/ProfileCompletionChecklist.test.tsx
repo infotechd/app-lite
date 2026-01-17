@@ -49,7 +49,6 @@ describe('ProfileCompletionChecklist', () => {
     id: '1',
     nome: 'John Doe',
     email: 'john@example.com',
-    tipo: 'buyer',
     tipoPessoa: 'PF',
     ativo: true,
     createdAt: new Date().toISOString(),
