@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { Button, Text, TextInput } from 'react-native-paper';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '@/types';
@@ -34,7 +35,7 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
     const handleSubmit = async () => {
         // Verifica se o campo de e-mail está preenchido.
         if (!email.trim()) {
-            Alert.alert('Erro', 'Informe seu e-mail.');
+            showAlert('Erro', 'Informe seu e-mail.');
             return;
         }
         try {
@@ -43,13 +44,13 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
             await authService.forgotPassword(email.trim());
             
             // Exibe mensagem informativa de sucesso.
-            Alert.alert('Tudo certo', 'Se este e-mail existir, enviaremos instruções em breve.');
+            showAlert('Tudo certo', 'Se este e-mail existir, enviaremos instruções em breve.');
             
             // Navega para a tela de redefinição de senha, passando o e-mail como parâmetro.
             navigation.navigate('ResetPassword', { email: email.trim() });
         } catch (err: any) {
             // Captura erros da API e exibe para o usuário.
-            Alert.alert('Erro', err?.message || 'Não foi possível enviar o e-mail.');
+            showAlert('Erro', err?.message || 'Não foi possível enviar o e-mail.');
         } finally {
             // Desativa o estado de carregamento independente do resultado.
             setLoading(false);

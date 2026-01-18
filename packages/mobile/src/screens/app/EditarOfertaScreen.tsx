@@ -4,7 +4,8 @@
 // e destacam pontos de melhoria identificados.
 
 import React, { useMemo, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { Button, Text, TextInput, HelperText, Chip } from 'react-native-paper';
 import { colors, spacing } from '@/styles/theme'; // Tokens de tema (cores, espaçamentos)
 import { criarOfertaSchema, OFERTA_MEDIA_CONFIG, PriceUnit } from '@/utils/validation'; // Schema de validação e configs de mídia
@@ -93,11 +94,16 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
     const [submitting, setSubmitting] = useState(false);
 
     const { categoryOptions, subcategoryOptions, stateOptions } = useOfertaOptions(form.categoria);
+    
+    // Debug: verificar se a categoria está sendo carregada corretamente
+    console.log('[EditarOfertaScreen] oferta.categoria:', oferta.categoria);
+    console.log('[EditarOfertaScreen] form.categoria:', form.categoria);
+    console.log('[EditarOfertaScreen] categoryOptions:', categoryOptions);
 
     // Hook para seleção de mídia, encapsulando lógica de câmera e galeria
     const onSelectMedia = (newMedia: MediaFile[]) => {
         if (media.length + newMedia.length > OFERTA_MEDIA_CONFIG.MAX_FILES) {
-            Alert.alert(
+            showAlert(
                 'Limite de mídias atingido',
                 `Você pode adicionar no máximo ${OFERTA_MEDIA_CONFIG.MAX_FILES} mídias.`
             );
@@ -259,14 +265,14 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
 
             // 4) Chamada da API para atualizar a oferta e navegação para detalhe
             const updated = await ofertaService.updateOferta(oferta._id, payload);
-            Alert.alert('Sucesso', 'Oferta atualizada com sucesso!');
+            showAlert('Sucesso', 'Oferta atualizada com sucesso!');
             // Ponto de melhoria: considerar navegação com goBack + atualização via contexto/estado global em vez de replace.
             navigation.replace('OfferDetail', { oferta: updated });
         } catch (e: any) {
             console.error('Erro ao atualizar oferta:', e?.response?.data || e);
             const message = e?.response?.data?.message || e?.message || 'Não foi possível atualizar a oferta.';
             // Ponto de melhoria: consolidar tratamento de erros (ex: hook/useApi) e mensagens i18n.
-            Alert.alert('Erro', String(message));
+            showAlert('Erro', String(message));
         } finally {
             setSubmitting(false);
         }

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Keyboard, ScrollView, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { Appbar, Button, Text, TextInput } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '@/context/AuthContext';
@@ -60,7 +61,7 @@ const EditProfileDocumentScreen: React.FC = () => {
   const handleSave = async () => {
     // Impede o salvamento se o valor for inválido
     if (!isValid) {
-      Alert.alert('Erro', `${label} inválido.`);
+      showAlert('Erro', `${label} inválido.`);
       return;
     }
     try {
@@ -75,13 +76,13 @@ const EditProfileDocumentScreen: React.FC = () => {
       // Atualiza os dados do usuário no contexto global da aplicação
       await setUser(updated);
       
-      Alert.alert('Sucesso', `${label} atualizado com sucesso.`);
+      showAlert('Sucesso', `${label} atualizado com sucesso.`);
       
       // Retorna para a tela anterior após o sucesso
       navigation.goBack();
     } catch (err: any) {
       // Exibe mensagem de erro amigável em caso de falha na requisição
-      Alert.alert('Erro', err?.message || 'Não foi possível salvar.');
+      showAlert('Erro', err?.message || 'Não foi possível salvar.');
     } finally {
       setSaving(false); // Desativa o estado de carregamento independente do resultado
     }

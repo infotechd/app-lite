@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Keyboard, ScrollView, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { Appbar, Button, Text, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '@/context/AuthContext';
@@ -40,7 +41,7 @@ const EditProfileCompanyScreen: React.FC = () => {
   const handleSave = async () => {
     // Validação preventiva antes de tentar salvar
     if (!canSave) {
-      Alert.alert('Erro', 'Razão Social é obrigatória e deve ter pelo menos 3 caracteres.');
+      showAlert('Erro', 'Razão Social é obrigatória e deve ter pelo menos 3 caracteres.');
       return;
     }
 
@@ -56,11 +57,11 @@ const EditProfileCompanyScreen: React.FC = () => {
       // Atualiza o contexto de autenticação com os novos dados do usuário
       await setUser(updated);
 
-      Alert.alert('Sucesso', 'Dados da empresa atualizados.');
+      showAlert('Sucesso', 'Dados da empresa atualizados.');
       navigation.goBack(); // Retorna para a tela anterior após sucesso
     } catch (err: any) {
       // Exibe mensagem de erro caso a requisição falhe
-      Alert.alert('Erro', err?.message || 'Não foi possível salvar.');
+      showAlert('Erro', err?.message || 'Não foi possível salvar.');
     } finally {
       setSaving(false); // Finaliza o estado de loading independente do resultado
     }

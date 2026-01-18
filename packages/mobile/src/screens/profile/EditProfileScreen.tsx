@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { Text, TextInput, Button, Appbar, ActivityIndicator, Dialog, Portal } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '@/context/AuthContext';
@@ -88,10 +89,10 @@ const EditProfileScreen: React.FC = () => {
       }
 
       await setUser(updatedUser);
-      Alert.alert('Sucesso', 'Perfil atualizado com sucesso.');
+      showAlert('Sucesso', 'Perfil atualizado com sucesso.');
       navigation.goBack();
     } catch (error: any) {
-      Alert.alert('Erro', error?.message || 'Não foi possível atualizar o perfil.');
+      showAlert('Erro', error?.message || 'Não foi possível atualizar o perfil.');
     } finally {
       setIsSaving(false);
     }
@@ -101,11 +102,11 @@ const EditProfileScreen: React.FC = () => {
     try {
       setIsSaving(true);
       const { message } = await updateEmailService(trimmedEmail, currentPassword);
-      Alert.alert('Solicitação enviada', message);
+      showAlert('Solicitação enviada', message);
       setPasswordModalVisible(false);
       setCurrentPassword('');
     } catch (error: any) {
-      Alert.alert('Erro', error?.message || 'Não foi possível solicitar a alteração de e-mail.');
+      showAlert('Erro', error?.message || 'Não foi possível solicitar a alteração de e-mail.');
     } finally {
       setIsSaving(false);
     }
@@ -119,10 +120,10 @@ const EditProfileScreen: React.FC = () => {
       setEmail(updatedUser.email);
       setIsEmailChanged(false);
       setToken('');
-      Alert.alert('Sucesso', 'E-mail atualizado com sucesso.');
+      showAlert('Sucesso', 'E-mail atualizado com sucesso.');
       navigation.goBack();
     } catch (error: any) {
-      Alert.alert('Erro', error?.message || 'Token inválido ou expirado.');
+      showAlert('Erro', error?.message || 'Token inválido ou expirado.');
     } finally {
       setConfirmingToken(false);
     }

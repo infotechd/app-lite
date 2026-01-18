@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Alert } from 'react-native';
+import { showAlert, showDestructiveConfirm } from '@/utils/alert';
 import { useAuth } from '@/context/AuthContext';
 import { uploadAvatar as uploadAvatarService, removeAvatar as removeAvatarService } from '@/services/profileService';
 import { useMediaPicker } from './useMediaPicker';
@@ -43,7 +43,7 @@ export const useProfileAvatar = (): UseProfileAvatarReturn => {
           const updatedUser = await uploadAvatarService(media[0]);
           await handleSuccess(updatedUser);
         } catch (error: any) {
-          Alert.alert('Erro ao carregar foto', error?.message || 'Tente novamente.');
+          showAlert('Erro ao carregar foto', error?.message || 'Tente novamente.');
         } finally {
           setIsLoading(false);
         }
@@ -59,28 +59,24 @@ export const useProfileAvatar = (): UseProfileAvatarReturn => {
   const remove = useCallback(async () => {
     if (!user?.avatar) return;
 
-    Alert.alert(
+    const confirmed = await showDestructiveConfirm(
       'Remover foto',
       'Tem certeza que deseja remover sua foto de perfil?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Remover', 
-          style: 'destructive',
-          onPress: async () => {
-            setIsLoading(true);
-            try {
-              const updatedUser = await removeAvatarService();
-              await handleSuccess(updatedUser);
-            } catch (error: any) {
-              Alert.alert('Erro ao remover foto', error?.message || 'Tente novamente.');
-            } finally {
-              setIsLoading(false);
-            }
-          }
-        },
-      ]
+      'Remover',
+      'Cancelar'
     );
+    
+    if (!confirmed) return;
+    
+    setIsLoading(true);
+    try {
+      const updatedUser = await removeAvatarService();
+      await handleSuccess(updatedUser);
+    } catch (error: any) {
+      showAlert('Erro ao remover foto', error?.message || 'Tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
   }, [user?.avatar, handleSuccess]);
 
   return { 

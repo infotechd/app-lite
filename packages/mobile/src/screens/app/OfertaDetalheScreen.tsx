@@ -10,7 +10,8 @@
 
 
 import React from 'react';
-import { View, StyleSheet, ScrollView, Image, Alert, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, Dimensions } from 'react-native';
+import { showAlert, showDestructiveConfirm } from '@/utils/alert';
 import { Text, Card, Chip, Button } from 'react-native-paper';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors, spacing } from '@/styles/theme';
@@ -72,30 +73,26 @@ const OfertaDetalheScreen: React.FC<Props> = ({ route, navigation }) => {
         navigation.navigate('EditOferta', { oferta });
     };
 
-    const handleDelete = () => {
-        Alert.alert(
+    const handleDelete = async () => {
+        const confirmed = await showDestructiveConfirm(
             'Excluir oferta',
             'Tem certeza que deseja excluir esta oferta? Esta ação não pode ser desfeita.',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Excluir',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await ofertaService.deleteOferta(oferta._id);
-                            Alert.alert('Sucesso', 'Oferta excluída com sucesso.');
-                            navigation.goBack();
-                        } catch (e: any) {
-                            const message = e?.response?.data?.message
-                                || e?.message
-                                || 'Não foi possível excluir a oferta.';
-                            Alert.alert('Erro', String(message));
-                        }
-                    },
-                },
-            ]
+            'Excluir',
+            'Cancelar'
         );
+        
+        if (!confirmed) return;
+        
+        try {
+            await ofertaService.deleteOferta(oferta._id);
+            showAlert('Sucesso', 'Oferta excluída com sucesso.');
+            navigation.goBack();
+        } catch (e: any) {
+            const message = e?.response?.data?.message
+                || e?.message
+                || 'Não foi possível excluir a oferta.';
+            showAlert('Erro', String(message));
+        }
     };
 
     return (

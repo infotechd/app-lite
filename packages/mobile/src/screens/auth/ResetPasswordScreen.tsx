@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { Button, Text, TextInput } from 'react-native-paper';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '@/types';
@@ -38,7 +39,7 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation, route }) => {
     const handleSubmit = async () => {
         // Validação básica: garante que tanto o token quanto a senha não estão vazios após remover espaços.
         if (!token.trim() || !password.trim()) {
-            Alert.alert('Erro', 'Informe token e nova senha.');
+            showAlert('Erro', 'Informe token e nova senha.');
             return;
         }
         try {
@@ -49,13 +50,13 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation, route }) => {
             await authService.resetPassword(token.trim(), password.trim());
             
             // Exibe mensagem de sucesso caso a API retorne sem erros.
-            Alert.alert('Sucesso', 'Senha redefinida com sucesso.');
+            showAlert('Sucesso', 'Senha redefinida com sucesso.');
             
             // Redireciona o usuário para a tela de Login, limpando a tela atual da pilha de navegação.
             navigation.replace('Login');
         } catch (err: any) {
             // Captura e exibe qualquer erro ocorrido durante o processo (ex: token inválido, erro de rede).
-            Alert.alert('Erro', err?.message || 'Não foi possível redefinir a senha.');
+            showAlert('Erro', err?.message || 'Não foi possível redefinir a senha.');
         } finally {
             // Garante que o estado de carregamento seja desativado ao final, independente do sucesso ou erro.
             setLoading(false);

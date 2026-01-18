@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { Text, TextInput, Button, Card } from 'react-native-paper';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing } from '@/styles/theme';
@@ -16,7 +17,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
     const handleLogin = async () => {
         if (!email || !password) {
-            Alert.alert('Erro', 'Preencha todos os campos');
+            showAlert('Erro', 'Preencha todos os campos');
             return;
         }
 
@@ -25,7 +26,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             await login(email, password);
         } catch (error: any) {
             const message = error?.message || error?.response?.data?.message || 'Erro ao fazer login';
-            Alert.alert('Erro', message);
+            showAlert('Erro', message);
         } finally {
             setIsLoading(false);
         }

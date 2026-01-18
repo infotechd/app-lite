@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Alert } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { MediaFile } from '@/types/media';
 
 /**
@@ -129,7 +129,7 @@ export const useMediaPicker = (props: UseMediaPickerProps) => {
 
             // Verifica se a nova seleção excede o limite permitido de arquivos.
             if (currentFilesCount + newFiles.length > maxFiles) {
-                Alert.alert(
+                showAlert(
                     'Limite de arquivos excedido',
                     `Você pode selecionar no máximo ${maxFiles} arquivos.`
                 );
@@ -149,7 +149,7 @@ export const useMediaPicker = (props: UseMediaPickerProps) => {
         const { status } =
             await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert(
+            showAlert(
                 'Permissão necessária',
                 'É necessário permitir o acesso à galeria.'
             );
@@ -177,7 +177,7 @@ export const useMediaPicker = (props: UseMediaPickerProps) => {
     const takePhoto = async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert(
+            showAlert(
                 'Permissão necessária',
                 'É necessário permitir o acesso à câmera.'
             );

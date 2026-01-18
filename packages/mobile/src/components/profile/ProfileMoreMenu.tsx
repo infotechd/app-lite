@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Platform, Share } from 'react-native';
+import { Platform, Share } from 'react-native';
 import { Divider, List, Menu, Snackbar } from 'react-native-paper';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '@/context/AuthContext';
+import { showDestructiveConfirm } from '@/utils/alert';
 
 export interface ProfileMoreMenuProps {
   visible: boolean;
@@ -57,44 +58,34 @@ const ProfileMoreMenu: React.FC<ProfileMoreMenuProps> = ({
     }
   }, [onDismiss, profileUrl, showToast]);
 
-  const onReport = useCallback(() => {
+  const onReport = useCallback(async () => {
     onDismiss();
-    Alert.alert(
+    const confirmed = await showDestructiveConfirm(
       'Denunciar perfil',
       'Tem certeza que deseja denunciar este perfil por comportamento inadequado?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Denunciar',
-          style: 'destructive',
-          onPress: () => {
-            console.log('Denunciar perfil:', { profileId });
-            showToast('Denúncia registrada');
-          },
-        },
-      ],
-      { cancelable: true },
+      'Denunciar',
+      'Cancelar'
     );
+    
+    if (confirmed) {
+      console.log('Denunciar perfil:', { profileId });
+      showToast('Denúncia registrada');
+    }
   }, [onDismiss, profileId, showToast]);
 
-  const onBlock = useCallback(() => {
+  const onBlock = useCallback(async () => {
     onDismiss();
-    Alert.alert(
+    const confirmed = await showDestructiveConfirm(
       'Bloquear usuário',
       'Você não verá mais este perfil e ele não poderá interagir com você. Deseja continuar?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Bloquear',
-          style: 'destructive',
-          onPress: () => {
-            console.log('Bloquear usuário:', { profileId });
-            showToast('Usuário bloqueado');
-          },
-        },
-      ],
-      { cancelable: true },
+      'Bloquear',
+      'Cancelar'
     );
+    
+    if (confirmed) {
+      console.log('Bloquear usuário:', { profileId });
+      showToast('Usuário bloqueado');
+    }
   }, [onDismiss, profileId, showToast]);
 
   const onSettings = useCallback(() => {
@@ -168,4 +159,3 @@ const ProfileMoreMenu: React.FC<ProfileMoreMenuProps> = ({
 };
 
 export default ProfileMoreMenu;
-

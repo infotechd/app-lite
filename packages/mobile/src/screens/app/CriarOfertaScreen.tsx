@@ -11,7 +11,8 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Alert, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { Button, Text, TextInput, HelperText, Chip } from 'react-native-paper';
 import { colors, spacing } from '@/styles/theme';
 import { criarOfertaSchema, CriarOfertaForm, OFERTA_MEDIA_CONFIG } from '@/utils/validation';
@@ -91,7 +92,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
      */
     const onSelectMedia = (newMedia: any[]) => {
         if (form.mediaFiles.length + newMedia.length > OFERTA_MEDIA_CONFIG.MAX_FILES) {
-            Alert.alert(
+            showAlert(
                 'Limite de mídias atingido',
                 `Você pode adicionar no máximo ${OFERTA_MEDIA_CONFIG.MAX_FILES} mídias.`
             );
@@ -200,7 +201,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
 
                     // Caso algum arquivo esteja inconsistente, orientamos o usuário a selecionar novamente
                     if (!allValid) {
-                        Alert.alert(
+                        showAlert(
                             'Erro',
                             'Arquivos de mídia inválidos. Tente selecionar novamente.'
                         );
@@ -220,7 +221,7 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
                         err?.response?.data?.message ||
                         err?.message ||
                         'Falha no upload de mídias.';
-                    Alert.alert('Erro no upload', String(message));
+                    showAlert('Erro no upload', String(message));
                     return;
                 }
             }
@@ -243,13 +244,13 @@ const CriarOfertaScreen: React.FC<Props> = ({ navigation }) => {
 
             // 4) Criação da oferta e redirecionamento para a tela de detalhes
             const created = await ofertaService.createOferta(payload);
-            Alert.alert('Sucesso', 'Oferta criada com sucesso!');
+            showAlert('Sucesso', 'Oferta criada com sucesso!');
             navigation.replace('OfferDetail', { oferta: created });
         } catch (e: any) {
             console.error('Erro ao criar oferta:', e?.response?.data || e);
             const message =
                 e?.response?.data?.message || e?.message || 'Não foi possível criar a oferta.';
-            Alert.alert('Erro', String(message));
+            showAlert('Erro', String(message));
         } finally {
             setSubmitting(false);
         }

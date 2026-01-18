@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Alert, Text as RNText, Switch as RNSwitch } from 'react-native';
+import { View, FlatList, StyleSheet, RefreshControl, Text as RNText, Switch as RNSwitch } from 'react-native';
+import { showAlert } from '@/utils/alert';
 import { Searchbar, Text, FAB, Chip, Button, Portal, Menu, Snackbar, List, IconButton } from 'react-native-paper';
 // Removido o componente SuggestionsCard em favor de sugestões inline no header (Parte 6)
 import { OfertaServico, OfertaFilters, SortOption } from '@/types/oferta';
@@ -391,7 +392,7 @@ const BuscarOfertasScreen: React.FC = () => {
         const max = parseNumber(draft.precoMax);
         const priceError = validatePriceRange(min, max);
         if (priceError) {
-            Alert.alert('Validação', priceError);
+            showAlert('Validação', priceError);
             return;
         }
 

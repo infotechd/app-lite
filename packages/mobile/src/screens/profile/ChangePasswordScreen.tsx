@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { profileService } from '@/services/profileService';
+import { showAlert, showConfirm } from '@/utils/alert';
 
 /**
  * Tela de alteração de senha do usuário.
@@ -30,13 +31,13 @@ const ChangePasswordScreen: React.FC = () => {
     const handleSubmit = async () => {
         // Verifica se os campos de senha não estão vazios
         if (!currentPassword || !newPassword) {
-            Alert.alert('Erro', 'Preencha a senha atual e a nova senha.');
+            showAlert('Erro', 'Preencha a senha atual e a nova senha.');
             return;
         }
 
         // Valida se a nova senha possui o comprimento mínimo exigido
         if (newPassword.length < 6) {
-            Alert.alert('Erro', 'Nova senha deve ter no mínimo 6 caracteres.');
+            showAlert('Erro', 'Nova senha deve ter no mínimo 6 caracteres.');
             return;
         }
 
@@ -48,10 +49,13 @@ const ChangePasswordScreen: React.FC = () => {
             const { message } = await profileService.changePassword(currentPassword, newPassword);
 
             // Exibe alerta de sucesso e volta para a tela anterior ao confirmar
-            Alert.alert('Sucesso', message, [{ text: 'OK', onPress: () => navigation.goBack() }]);
+            const confirmed = await showConfirm('Sucesso', message, 'OK');
+            if (confirmed) {
+                navigation.goBack();
+            }
         } catch (err: any) {
             // Exibe erro caso a requisição falhe (ex: senha atual incorreta)
-            Alert.alert('Erro', err?.message || 'Não foi possível alterar a senha.');
+            showAlert('Erro', err?.message || 'Não foi possível alterar a senha.');
         } finally {
             // Desativa o estado de carregamento
             setLoading(false);
@@ -107,4 +111,3 @@ const styles = StyleSheet.create({
 });
 
 export default ChangePasswordScreen;
-

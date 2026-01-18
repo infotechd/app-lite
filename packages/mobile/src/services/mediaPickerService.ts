@@ -15,7 +15,8 @@
 
 import * as ImagePicker from 'expo-image-picker';
 import { MediaFile, OFERTA_MEDIA_CONFIG, MediaConfig } from '@/utils/validation';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { showAlert } from '@/utils/alert';
 
 /**
  * Resultado padronizado das operações de seleção/captura de mídia.
@@ -212,7 +213,7 @@ export async function takePhoto(
 
     const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
     if (cameraPermission.status !== 'granted') {
-        Alert.alert(
+        showAlert(
             'Permissão Negada',
             'É necessário permitir o acesso à câmera para tirar fotos.'
         );
@@ -233,7 +234,7 @@ export async function takePhoto(
         return processAssets(result.assets, current, cfg, 'image');
     } catch (error) {
         console.error('Erro ao tirar foto:', error);
-        Alert.alert('Erro', 'Não foi possível tirar a foto.');
+        showAlert('Erro', 'Não foi possível tirar a foto.');
         return { files: current, warnings: [] };
     }
 }
@@ -260,7 +261,7 @@ export async function recordVideo(
 
     const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
     if (cameraPermission.status !== 'granted') {
-        Alert.alert(
+        showAlert(
             'Permissão Negada',
             'É necessário permitir o acesso à câmera para gravar vídeos.'
         );
@@ -282,7 +283,7 @@ export async function recordVideo(
         return processAssets(result.assets, current, cfg, 'video');
     } catch (error) {
         console.error('Erro ao gravar vídeo:', error);
-        Alert.alert('Erro', 'Não foi possível gravar o vídeo.');
+        showAlert('Erro', 'Não foi possível gravar o vídeo.');
         return { files: current, warnings: [] };
     }
 }
@@ -304,7 +305,7 @@ export async function pickPhoto(
 ): Promise<PickMediaResult> {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (perm.status !== 'granted') {
-        Alert.alert(
+        showAlert(
             'Permissão Negada',
             'É necessário permitir o acesso à galeria para escolher fotos.'
         );
@@ -331,7 +332,7 @@ export async function pickPhoto(
         return processAssets(result.assets, current, cfg, 'image');
     } catch (error) {
         console.error('Erro ao escolher foto:', error);
-        Alert.alert('Erro', 'Não foi possível escolher a foto.');
+        showAlert('Erro', 'Não foi possível escolher a foto.');
         return { files: current, warnings: [] };
     }
 }
@@ -353,7 +354,7 @@ export async function pickVideo(
 ): Promise<PickMediaResult> {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (perm.status !== 'granted') {
-        Alert.alert(
+        showAlert(
             'Permissão Negada',
             'É necessário permitir o acesso à galeria para escolher vídeos.'
         );
@@ -380,7 +381,7 @@ export async function pickVideo(
         return processAssets(result.assets, current, cfg, 'video');
     } catch (error) {
         console.error('Erro ao escolher vídeo:', error);
-        Alert.alert('Erro', 'Não foi possível escolher o vídeo.');
+        showAlert('Erro', 'Não foi possível escolher o vídeo.');
         return { files: current, warnings: [] };
     }
 }
