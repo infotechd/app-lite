@@ -306,7 +306,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
                 label="Preço"
                 value={form.precoText}
                 onChangeText={t => setField('precoText', maskCurrencyInput(t))}
-                style={[styles.input, styles.priceInput]}
+                style={styles.input}
                 mode="outlined"
                 keyboardType="numeric"
                 error={!!errors.preco}
@@ -450,11 +450,11 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
         gap: spacing.md,
     },
-    priceInput: {
-        flex: 1,
-    },
     priceUnitContainer: {
-        flex: 1,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: spacing.sm,
+        marginBottom: spacing.md,
     },
     label: {
         marginBottom: spacing.sm,
