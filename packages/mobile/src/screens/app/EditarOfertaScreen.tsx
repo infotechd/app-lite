@@ -183,6 +183,21 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     /**
+     * Traduz erros técnicos de mídia para mensagens amigáveis ao usuário.
+     */
+    const getFriendlyMediaError = (error: any) => {
+        const status = error?.response?.status;
+        const message = error?.message?.toLowerCase() || '';
+        const apiMessage = error?.response?.data?.message?.toLowerCase() || '';
+
+        if (message.includes('network error')) return 'Verifique sua conexão com a internet.';
+        if (message.includes('timeout') || message.includes('econnaborted')) return 'O upload demorou muito. Tente novamente com um sinal melhor.';
+        if (status === 413 || apiMessage.includes('too large') || apiMessage.includes('grande demais')) return 'O arquivo é grande demais para o nosso servidor.';
+
+        return 'Ocorreu um problema ao salvar suas mídias. Tente novamente em instantes.';
+    };
+
+    /**
      * Submete o formulário de edição de oferta.
      * Fluxo:
      * 1) Limpa erros e ativa estado de envio.
@@ -237,9 +252,16 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
             let uploadedVideoUrls: string[] = [];
 
             if (localFiles.length > 0) {
-                const uploadResponse = await uploadFiles(localFiles);
-                uploadedImageUrls = uploadResponse.images || [];
-                uploadedVideoUrls = uploadResponse.videos || [];
+                try {
+                    const uploadResponse = await uploadFiles(localFiles);
+                    uploadedImageUrls = uploadResponse.images || [];
+                    uploadedVideoUrls = uploadResponse.videos || [];
+                } catch (uploadError: any) {
+                    console.error('Erro no upload de mídia:', uploadError);
+                    showAlert('Problema com Mídia', getFriendlyMediaError(uploadError));
+                    setSubmitting(false);
+                    return;
+                }
             }
 
             // 2) Consolidação final de listas de mídias (mantidas + recém-carregadas)
@@ -433,7 +455,7 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
                 loading={submitting}
                 style={styles.submit}
             >
-                Salvar Alterações
+                {submitting ? 'Enviando fotos e vídeos...' : 'Salvar Alterações'}
             </Button>
         </ScrollView>
     );

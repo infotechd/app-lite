@@ -56,30 +56,37 @@ export interface UploadFilesResponse {
  * @returns Promise com o Blob do arquivo
  */
 async function uriToBlob(uri: string): Promise<Blob> {
-    // Se for uma URL blob: ou http/https, usa fetch
-    if (uri.startsWith('blob:') || uri.startsWith('http://') || uri.startsWith('https://')) {
-        const response = await fetch(uri);
-        return await response.blob();
-    }
-    
-    // Se for data: URI (base64), converte manualmente
-    if (uri.startsWith('data:')) {
-        const [header, base64Data] = uri.split(',');
-        const mimeMatch = header.match(/data:([^;]+)/);
-        const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
-        
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
+    try {
+        // Se for uma URL blob: ou http/https, usa fetch
+        if (uri.startsWith('blob:') || uri.startsWith('http://') || uri.startsWith('https://')) {
+            const response = await fetch(uri);
+            if (!response.ok) throw new Error('Falha ao ler arquivo temporário');
+            return await response.blob();
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        return new Blob([byteArray], { type: mime });
+
+        // Se for data: URI (base64), converte manualmente
+        if (uri.startsWith('data:')) {
+            const [header, base64Data] = uri.split(',');
+            const mimeMatch = header.match(/data:([^;]+)/);
+            const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mime });
+        }
+
+        // Fallback: tenta fetch mesmo assim
+        const response = await fetch(uri);
+        if (!response.ok) throw new Error('Falha ao ler arquivo (fallback)');
+        return await response.blob();
+    } catch (error) {
+        console.error('[uriToBlob] Erro ao converter URI para Blob:', error);
+        throw new Error('Não foi possível processar este arquivo. Por favor, selecione a foto novamente.');
     }
-    
-    // Fallback: tenta fetch mesmo assim
-    const response = await fetch(uri);
-    return await response.blob();
 }
 
 /**
