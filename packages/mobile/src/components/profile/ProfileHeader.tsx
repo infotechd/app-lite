@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Avatar, Button, IconButton } from 'react-native-paper';
 import { colors, spacing, radius } from '@/styles/theme';
@@ -56,15 +56,24 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ user, profileId }) => {
   /** Hash para o efeito de borrão (blur) enquanto a imagem principal carrega */
   const avatarBlurhash = user?.avatarBlurhash ?? 'L6PZfSi_.AyE_3t7t7R**j_3mWj?';
 
+  // Estado para rastrear se houve erro ao carregar a imagem do avatar
+  const [imageError, setImageError] = useState(false);
+
+  // Reseta o estado de erro quando a URL do avatar muda
+  useEffect(() => {
+    setImageError(false);
+  }, [avatarUrl]);
+
   return (
     <View style={styles.container}>
       {/* Seção do Avatar com suporte a carregamento otimizado e badge de verificado */}
       <View style={styles.avatarContainer}>
-        {avatarUrl ? (
+        {avatarUrl && !imageError ? (
           <OptimizedImage
             source={{ uri: avatarUrl }}
             blurhash={avatarBlurhash}
             style={styles.avatar}
+            onError={() => setImageError(true)}
           />
         ) : (
           <Avatar.Text label={initial} size={80} style={styles.avatar} />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Avatar, IconButton, Menu, Divider, ActivityIndicator } from 'react-native-paper';
 import { useProfileAvatar } from '@/hooks/useProfileAvatar';
@@ -22,6 +22,9 @@ const AvatarEditor: React.FC = () => {
   // Estado local para controlar a visibilidade do menu de opções (aberto/fechado)
   const [menuVisible, setMenuVisible] = useState(false);
 
+  // Estado para rastrear se houve erro ao carregar a imagem do avatar
+  const [imageError, setImageError] = useState(false);
+
   /**
    * Abre o menu suspenso de opções do avatar.
    * @returns {void}
@@ -41,6 +44,11 @@ const AvatarEditor: React.FC = () => {
   // URL da imagem de avatar do usuário extraída do objeto user
   const avatarUrl = user?.avatar;
 
+  // Reseta o estado de erro quando a URL do avatar muda
+  useEffect(() => {
+    setImageError(false);
+  }, [avatarUrl]);
+
   return (
     <View style={styles.container}>
       <View style={styles.avatarWrapper}>
@@ -49,12 +57,13 @@ const AvatarEditor: React.FC = () => {
           onDismiss={closeMenu}
           anchor={
             <TouchableOpacity onPress={openMenu} activeOpacity={0.7}>
-              {/* Exibição condicional: mostra a imagem otimizada se houver URL, ou as iniciais do usuário */}
-              {avatarUrl ? (
+              {/* Exibição condicional: mostra a imagem otimizada se houver URL válida, ou as iniciais do usuário como fallback */}
+              {avatarUrl && !imageError ? (
                 <OptimizedImage
                   source={{ uri: avatarUrl }}
                   style={styles.avatar}
                   blurhash={user?.avatarBlurhash}
+                  onError={() => setImageError(true)}
                 />
               ) : (
                 <Avatar.Text label={initial} size={120} style={styles.avatar} />
