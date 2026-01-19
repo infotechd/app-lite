@@ -10,6 +10,7 @@ export interface OptimizedImageProps {
   contentFit?: ImageProps['contentFit'];
   cachePolicy?: ImageProps['cachePolicy'];
   transition?: number;      // ms da transição ao carregar
+  onError?: ImageProps['onError'];
 }
 
 export default function OptimizedImage({
@@ -20,6 +21,7 @@ export default function OptimizedImage({
   contentFit = 'cover',
   cachePolicy = 'memory-disk',
   transition = 200,
+  onError,
 }: OptimizedImageProps) {
   const placeholder = blurhash
     ? { blurhash }
@@ -36,6 +38,7 @@ export default function OptimizedImage({
         contentFit={contentFit}
         cachePolicy={cachePolicy}
         transition={transition}
+        onError={onError}
       />
     </View>
   );
