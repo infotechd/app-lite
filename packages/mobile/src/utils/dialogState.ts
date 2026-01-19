@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-
 /**
  * Interface que define o estado de um diálogo global.
  */
@@ -36,7 +34,9 @@ class DialogManager {
     subscribe(listener: DialogListener) {
         this.listeners.add(listener);
         listener(this.state);
-        return () => this.listeners.delete(listener);
+        return () => {
+            this.listeners.delete(listener);
+        };
     }
 
     private notify() {
