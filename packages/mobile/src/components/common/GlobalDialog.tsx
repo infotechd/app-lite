@@ -16,7 +16,9 @@ export const GlobalDialog: React.FC = () => {
         const unsubscribe = dialogManager.subscribe((newState) => {
             setState({ ...newState });
         });
-        return unsubscribe;
+        return () => {
+            unsubscribe();
+        };
     }, []);
 
     const { visible, title, message, confirmText, cancelText, isDestructive } = state;
