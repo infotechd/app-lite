@@ -201,8 +201,11 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
         setErrors({});
 
         // Separa arquivos locais (que precisam ser enviados) de URLs remotas (que são mantidas)
-        const localFiles = media.filter(m => m.uri.startsWith('file://'));
-        const remoteFiles = media.filter(m => m.uri.startsWith('http'));
+        // Na Web, arquivos locais podem começar com 'blob:' ou 'data:'.
+        // URLs remotas sempre começam com 'http'.
+        const isRemote = (uri: string) => uri.startsWith('http');
+        const localFiles = media.filter(m => !isRemote(m.uri));
+        const remoteFiles = media.filter(m => isRemote(m.uri));
 
         // Dados para validação, incluindo preço convertido para número
         const validationData = {
@@ -241,14 +244,13 @@ const EditarOfertaScreen: React.FC<Props> = ({ route, navigation }) => {
 
             // 2) Consolidação final de listas de mídias (mantidas + recém-carregadas)
             // Consolidação final: mantém URLs remotas existentes + adiciona URLs recém enviadas
-            // Usa startsWith('image/')/startsWith('video/') para compatibilidade com MIME types e
-            // também aceita os valores legados ('image'/'video') por segurança.
+            // Filtramos as mídias remotas pelo tipo (imagem ou vídeo) para remontar as listas originais
             const finalImages = [
-                ...remoteFiles.filter(m => m.type?.startsWith('image/') || (m as any).type === 'image').map(m => m.uri),
+                ...remoteFiles.filter(m => m.type?.includes('image') || (m as any).type === 'image').map(m => m.uri),
                 ...uploadedImageUrls,
             ];
             const finalVideos = [
-                ...remoteFiles.filter(m => m.type?.startsWith('video/') || (m as any).type === 'video').map(m => m.uri),
+                ...remoteFiles.filter(m => m.type?.includes('video') || (m as any).type === 'video').map(m => m.uri),
                 ...uploadedVideoUrls,
             ];
 
