@@ -96,46 +96,54 @@ export const useMediaPicker = (props: UseMediaPickerProps) => {
     const handleSelection = async (
         pickerFunction: () => Promise<ImagePicker.ImagePickerResult>
     ) => {
-        const result = await pickerFunction();
-        if (!result.canceled) {
-            // Converte os assets retornados pelo expo-image-picker para o formato interno (MediaFile)
-            const newFiles = result.assets.map((asset): MediaFile => {
-                // Inferir MIME type a partir do nome do arquivo ou tipo base do picker
-                const fileName = asset.fileName ?? asset.uri.split('/').pop() ?? 'media-file';
-                const ext = fileName.split('.').pop()?.toLowerCase() || '';
+        try {
+            const result = await pickerFunction();
+            if (!result.canceled) {
+                // Converte os assets retornados pelo expo-image-picker para o formato interno (MediaFile)
+                const newFiles = result.assets.map((asset): MediaFile => {
+                    // Inferir MIME type a partir do nome do arquivo ou tipo base do picker
+                    const fileName = asset.fileName ?? asset.uri.split('/').pop() ?? 'media-file';
+                    const ext = fileName.split('.').pop()?.toLowerCase() || '';
 
-                let mimeType: string;
-                // Para vídeos, normalizamos para 'video/mp4' (único tipo aceito na validação)
-                if (asset.type === 'video' || ext === 'mp4' || ext === 'mov' || ext === 'm4v') {
-                    mimeType = 'video/mp4';
-                } else if (ext === 'png') {
-                    mimeType = 'image/png';
-                } else {
-                    // Padrão para imagens JPEG quando a extensão não indicar PNG
-                    mimeType = 'image/jpeg';
+                    let mimeType: string;
+                    // Para vídeos, normalizamos para 'video/mp4' (único tipo aceito na validação)
+                    if (asset.type === 'video' || ext === 'mp4' || ext === 'mov' || ext === 'm4v') {
+                        mimeType = 'video/mp4';
+                    } else if (ext === 'png') {
+                        mimeType = 'image/png';
+                    } else {
+                        // Padrão para imagens JPEG quando a extensão não indicar PNG
+                        mimeType = 'image/jpeg';
+                    }
+
+                    return {
+                        uri: asset.uri,
+                        // Agora retornamos MIME type completo para compatibilidade com o schema de validação
+                        // Tipagem flexível para manter compatibilidade com o tipo local de MediaFile
+                        // IMPORTANTE: Se você remover o `as any` sem alinhar o tipo em src/types/media.ts,
+                        // o TypeScript acusará erro. Considere migrar MediaFile.type para MIME ou criar um
+                        // discriminador separado (ex.: kind: 'image' | 'video').
+                        type: mimeType as any,
+                        name: fileName,
+                    };
+                });
+
+                // Verifica se a nova seleção excede o limite permitido de arquivos.
+                if (currentFilesCount + newFiles.length > maxFiles) {
+                    showAlert(
+                        'Limite de arquivos excedido',
+                        `Você pode selecionar no máximo ${maxFiles} arquivos.`
+                    );
+                    return;
                 }
-
-                return {
-                    uri: asset.uri,
-                    // Agora retornamos MIME type completo para compatibilidade com o schema de validação
-                    // Tipagem flexível para manter compatibilidade com o tipo local de MediaFile
-                    // IMPORTANTE: Se você remover o `as any` sem alinhar o tipo em src/types/media.ts,
-                    // o TypeScript acusará erro. Considere migrar MediaFile.type para MIME ou criar um
-                    // discriminador separado (ex.: kind: 'image' | 'video').
-                    type: mimeType as any,
-                    name: fileName,
-                };
-            });
-
-            // Verifica se a nova seleção excede o limite permitido de arquivos.
-            if (currentFilesCount + newFiles.length > maxFiles) {
-                showAlert(
-                    'Limite de arquivos excedido',
-                    `Você pode selecionar no máximo ${maxFiles} arquivos.`
-                );
-                return;
+                onSelect(newFiles);
             }
-            onSelect(newFiles);
+        } catch (error) {
+            console.error('[useMediaPicker] Erro ao selecionar mídia:', error);
+            showAlert(
+                'Ops!',
+                'Não conseguimos abrir sua galeria ou câmera agora. Tente reiniciar o app.'
+            );
         }
     };
 
