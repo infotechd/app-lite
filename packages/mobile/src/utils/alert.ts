@@ -6,6 +6,7 @@
  */
 
 import { Alert as RNAlert, Platform } from 'react-native';
+import { dialogManager } from './dialogState';
 
 export interface AlertButton {
     text: string;
@@ -28,31 +29,23 @@ export const showAlert = (
     buttons?: AlertButton[]
 ): void => {
     if (Platform.OS === 'web') {
-        // Na web, usamos window.confirm para diálogos com opções
-        // ou window.alert para mensagens simples
-        if (buttons && buttons.length > 1) {
-            // Encontrar botão de confirmação (não-cancel)
-            const confirmButton = buttons.find(b => b.style !== 'cancel');
-            const cancelButton = buttons.find(b => b.style === 'cancel');
-            
-            const fullMessage = message ? `${title}\n\n${message}` : title;
-            const confirmed = window.confirm(fullMessage);
-            
+        // Usamos o dialogManager para evitar window.alert/confirm que podem ser bloqueados
+        const confirmButton = buttons?.find(b => b.style !== 'cancel') || buttons?.[0];
+        const cancelButton = buttons?.find(b => b.style === 'cancel');
+
+        dialogManager.show({
+            title,
+            message,
+            confirmText: confirmButton?.text || 'OK',
+            cancelText: cancelButton?.text || 'Cancelar',
+            isDestructive: confirmButton?.style === 'destructive'
+        }).then(confirmed => {
             if (confirmed && confirmButton?.onPress) {
                 confirmButton.onPress();
             } else if (!confirmed && cancelButton?.onPress) {
                 cancelButton.onPress();
             }
-        } else {
-            // Alerta simples
-            const fullMessage = message ? `${title}\n\n${message}` : title;
-            window.alert(fullMessage);
-            
-            // Chamar callback do primeiro botão se existir
-            if (buttons && buttons[0]?.onPress) {
-                buttons[0].onPress();
-            }
-        }
+        });
     } else {
         // No mobile, usa o Alert nativo
         RNAlert.alert(title, message, buttons);
@@ -74,21 +67,25 @@ export const showConfirm = (
     confirmText = 'Confirmar',
     cancelText = 'Cancelar'
 ): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+        return dialogManager.show({
+            title,
+            message,
+            confirmText,
+            cancelText,
+            isDestructive: false
+        });
+    }
+
     return new Promise((resolve) => {
-        if (Platform.OS === 'web') {
-            const fullMessage = message ? `${title}\n\n${message}` : title;
-            const confirmed = window.confirm(fullMessage);
-            resolve(confirmed);
-        } else {
-            RNAlert.alert(
-                title,
-                message,
-                [
-                    { text: cancelText, style: 'cancel', onPress: () => resolve(false) },
-                    { text: confirmText, onPress: () => resolve(true) },
-                ]
-            );
-        }
+        RNAlert.alert(
+            title,
+            message,
+            [
+                { text: cancelText, style: 'cancel', onPress: () => resolve(false) },
+                { text: confirmText, onPress: () => resolve(true) },
+            ]
+        );
     });
 };
 
@@ -106,21 +103,25 @@ export const showDestructiveConfirm = (
     destructiveText = 'Excluir',
     cancelText = 'Cancelar'
 ): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+        return dialogManager.show({
+            title,
+            message,
+            confirmText: destructiveText,
+            cancelText,
+            isDestructive: true
+        });
+    }
+
     return new Promise((resolve) => {
-        if (Platform.OS === 'web') {
-            const fullMessage = message ? `${title}\n\n${message}` : title;
-            const confirmed = window.confirm(fullMessage);
-            resolve(confirmed);
-        } else {
-            RNAlert.alert(
-                title,
-                message,
-                [
-                    { text: cancelText, style: 'cancel', onPress: () => resolve(false) },
-                    { text: destructiveText, style: 'destructive', onPress: () => resolve(true) },
-                ]
-            );
-        }
+        RNAlert.alert(
+            title,
+            message,
+            [
+                { text: cancelText, style: 'cancel', onPress: () => resolve(false) },
+                { text: destructiveText, style: 'destructive', onPress: () => resolve(true) },
+            ]
+        );
     });
 };
 

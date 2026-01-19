@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import RootNavigator from './src/navigation/RootNavigator';
+import { GlobalDialog } from './src/components/common/GlobalDialog';
 import { AuthProvider } from '@/context/AuthContext';
 // import { lightTheme, darkTheme } from '@/styles/theme';
 import { lightTheme } from '@/styles/theme';
@@ -26,6 +27,7 @@ const App: React.FC = () => {
                     <NavigationContainer theme={navigationTheme} ref={navigationRef}>
                         <RootNavigator />
                     </NavigationContainer>
+                    <GlobalDialog />
                 </AuthProvider>
             </SafeAreaProvider>
         </PaperProvider>
