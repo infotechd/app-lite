@@ -226,11 +226,11 @@ export const API_CONFIG = {
     retries: 3,
     retryDelay: 1000,
     endpoints: {
-        auth: '/auth',
-        users: '/users',
-        ofertas: '/ofertas',
-        anuncios: '/anuncios',
-        upload: '/upload',
+        auth: 'auth',
+        users: 'users',
+        ofertas: 'ofertas',
+        anuncios: 'anuncios',
+        upload: 'upload',
     },
 };
 
