@@ -101,7 +101,7 @@ export async function uploadAvatar(file: AvatarFile): Promise<User> {
      * Execução da chamada de API.
      * Rota atualizada para /v1/users/me/avatar conforme Versão 2.0
      */
-    const { data } = await api.patch('/v1/users/me/avatar', form, {
+    const { data } = await api.patch('v1/users/me/avatar', form, {
        headers: { 'Content-Type': 'multipart/form-data' },
        timeout: 45000,
      });
@@ -124,7 +124,7 @@ export async function uploadAvatar(file: AvatarFile): Promise<User> {
  */
 export async function removeAvatar(): Promise<User> {
   try {
-    const { data } = await api.delete('/v1/users/me/avatar');
+    const { data } = await api.delete('v1/users/me/avatar');
     return normalizeUser(data?.data ?? data);
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || 'Erro ao remover avatar.';
@@ -139,7 +139,7 @@ export async function removeAvatar(): Promise<User> {
  */
 export async function updateName(nome: string): Promise<User> {
   try {
-    const { data } = await api.patch('/v1/users/me/nome', { nome });
+    const { data } = await api.patch('v1/users/me/nome', { nome });
     return normalizeUser(data?.data ?? data);
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar nome.';
@@ -154,7 +154,7 @@ export async function updateName(nome: string): Promise<User> {
  */
 export async function updatePhone(telefone: string): Promise<User> {
   try {
-    const { data } = await api.patch('/v1/users/me/telefone', { telefone });
+    const { data } = await api.patch('v1/users/me/telefone', { telefone });
     return normalizeUser(data?.data ?? data);
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar telefone.';
@@ -170,7 +170,7 @@ export async function updatePhone(telefone: string): Promise<User> {
  */
 export async function updateLocation(cidade: string, estado: string): Promise<User> {
   try {
-    const { data } = await api.patch('/v1/users/me/localizacao', { cidade, estado });
+    const { data } = await api.patch('v1/users/me/localizacao', { cidade, estado });
     return normalizeUser(data?.data ?? data);
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar localização.';
@@ -183,7 +183,7 @@ export async function updateLocation(cidade: string, estado: string): Promise<Us
  */
 export async function updateEmail(email: string, currentPassword: string): Promise<{ message: string }> {
   try {
-    const { data } = await api.patch('/v1/users/me/email', { email, currentPassword });
+    const { data } = await api.patch('v1/users/me/email', { email, currentPassword });
     return { message: data?.message ?? 'Solicitação registrada. Verifique o novo e-mail.' };
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || 'Erro ao solicitar alteração de e-mail.';
@@ -196,7 +196,7 @@ export async function updateEmail(email: string, currentPassword: string): Promi
  */
 export async function confirmEmailChange(token: string): Promise<User> {
   try {
-    const { data } = await api.post('/v1/users/me/email/confirm', { token });
+    const { data } = await api.post('v1/users/me/email/confirm', { token });
     return normalizeUser(data?.data ?? data);
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || 'Erro ao confirmar alteração de e-mail.';
@@ -212,7 +212,7 @@ export async function confirmEmailChange(token: string): Promise<User> {
  */
 export async function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
   try {
-    const { data } = await api.post('/v1/users/me/password', { currentPassword, newPassword });
+    const { data } = await api.post('v1/users/me/password', { currentPassword, newPassword });
     return { message: data?.message ?? 'Senha alterada com sucesso.' };
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || 'Erro ao alterar senha.';
@@ -227,7 +227,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
  */
 export async function updateCompanyData(data: { razaoSocial: string; nomeFantasia?: string }): Promise<User> {
   try {
-    const { data: res } = await api.patch('/v1/users/me/company-data', data);
+    const { data: res } = await api.patch('v1/users/me/company-data', data);
     return normalizeUser(res?.data ?? res);
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar dados da empresa.';
@@ -242,7 +242,7 @@ export async function updateCompanyData(data: { razaoSocial: string; nomeFantasi
  */
 export async function updateDocuments(data: { cpf?: string; cnpj?: string }): Promise<User> {
   try {
-    const { data: res } = await api.patch('/v1/users/me/documents', data);
+    const { data: res } = await api.patch('v1/users/me/documents', data);
     return normalizeUser(res?.data ?? res);
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || 'Erro ao atualizar documentos.';

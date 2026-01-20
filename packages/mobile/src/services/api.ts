@@ -15,7 +15,7 @@ import { Platform } from 'react-native';
 // ============================================================================
 
 // URL de produção - SEMPRE usar esta em builds de preview/production
-const PRODUCTION_API_URL = 'https://api.app-super.digital/api';
+const PRODUCTION_API_URL = 'https://api.app-super.digital/api/';
 
 // Verifica se estamos em modo de desenvolvimento
 // __DEV__ é definido pelo Metro bundler e é false em builds de produção/preview
