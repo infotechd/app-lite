@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Keyboard, ScrollView, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import React, { useMemo, useState, useCallback } from 'react';
+import { Keyboard, ScrollView, StyleSheet, Platform, Pressable, View } from 'react-native';
 import { showAlert } from '@/utils/alert';
 import { Appbar, Button, Text, TextInput } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -15,6 +15,9 @@ interface RouteParams {
 /**
  * Tela para edição de documentos do perfil (CPF ou CNPJ).
  * Permite que o usuário atualize seus dados de identificação com validação.
+ * 
+ * Correção aplicada: O TouchableWithoutFeedback foi substituído por Pressable
+ * com verificação de plataforma para não interferir nos inputs na versão Web.
  * 
  * @returns Componente React que renderiza a tela de edição de documento.
  */
@@ -50,6 +53,16 @@ const EditProfileDocumentScreen: React.FC = () => {
     // Para CNPJ, valida apenas o tamanho (14 dígitos) por enquanto
     return cleanValue.length === 14;
   }, [cleanValue, type]);
+
+  /**
+   * Handler para dispensar o teclado apenas em plataformas nativas.
+   * Na Web, o Keyboard.dismiss() pode interferir no foco dos inputs.
+   */
+  const handleDismissKeyboard = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Keyboard.dismiss();
+    }
+  }, []);
 
   /**
    * Processa a ação de salvar as alterações do documento.
@@ -96,8 +109,12 @@ const EditProfileDocumentScreen: React.FC = () => {
         <Appbar.Content title={`Editar ${label}`} />
       </Appbar.Header>
 
-      {/* TouchableWithoutFeedback permite fechar o teclado ao tocar fora do input */}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      {/* 
+        Pressable com onPress condicional: 
+        - Em plataformas nativas, dispensa o teclado ao tocar fora dos inputs
+        - Na Web, não faz nada para não interferir no foco dos inputs
+      */}
+      <Pressable style={styles.pressableContainer} onPress={handleDismissKeyboard}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text variant="bodyMedium" style={styles.helper}>
             Informe seu {label} com  {type === 'CPF' ? '11' : '14'} dígitos.
@@ -123,7 +140,7 @@ const EditProfileDocumentScreen: React.FC = () => {
             Salvar
           </Button>
         </ScrollView>
-      </TouchableWithoutFeedback>
+      </Pressable>
     </View>
   );
 };
@@ -131,10 +148,10 @@ const EditProfileDocumentScreen: React.FC = () => {
 // Definição dos estilos da tela utilizando o tema de espaçamento centralizado
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  pressableContainer: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.md },
   helper: { marginBottom: spacing.sm },
   button: { marginTop: spacing.md },
 });
 
 export default EditProfileDocumentScreen;
-
