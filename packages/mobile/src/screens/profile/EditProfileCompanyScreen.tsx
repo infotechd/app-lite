@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { Keyboard, ScrollView, StyleSheet, Platform, Pressable, View } from 'react-native';
+
 import { showAlert } from '@/utils/alert';
 import { Appbar, Button, Text, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -80,6 +80,12 @@ const EditProfileCompanyScreen: React.FC = () => {
     }
   };
 
+  const handleDismissKeyboard = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Keyboard.dismiss();
+    }
+  }, []);
+
   return (
     <View style={styles.container}>
       {/* Cabeçalho da tela com botão de voltar */}
@@ -88,12 +94,7 @@ const EditProfileCompanyScreen: React.FC = () => {
         <Appbar.Content title="Dados da empresa" />
       </Appbar.Header>
 
-      {/* 
-        Pressable com onPress condicional: 
-        - Em plataformas nativas, dispensa o teclado ao tocar fora dos inputs
-        - Na Web, não faz nada para não interferir no foco dos inputs
-      */}
-      <Pressable style={styles.pressableContainer} onPress={handleDismissKeyboard}>
+
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text variant="bodyMedium" style={styles.helper}>
             Preencha os dados empresariais para validar sua conta PJ.

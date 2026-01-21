@@ -142,6 +142,12 @@ const EditProfileScreen: React.FC = () => {
     }
   };
 
+  const handleDismissKeyboard = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Keyboard.dismiss();
+    }
+  }, []);
+
   return (
     <View style={styles.container}>
       <Appbar.Header elevated>
@@ -154,16 +160,7 @@ const EditProfileScreen: React.FC = () => {
         style={styles.keyboardAvoidingView}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-        {/* 
-          Pressable com onPress condicional: 
-          - Em plataformas nativas, dispensa o teclado ao tocar fora dos inputs
-          - Na Web, não faz nada para não interferir no foco dos inputs
-        */}
-        <Pressable 
-          style={styles.pressableContainer} 
-          onPress={handleDismissKeyboard}
-        >
-          <ScrollView 
+
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
@@ -175,7 +172,7 @@ const EditProfileScreen: React.FC = () => {
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Informações Básicas
               </Text>
-              
+
               <TextInput
                 label="Nome"
                 value={nome}
@@ -189,20 +186,6 @@ const EditProfileScreen: React.FC = () => {
                 Use apenas letras e espaços, entre 3 e 50 caracteres. Removemos espaços duplicados automaticamente.
               </Text>
 
-              <TextInput
-                label="Telefone"
-                value={telefone}
-                mode="outlined"
-                onChangeText={(text) => setTelefone(formatPhoneNumber(text))}
-                style={styles.input}
-                keyboardType="phone-pad"
-                error={!!telefone && !isPhoneValid}
-                placeholder="(11) 99999-9999"
-              />
-              <Text variant="bodySmall" style={styles.helperText}>
-                Obrigatório para facilitar o contato de interessados.
-              </Text>
-              
               <View style={styles.row}>
                 <TextInput
                   label="Cidade"
@@ -243,7 +226,7 @@ const EditProfileScreen: React.FC = () => {
                 keyboardType="email-address"
               />
 
-              <Button 
+
                 mode="contained"
                 onPress={handleSave}
                 disabled={!canSave || isSaving}
