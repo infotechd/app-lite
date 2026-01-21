@@ -39,6 +39,16 @@ const EditProfileScreen: React.FC = () => {
   const [confirmingToken, setConfirmingToken] = useState(false);
   const [token, setToken] = useState('');
 
+  /**
+   * Handler para dispensar o teclado apenas em plataformas nativas.
+   * Na Web, o Keyboard.dismiss() pode interferir no foco dos inputs.
+   */
+  const handleDismissKeyboard = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Keyboard.dismiss();
+    }
+  }, []);
+
   // Lógica de validação do Nome
   const trimmedName = useMemo(() => nome.replace(/\s+/g, ' ').trim(), [nome]);
   const onlyLetters = useMemo(() => /^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/.test(trimmedName || ''), [trimmedName]);
@@ -62,16 +72,6 @@ const EditProfileScreen: React.FC = () => {
   // O botão salvar é habilitado se houver mudanças E tudo for válido
   const canSave = (isNameValid && isPhoneValid && isCidadeValid && isEstadoValid) && 
                  (isNameChanged || isPhoneChanged || isLocationChanged || isEmailChanged);
-
-  /**
-   * Handler para dispensar o teclado apenas em plataformas nativas.
-   * Na Web, o Keyboard.dismiss() pode interferir no foco dos inputs.
-   */
-  const handleDismissKeyboard = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Keyboard.dismiss();
-    }
-  }, []);
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -142,12 +142,6 @@ const EditProfileScreen: React.FC = () => {
     }
   };
 
-  const handleDismissKeyboard = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Keyboard.dismiss();
-    }
-  }, []);
-
   return (
     <View style={styles.container}>
       <Appbar.Header elevated>
@@ -160,7 +154,8 @@ const EditProfileScreen: React.FC = () => {
         style={styles.keyboardAvoidingView}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-
+        <Pressable style={styles.pressableContainer} onPress={handleDismissKeyboard}>
+          <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
@@ -226,7 +221,7 @@ const EditProfileScreen: React.FC = () => {
                 keyboardType="email-address"
               />
 
-
+              <Button
                 mode="contained"
                 onPress={handleSave}
                 disabled={!canSave || isSaving}

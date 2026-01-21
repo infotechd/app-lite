@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, Platform, Pressable, Keyboard } from 'react-native';
 
 import { showAlert } from '@/utils/alert';
 import { Appbar, Button, Text, TextInput } from 'react-native-paper';
@@ -101,12 +102,6 @@ const EditProfileDocumentScreen: React.FC = () => {
     }
   };
 
-  const handleDismissKeyboard = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Keyboard.dismiss();
-    }
-  }, []);
-
   return (
     <View style={styles.container}>
       {/* Barra superior com ação de voltar e título dinâmico */}
@@ -115,7 +110,7 @@ const EditProfileDocumentScreen: React.FC = () => {
         <Appbar.Content title={`Editar ${label}`} />
       </Appbar.Header>
 
-
+      <Pressable style={styles.pressableContainer} onPress={handleDismissKeyboard}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text variant="bodyMedium" style={styles.helper}>
             Informe seu {label} com  {type === 'CPF' ? '11' : '14'} dígitos.
