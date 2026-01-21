@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Keyboard, ScrollView, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import React, { useMemo, useState, useCallback } from 'react';
+import { Keyboard, ScrollView, StyleSheet, View, Pressable, Platform } from 'react-native';
 import { showAlert } from '@/utils/alert';
 import { Appbar, Button, Text, TextInput } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -88,6 +88,12 @@ const EditProfileDocumentScreen: React.FC = () => {
     }
   };
 
+  const handleDismissKeyboard = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Keyboard.dismiss();
+    }
+  }, []);
+
   return (
     <View style={styles.container}>
       {/* Barra superior com ação de voltar e título dinâmico */}
@@ -96,8 +102,7 @@ const EditProfileDocumentScreen: React.FC = () => {
         <Appbar.Content title={`Editar ${label}`} />
       </Appbar.Header>
 
-      {/* TouchableWithoutFeedback permite fechar o teclado ao tocar fora do input */}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <Pressable style={{ flex: 1 }} onPress={handleDismissKeyboard}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text variant="bodyMedium" style={styles.helper}>
             Informe seu {label} com  {type === 'CPF' ? '11' : '14'} dígitos.
@@ -123,7 +128,7 @@ const EditProfileDocumentScreen: React.FC = () => {
             Salvar
           </Button>
         </ScrollView>
-      </TouchableWithoutFeedback>
+      </Pressable>
     </View>
   );
 };

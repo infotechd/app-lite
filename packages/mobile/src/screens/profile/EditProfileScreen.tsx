@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Pressable, Keyboard } from 'react-native';
 import { showAlert } from '@/utils/alert';
 import { Text, TextInput, Button, Appbar, ActivityIndicator, Dialog, Portal } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -129,6 +129,12 @@ const EditProfileScreen: React.FC = () => {
     }
   };
 
+  const handleDismissKeyboard = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Keyboard.dismiss();
+    }
+  }, []);
+
   return (
     <View style={styles.container}>
       <Appbar.Header elevated>
@@ -137,152 +143,152 @@ const EditProfileScreen: React.FC = () => {
       </Appbar.Header>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoidingView}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView 
+        <Pressable style={{ flex: 1 }} onPress={handleDismissKeyboard}>
+          <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           >
-        {/* Editor de Avatar - Ponto central da Versão 2.0 */}
-        <AvatarEditor />
+            {/* Editor de Avatar - Ponto central da Versão 2.0 */}
+            <AvatarEditor />
 
-        <View style={styles.form}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Informações Básicas
-          </Text>
-          
-          <TextInput
-            label="Nome"
-            value={nome}
-            mode="outlined"
-            onChangeText={setNome}
-            style={styles.input}
-            error={!!nome && !isNameValid}
-            right={isSaving ? <ActivityIndicator size="small" /> : undefined}
-          />
-          <Text variant="bodySmall" style={styles.helperText}>
-            Use apenas letras e espaços, entre 3 e 50 caracteres. Removemos espaços duplicados automaticamente.
-          </Text>
-
-          <TextInput
-            label="Telefone"
-            value={telefone}
-            mode="outlined"
-            onChangeText={(text) => setTelefone(formatPhoneNumber(text))}
-            style={styles.input}
-            keyboardType="phone-pad"
-            error={!!telefone && !isPhoneValid}
-            placeholder="(11) 99999-9999"
-          />
-          <Text variant="bodySmall" style={styles.helperText}>
-            Obrigatório para facilitar o contato de interessados.
-          </Text>
-          
-          <View style={styles.row}>
-            <TextInput
-              label="Cidade"
-              value={cidade}
-              mode="outlined"
-              onChangeText={setCidade}
-              style={[styles.input, { flex: 3, marginRight: spacing.sm }]}
-              error={!!cidade && !isCidadeValid}
-              placeholder="Ex: São Paulo"
-            />
-            <TextInput
-              label="UF"
-              value={estado}
-              mode="outlined"
-              onChangeText={(text) => setEstado(text.toUpperCase().substring(0, 2))}
-              style={[styles.input, { flex: 1 }]}
-              error={!!estado && !isEstadoValid}
-              placeholder="SP"
-              autoCapitalize="characters"
-            />
-          </View>
-          <Text variant="bodySmall" style={styles.helperText}>
-            Cidade e Estado onde você atua ou reside.
-          </Text>
-
-          <TextInput
-            label="E-mail"
-            value={email}
-            mode="outlined"
-            onChangeText={(text) => {
-              setEmail(text);
-              setIsEmailChanged(text.trim().toLowerCase() !== (user?.email ?? '').toLowerCase());
-            }}
-            style={styles.input}
-            error={!!email && !isEmailValid}
-            right={isEmailChanged ? <TextInput.Icon icon="email-edit" /> : undefined}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-
-          <Button 
-            mode="contained"
-            onPress={handleSave}
-            disabled={!canSave || isSaving}
-            loading={isSaving}
-            style={styles.moreButton}
-          >
-            Salvar
-          </Button>
-
-          {isEmailChanged && (
-            <View style={{ marginTop: spacing.sm }}>
-              <Text variant="bodySmall" style={styles.helperText}>
-                Para confirmar a troca de e-mail enviaremos um token para o novo endereço.
+            <View style={styles.form}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Informações Básicas
               </Text>
-              <TextInput
-                label="Token de confirmação"
-                value={token}
-                mode="outlined"
-                onChangeText={setToken}
-                style={styles.input}
-                right={confirmingToken ? <ActivityIndicator size="small" /> : undefined}
-                placeholder="Cole o token recebido"
-                autoCapitalize="none"
-              />
-              <Button
-                mode="outlined"
-                onPress={handleConfirmToken}
-                disabled={!token || confirmingToken}
-                loading={confirmingToken}
-              >
-                Confirmar e-mail
-              </Button>
-            </View>
-          )}
-        </View>
-      </ScrollView>
-    </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
 
-    <Portal>
-      <Dialog visible={passwordModalVisible} onDismiss={() => setPasswordModalVisible(false)}>
-        <Dialog.Title>Confirme sua senha</Dialog.Title>
-        <Dialog.Content>
-          <TextInput
-            label="Senha atual"
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            secureTextEntry
-            mode="outlined"
-            autoCapitalize="none"
-          />
-        </Dialog.Content>
-        <Dialog.Actions>
-          <Button onPress={() => setPasswordModalVisible(false)}>Cancelar</Button>
-          <Button onPress={handleConfirmPassword} disabled={!currentPassword || isSaving} loading={isSaving}>Confirmar</Button>
-        </Dialog.Actions>
-      </Dialog>
-    </Portal>
-  </View>
-);
+              <TextInput
+                label="Nome"
+                value={nome}
+                mode="outlined"
+                onChangeText={setNome}
+                style={styles.input}
+                error={!!nome && !isNameValid}
+                right={isSaving ? <ActivityIndicator size="small" /> : undefined}
+              />
+              <Text variant="bodySmall" style={styles.helperText}>
+                Use apenas letras e espaços, entre 3 e 50 caracteres. Removemos espaços duplicados automaticamente.
+              </Text>
+
+              <TextInput
+                label="Telefone"
+                value={telefone}
+                mode="outlined"
+                onChangeText={(text) => setTelefone(formatPhoneNumber(text))}
+                style={styles.input}
+                keyboardType="phone-pad"
+                error={!!telefone && !isPhoneValid}
+                placeholder="(11) 99999-9999"
+              />
+              <Text variant="bodySmall" style={styles.helperText}>
+                Obrigatório para facilitar o contato de interessados.
+              </Text>
+
+              <View style={styles.row}>
+                <TextInput
+                  label="Cidade"
+                  value={cidade}
+                  mode="outlined"
+                  onChangeText={setCidade}
+                  style={[styles.input, { flex: 3, marginRight: spacing.sm }]}
+                  error={!!cidade && !isCidadeValid}
+                  placeholder="Ex: São Paulo"
+                />
+                <TextInput
+                  label="UF"
+                  value={estado}
+                  mode="outlined"
+                  onChangeText={(text) => setEstado(text.toUpperCase().substring(0, 2))}
+                  style={[styles.input, { flex: 1 }]}
+                  error={!!estado && !isEstadoValid}
+                  placeholder="SP"
+                  autoCapitalize="characters"
+                />
+              </View>
+              <Text variant="bodySmall" style={styles.helperText}>
+                Cidade e Estado onde você atua ou reside.
+              </Text>
+
+              <TextInput
+                label="E-mail"
+                value={email}
+                mode="outlined"
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setIsEmailChanged(text.trim().toLowerCase() !== (user?.email ?? '').toLowerCase());
+                }}
+                style={styles.input}
+                error={!!email && !isEmailValid}
+                right={isEmailChanged ? <TextInput.Icon icon="email-edit" /> : undefined}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+
+              <Button
+                mode="contained"
+                onPress={handleSave}
+                disabled={!canSave || isSaving}
+                loading={isSaving}
+                style={styles.moreButton}
+              >
+                Salvar
+              </Button>
+
+              {isEmailChanged && (
+                <View style={{ marginTop: spacing.sm }}>
+                  <Text variant="bodySmall" style={styles.helperText}>
+                    Para confirmar a troca de e-mail enviaremos um token para o novo endereço.
+                  </Text>
+                  <TextInput
+                    label="Token de confirmação"
+                    value={token}
+                    mode="outlined"
+                    onChangeText={setToken}
+                    style={styles.input}
+                    right={confirmingToken ? <ActivityIndicator size="small" /> : undefined}
+                    placeholder="Cole o token recebido"
+                    autoCapitalize="none"
+                  />
+                  <Button
+                    mode="outlined"
+                    onPress={handleConfirmToken}
+                    disabled={!token || confirmingToken}
+                    loading={confirmingToken}
+                  >
+                    Confirmar e-mail
+                  </Button>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </Pressable>
+      </KeyboardAvoidingView>
+
+      <Portal>
+        <Dialog visible={passwordModalVisible} onDismiss={() => setPasswordModalVisible(false)}>
+          <Dialog.Title>Confirme sua senha</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Senha atual"
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              secureTextEntry
+              mode="outlined"
+              autoCapitalize="none"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setPasswordModalVisible(false)}>Cancelar</Button>
+            <Button onPress={handleConfirmPassword} disabled={!currentPassword || isSaving} loading={isSaving}>Confirmar</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({

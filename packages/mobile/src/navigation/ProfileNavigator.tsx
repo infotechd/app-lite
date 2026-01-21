@@ -17,10 +17,10 @@ const ProfileNavigator: React.FC = () => {
             <Stack.Screen name="ProfileHome" component={ProfileHome} options={{ title: 'Perfil' }} />
             <Stack.Screen name="Settings" component={Settings} options={{ title: 'Configurações' }} />
             <Stack.Screen name="Notifications" component={Notifications} options={{ title: 'Notificações' }} />
-            <Stack.Screen name="EditProfile" component={EditProfile} options={{ title: 'Editar Perfil' }} />
+            <Stack.Screen name="EditProfile" component={EditProfile} options={{ title: 'Editar Perfil', headerShown: false }} />
             <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ title: 'Alterar senha' }} />
-            <Stack.Screen name="EditProfileDocument" component={EditProfileDocumentScreen} options={{ title: 'Editar documento' }} />
-            <Stack.Screen name="EditProfileCompany" component={EditProfileCompanyScreen} options={{ title: 'Dados da empresa' }} />
+            <Stack.Screen name="EditProfileDocument" component={EditProfileDocumentScreen} options={{ title: 'Editar documento', headerShown: false }} />
+            <Stack.Screen name="EditProfileCompany" component={EditProfileCompanyScreen} options={{ title: 'Dados da empresa', headerShown: false }} />
         </Stack.Navigator>
     );
 };

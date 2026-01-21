@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Keyboard, ScrollView, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import React, { useMemo, useState, useCallback } from 'react';
+import { Keyboard, ScrollView, StyleSheet, View, Pressable, Platform } from 'react-native';
 import { showAlert } from '@/utils/alert';
 import { Appbar, Button, Text, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -67,6 +67,12 @@ const EditProfileCompanyScreen: React.FC = () => {
     }
   };
 
+  const handleDismissKeyboard = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Keyboard.dismiss();
+    }
+  }, []);
+
   return (
     <View style={styles.container}>
       {/* Cabeçalho da tela com botão de voltar */}
@@ -76,7 +82,7 @@ const EditProfileCompanyScreen: React.FC = () => {
       </Appbar.Header>
 
       {/* Área rolável que fecha o teclado ao tocar fora dos campos */}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <Pressable style={{ flex: 1 }} onPress={handleDismissKeyboard}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text variant="bodyMedium" style={styles.helper}>
             Preencha os dados empresariais para validar sua conta PJ.
@@ -112,7 +118,7 @@ const EditProfileCompanyScreen: React.FC = () => {
             Salvar
           </Button>
         </ScrollView>
-      </TouchableWithoutFeedback>
+      </Pressable>
     </View>
   );
 };
