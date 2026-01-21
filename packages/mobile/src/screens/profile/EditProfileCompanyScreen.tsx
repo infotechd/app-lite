@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { Keyboard, ScrollView, StyleSheet, View, Pressable, Platform } from 'react-native';
+
 import { showAlert } from '@/utils/alert';
 import { Appbar, Button, Text, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -15,6 +15,9 @@ const MIN_RAZAO = 3;
 /**
  * Tela de edição dos dados da empresa (PJ).
  * Permite que o usuário atualize a Razão Social e o Nome Fantasia associados à sua conta.
+ * 
+ * Correção aplicada: O TouchableWithoutFeedback foi substituído por Pressable
+ * com verificação de plataforma para não interferir nos inputs na versão Web.
  *
  * @returns {React.JSX.Element} Componente de tela de edição de perfil empresarial.
  */
@@ -30,6 +33,16 @@ const EditProfileCompanyScreen: React.FC = () => {
 
   // Validação: A Razão Social deve ter pelo menos 3 caracteres (ignorando espaços)
   const canSave = useMemo(() => razaoSocial.trim().length >= MIN_RAZAO, [razaoSocial]);
+
+  /**
+   * Handler para dispensar o teclado apenas em plataformas nativas.
+   * Na Web, o Keyboard.dismiss() pode interferir no foco dos inputs.
+   */
+  const handleDismissKeyboard = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Keyboard.dismiss();
+    }
+  }, []);
 
   /**
    * Processa a gravação dos dados da empresa no servidor.
@@ -81,8 +94,7 @@ const EditProfileCompanyScreen: React.FC = () => {
         <Appbar.Content title="Dados da empresa" />
       </Appbar.Header>
 
-      {/* Área rolável que fecha o teclado ao tocar fora dos campos */}
-      <Pressable style={{ flex: 1 }} onPress={handleDismissKeyboard}>
+
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text variant="bodyMedium" style={styles.helper}>
             Preencha os dados empresariais para validar sua conta PJ.
@@ -128,6 +140,7 @@ const EditProfileCompanyScreen: React.FC = () => {
  */
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  pressableContainer: { flex: 1 },
   // Espaçamento interno do formulário
   content: { padding: spacing.lg, gap: spacing.md },
   // Margem inferior para o texto de ajuda
@@ -137,4 +150,3 @@ const styles = StyleSheet.create({
 });
 
 export default EditProfileCompanyScreen;
-

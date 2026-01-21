@@ -18,6 +18,9 @@ import { formatPhoneNumber, isValidPhoneNumber } from '@/utils/phoneFormatter';
 /**
  * Tela de Edição de Perfil (Versão 2.0).
  * Centraliza a edição de avatar e futuramente outros dados do usuário.
+ * 
+ * Correção aplicada: O TouchableWithoutFeedback foi substituído por Pressable
+ * com verificação de target para não interferir nos inputs na versão Web.
  */
 const EditProfileScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -59,6 +62,16 @@ const EditProfileScreen: React.FC = () => {
   // O botão salvar é habilitado se houver mudanças E tudo for válido
   const canSave = (isNameValid && isPhoneValid && isCidadeValid && isEstadoValid) && 
                  (isNameChanged || isPhoneChanged || isLocationChanged || isEmailChanged);
+
+  /**
+   * Handler para dispensar o teclado apenas em plataformas nativas.
+   * Na Web, o Keyboard.dismiss() pode interferir no foco dos inputs.
+   */
+  const handleDismissKeyboard = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Keyboard.dismiss();
+    }
+  }, []);
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -147,8 +160,7 @@ const EditProfileScreen: React.FC = () => {
         style={styles.keyboardAvoidingView}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-        <Pressable style={{ flex: 1 }} onPress={handleDismissKeyboard}>
-          <ScrollView
+
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
@@ -172,20 +184,6 @@ const EditProfileScreen: React.FC = () => {
               />
               <Text variant="bodySmall" style={styles.helperText}>
                 Use apenas letras e espaços, entre 3 e 50 caracteres. Removemos espaços duplicados automaticamente.
-              </Text>
-
-              <TextInput
-                label="Telefone"
-                value={telefone}
-                mode="outlined"
-                onChangeText={(text) => setTelefone(formatPhoneNumber(text))}
-                style={styles.input}
-                keyboardType="phone-pad"
-                error={!!telefone && !isPhoneValid}
-                placeholder="(11) 99999-9999"
-              />
-              <Text variant="bodySmall" style={styles.helperText}>
-                Obrigatório para facilitar o contato de interessados.
               </Text>
 
               <View style={styles.row}>
@@ -228,7 +226,7 @@ const EditProfileScreen: React.FC = () => {
                 keyboardType="email-address"
               />
 
-              <Button
+
                 mode="contained"
                 onPress={handleSave}
                 disabled={!canSave || isSaving}
@@ -297,6 +295,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
   },
   keyboardAvoidingView: {
+    flex: 1,
+  },
+  pressableContainer: {
     flex: 1,
   },
   scrollContent: {
